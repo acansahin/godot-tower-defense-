@@ -1,0 +1,28 @@
+; Engine configuration file.
+; Godot 4.5 project — Element TD style Tower Defense prototype.
+
+config_version=5
+
+[application]
+
+config/name="Element TD Prototype"
+config/description="A tiny Warcraft III Element TD inspired tower defense prototype."
+run/main_scene="res://scenes/Main.tscn"
+config/features=PackedStringArray("4.5", "GL Compatibility")
+config/icon="res://icon.svg"
+
+[autoload]
+
+Game="*res://scripts/game.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="keep"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
