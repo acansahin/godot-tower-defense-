@@ -30,6 +30,9 @@ func _ready() -> void:
 	Game.game_over.connect(_on_game_over)
 	Game.victory.connect(_on_victory)
 	wave_manager.wave_started.connect(hud.set_wave)
+	wave_manager.wave_preview.connect(hud.set_next)
+	wave_manager.prep_started.connect(hud.enable_send)
+	hud.send_pressed.connect(wave_manager.send_now)
 	palette.drag_started.connect(_on_drag_started)
 
 	wave_manager.enemies_root = enemies_root

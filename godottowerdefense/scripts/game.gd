@@ -98,6 +98,35 @@ const TOWER_DEFS := {
 ## Order the palette lists towers in.
 const TOWER_ORDER: Array = ["fire", "water", "nature", "earth", "lightning", "steam", "lava", "ice"]
 
+# --- Wave definitions ----------------------------------------------------------
+# Each wave picks an archetype from WAVE_TYPES; its stats = the base scaling
+# (quadratic HP etc. in wave_manager) times the archetype's multipliers. Fields
+# (all optional, default 1.0 / false / 0):
+#   name, color, hp, spd, count, radius, cc_immune, regen (frac of max hp/s),
+#   split (children on death), air (all flyers).
+const WAVE_TYPES := {
+	"normal": {"name": "Normal", "color": Color(0.85, 0.30, 0.30)},
+	"fast":   {"name": "Fast",   "color": Color(0.95, 0.85, 0.25), "hp": 0.6, "spd": 1.7, "count": 1.3, "radius": 0.85},
+	"swarm":  {"name": "Swarm",  "color": Color(0.90, 0.50, 0.75), "hp": 0.35, "spd": 1.15, "count": 2.6, "radius": 0.8},
+	"tank":   {"name": "Tank",   "color": Color(0.45, 0.50, 0.55), "hp": 3.0, "spd": 0.6, "count": 0.4, "radius": 1.35},
+	"immune": {"name": "Immune", "color": Color(0.60, 0.62, 0.70), "hp": 1.3, "cc_immune": true},
+	"regen":  {"name": "Regen",  "color": Color(0.35, 0.75, 0.40), "hp": 1.4, "regen": 0.06},
+	"air":    {"name": "Air",    "color": Color(0.72, 0.78, 0.96), "air": true},
+	"split":  {"name": "Splitter","color": Color(0.85, 0.55, 0.25), "hp": 1.2, "count": 0.7, "split": 2, "radius": 1.15},
+}
+
+## 20 waves; boss on every 5th. Kept short — stats come from the scaling formula.
+const WAVES: Array = [
+	{"type": "normal"}, {"type": "fast"}, {"type": "swarm"}, {"type": "normal"},
+	{"type": "tank", "boss": true},
+	{"type": "air"}, {"type": "immune"}, {"type": "fast"}, {"type": "regen"},
+	{"type": "swarm", "boss": true},
+	{"type": "split"}, {"type": "tank"}, {"type": "air"}, {"type": "immune"},
+	{"type": "fast", "boss": true},
+	{"type": "regen"}, {"type": "split"}, {"type": "swarm"}, {"type": "tank"},
+	{"type": "normal", "boss": true},
+]
+
 var gold: int = 0
 var lives: int = 0
 var is_over: bool = false

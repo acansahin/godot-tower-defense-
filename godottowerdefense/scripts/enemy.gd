@@ -4,6 +4,9 @@ class_name Enemy
 ## death and costs the player a life if it reaches the end.
 
 signal removed  ## Emitted whenever the enemy leaves play (death OR escape).
+## Emitted by a splitter when it dies so WaveManager can spawn its children.
+## (position, path_progress, count, child_hp, child_speed, tint, child_radius)
+signal split_requested(pos: Vector2, progress: int, count: int, hp: float, spd: float, tint: Color, r: float)
 
 var speed: float = 70.0
 var max_health: float = 30.0
@@ -14,6 +17,10 @@ var radius: float = 16.0
 var is_flying: bool = false  ## Flyers can only be hit by archer towers.
 var is_boss: bool = false    ## Bosses get a crown + heavier presence.
 var life_cost: int = 1       ## Lives lost if this enemy reaches the end (bosses cost more).
+# Archetype traits (set by WaveManager from the wave's WAVE_TYPES entry).
+var cc_immune: bool = false  ## Ignores slow / poison / stun.
+var regen_dps: float = 0.0   ## Heals this much per second.
+var split_into: int = 0      ## Children spawned on death (0 = none).
 
 var _path: Array = []
 var _target_index: int = 1
@@ -30,20 +37,30 @@ var _stun_time: float = 0.0
 
 ## Slows to `factor` of base speed for `time` seconds. Strongest slow wins.
 func apply_slow(factor: float, time: float) -> void:
+	if cc_immune:
+		return
 	_slow_factor = minf(_slow_factor, factor)
 	_slow_time = maxf(_slow_time, time)
 	queue_redraw()
 
 ## Freezes the enemy in place for `time` seconds (longest stun wins).
 func apply_stun(time: float) -> void:
+	if cc_immune:
+		return
 	_stun_time = maxf(_stun_time, time)
 	queue_redraw()
 
 ## Deals `dps` damage per second for `time` seconds. Strongest poison wins.
 func apply_poison(dps: float, time: float) -> void:
+	if cc_immune:
+		return
 	_poison_dps = maxf(_poison_dps, dps)
 	_poison_time = maxf(_poison_time, time)
 	queue_redraw()
+
+## Sets how far along the path this enemy starts (used for split children).
+func set_progress(index: int) -> void:
+	_target_index = index
 
 func setup(hp: float, spd: float, gold_reward: int, tint: Color) -> void:
 	max_health = hp
@@ -82,6 +99,8 @@ func _process(delta: float) -> void:
 
 ## Advances slow / poison timers and applies poison damage over time.
 func _tick_status(delta: float) -> void:
+	if regen_dps > 0.0 and health < max_health:
+		health = minf(max_health, health + regen_dps * delta)
 	if _stun_time > 0.0:
 		_stun_time -= delta
 		if _stun_time <= 0.0:
@@ -124,6 +143,11 @@ func take_damage(amount: float) -> void:
 func _die() -> void:
 	_dead = true
 	Game.add_gold(reward)
+	# Splitters break into smaller children that continue from here. Emit BEFORE
+	# `removed` so WaveManager adds them to the alive count first (no early clear).
+	if split_into > 0:
+		split_requested.emit(global_position, _target_index, split_into,
+				max_health * 0.35, speed * 1.15, color, radius * 0.62)
 	removed.emit()
 	queue_free()
 
@@ -168,6 +192,14 @@ func _draw() -> void:
 		for i in range(3):
 			var a := _anim_phase * 4.0 + i * TAU / 3.0
 			draw_circle(Vector2(cos(a), sin(a)) * (radius + 9.0), 2.6, Color(1.0, 0.95, 0.45))
+	# Archetype markers so wave types read at a glance.
+	if cc_immune:
+		draw_arc(Vector2.ZERO, radius + 2.0, 0.0, TAU, 26, Color(0.78, 0.82, 0.9, 0.9), 3.0, true)
+	if regen_dps > 0.0:
+		var g := Color(0.5, 1.0, 0.55)
+		var p := Vector2(radius * 0.55, -radius * 0.55)
+		draw_line(p + Vector2(-3, 0), p + Vector2(3, 0), g, 2.0)
+		draw_line(p + Vector2(0, -3), p + Vector2(0, 3), g, 2.0)
 	if is_boss:
 		_draw_crown()
 

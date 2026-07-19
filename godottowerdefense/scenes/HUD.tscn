@@ -48,3 +48,22 @@ mouse_filter = 2
 theme_override_colors/font_color = Color(0.8, 0.9, 1, 1)
 theme_override_font_sizes/font_size = 22
 text = "Wave: 0 / 10"
+
+[node name="NextLabel" type="Label" parent="."]
+layout_mode = 0
+offset_left = 730.0
+offset_top = 11.0
+offset_right = 1090.0
+offset_bottom = 40.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.95, 0.9, 0.7, 1)
+theme_override_font_sizes/font_size = 20
+text = "Next: —"
+
+[node name="SendButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 1098.0
+offset_top = 6.0
+offset_right = 1272.0
+offset_bottom = 40.0
+text = "Send Next ▶"
