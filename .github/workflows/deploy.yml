@@ -34,12 +34,8 @@ jobs:
           mkdir -p build/web
           cd godottowerdefense
           godot --headless --export-release "Web" "$GITHUB_WORKSPACE/build/web/index.html"
-
-      - name: Enable cross-origin isolation (GitHub Pages can't set the headers)
-        run: |
-          curl -sSL -o build/web/coi-serviceworker.js \
-            https://raw.githubusercontent.com/gzuidhof/coi-serviceworker/master/coi-serviceworker.min.js
-          sed -i 's#</title>#</title><script src="coi-serviceworker.js"></script>#' build/web/index.html
+          # Pages serves index.html by default; the single-threaded (nothreads)
+          # export needs no cross-origin isolation headers.
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
