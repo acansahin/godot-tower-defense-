@@ -53,21 +53,21 @@ const START_LIVES := 20
 #   stun_chance/stun_time (chance to freeze the enemy in place). Missing = "off".
 const TOWER_DEFS := {
 	"fire": {
-		"name": "Fire", "cost": 40, "color": Color(0.95, 0.45, 0.18),
+		"name": "Fire", "cost": 40, "color": Color(0.95, 0.45, 0.18), "element": "fire",
 		"damage": 12.0, "range": 175.0, "interval": 0.45,
 	},
 	"water": {
-		"name": "Water", "cost": 45, "color": Color(0.30, 0.60, 0.95),
+		"name": "Water", "cost": 45, "color": Color(0.30, 0.60, 0.95), "element": "water",
 		"damage": 6.0, "range": 165.0, "interval": 0.6,
 		"slow_factor": 0.55, "slow_time": 1.4,
 	},
 	"nature": {
-		"name": "Nature", "cost": 40, "color": Color(0.35, 0.80, 0.35),
+		"name": "Nature", "cost": 40, "color": Color(0.35, 0.80, 0.35), "element": "nature",
 		"damage": 4.0, "range": 165.0, "interval": 0.65,
 		"poison_dps": 10.0, "poison_time": 3.0,
 	},
 	"earth": {
-		"name": "Earth", "cost": 70, "color": Color(0.72, 0.55, 0.34),
+		"name": "Earth", "cost": 70, "color": Color(0.72, 0.55, 0.34), "element": "earth",
 		"damage": 30.0, "range": 150.0, "interval": 1.5, "can_hit_flying": false,
 		"splash_radius": 72.0, "splash_factor": 0.5,
 	},
@@ -116,16 +116,50 @@ const WAVE_TYPES := {
 }
 
 ## 20 waves; boss on every 5th. Kept short — stats come from the scaling formula.
+## "element" (optional) is the wave's armor element (empty/absent = neutral); the
+## first waves and all Air waves stay neutral so element colour doesn't clash.
 const WAVES: Array = [
-	{"type": "normal"}, {"type": "fast"}, {"type": "swarm"}, {"type": "normal"},
-	{"type": "tank", "boss": true},
-	{"type": "air"}, {"type": "immune"}, {"type": "fast"}, {"type": "regen"},
-	{"type": "swarm", "boss": true},
-	{"type": "split"}, {"type": "tank"}, {"type": "air"}, {"type": "immune"},
-	{"type": "fast", "boss": true},
-	{"type": "regen"}, {"type": "split"}, {"type": "swarm"}, {"type": "tank"},
-	{"type": "normal", "boss": true},
+	{"type": "normal"}, {"type": "fast"}, {"type": "swarm"},
+	{"type": "normal", "element": "fire"},
+	{"type": "tank", "boss": true, "element": "water"},
+	{"type": "air"},
+	{"type": "immune", "element": "nature"},
+	{"type": "fast", "element": "earth"},
+	{"type": "regen", "element": "water"},
+	{"type": "swarm", "boss": true, "element": "fire"},
+	{"type": "split", "element": "nature"},
+	{"type": "tank", "element": "earth"},
+	{"type": "air"},
+	{"type": "immune", "element": "water"},
+	{"type": "fast", "boss": true, "element": "fire"},
+	{"type": "regen", "element": "nature"},
+	{"type": "split", "element": "earth"},
+	{"type": "swarm", "element": "water"},
+	{"type": "tank", "element": "fire"},
+	{"type": "normal", "boss": true, "element": "nature"},
 ]
+
+# --- Element matchup -----------------------------------------------------------
+# Simple 4-element cycle: each beats the next. A tower's damage element vs an
+# enemy's armor element gives a multiplier (see element_mult). Neutral ("") on
+# either side = x1, so Lightning / dual towers and early/air waves are unaffected.
+const ELEMENT_BEATS := {"fire": "nature", "nature": "earth", "earth": "water", "water": "fire"}
+const ELEMENT_COLORS := {
+	"fire": Color(0.95, 0.45, 0.18), "water": Color(0.30, 0.60, 0.95),
+	"nature": Color(0.35, 0.80, 0.35), "earth": Color(0.72, 0.55, 0.34),
+}
+const ELEMENT_STRONG := 1.75
+const ELEMENT_WEAK := 0.6
+
+## Damage multiplier for attacker element `atk` hitting armour element `def`.
+func element_mult(atk: String, def: String) -> float:
+	if atk == "" or def == "":
+		return 1.0
+	if ELEMENT_BEATS.get(atk, "") == def:
+		return ELEMENT_STRONG
+	if ELEMENT_BEATS.get(def, "") == atk:
+		return ELEMENT_WEAK
+	return 1.0
 
 var gold: int = 0
 var lives: int = 0

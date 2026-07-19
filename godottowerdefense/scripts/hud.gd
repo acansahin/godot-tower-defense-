@@ -24,8 +24,9 @@ func set_wave(number: int, total: int) -> void:
 	wave_label.text = "Wave: %d / %d" % [number, total]
 	send_button.disabled = true  # a wave is active now
 
-func set_next(text: String) -> void:
+func set_next(text: String, color: Color) -> void:
 	next_label.text = text
+	next_label.add_theme_color_override("font_color", color)
 
 ## Re-enabled during the between-waves gap.
 func enable_send() -> void:

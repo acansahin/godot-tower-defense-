@@ -7,6 +7,7 @@ class_name Projectile
 var speed: float = 420.0
 var damage: float = 10.0
 var color: Color = Color.WHITE
+var element: String = ""  ## Damage element for the enemy-armour matchup.
 var splash_radius: float = 0.0
 var splash_factor: float = 0.5
 var hits_flying: bool = true    ## False skips flyers (ground-only towers) for splash.
@@ -44,9 +45,9 @@ func _hit(target: Enemy) -> void:
 		_apply_splash(target, impact)
 	queue_free()
 
-## Applies damage (scaled by mult) plus any slow / poison to one enemy.
+## Applies damage (scaled by mult and the element matchup) plus any slow / poison.
 func _apply(enemy: Enemy, mult: float) -> void:
-	enemy.take_damage(damage * mult)
+	enemy.take_damage(damage * mult * Game.element_mult(element, enemy.armor_element))
 	if slow_time > 0.0:
 		enemy.apply_slow(slow_factor, slow_time)
 	if poison_time > 0.0:

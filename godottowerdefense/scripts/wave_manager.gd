@@ -5,7 +5,7 @@ class_name WaveManager
 ## restart never leaves a spawn loop running.
 
 signal wave_started(number: int, total: int)
-signal wave_preview(text: String)  ## Describes the next wave for the HUD.
+signal wave_preview(text: String, color: Color)  ## Describes the next wave for the HUD.
 signal prep_started                ## The between-waves gap began (send-early available).
 
 const ENEMY := preload("res://scenes/Enemy.tscn")
@@ -44,6 +44,7 @@ var _reward: int = 0
 var _interval: float = 0.6
 var _tint: Color = Color.WHITE
 var _type_def: Dictionary = {}  ## The current wave's WAVE_TYPES entry.
+var _element: String = ""       ## The current wave's armor element ("" = neutral).
 var _lives_at_start: int = 0    ## Lives when the wave began (for the leak-free bonus).
 
 func _ready() -> void:
@@ -58,7 +59,7 @@ func _ready() -> void:
 	add_child(_prep_timer)
 
 func start() -> void:
-	wave_preview.emit(_preview_text(1))
+	wave_preview.emit(_preview_text(1), _preview_color(1))
 	_queue_next_wave()
 
 func _queue_next_wave() -> void:
@@ -89,10 +90,15 @@ func _start_wave() -> void:
 	_reward = 3 + _wave
 	_interval = maxf(0.3, 0.9 - _wave * 0.04)
 	_to_spawn = maxi(1, int(round(base_count * float(_type_def.get("count", 1.0)))))
-	_tint = _type_def.get("color", Color.WHITE)
+	# Element waves colour the body by element; neutral waves keep the archetype colour.
+	_element = String(def.get("element", ""))
+	if _element != "":
+		_tint = Game.ELEMENT_COLORS.get(_element, Color.WHITE)
+	else:
+		_tint = _type_def.get("color", Color.WHITE)
 	_lives_at_start = Game.lives
 	wave_started.emit(_wave, Game.WAVES.size())
-	wave_preview.emit(_preview_text(_wave + 1))
+	wave_preview.emit(_preview_text(_wave + 1), _preview_color(_wave + 1))
 	if def.get("boss", false):
 		_spawn_boss()                # milestone centrepiece
 	_spawn_one()                     # first enemy immediately
@@ -105,6 +111,7 @@ func _spawn_one() -> void:
 	_to_spawn -= 1
 	var enemy := ENEMY.instantiate() as Enemy
 	enemy.setup(_hp, _spd, _reward, _tint)
+	enemy.armor_element = _element
 	enemy.radius = 16.0 * float(_type_def.get("radius", 1.0))
 	enemy.cc_immune = _type_def.get("cc_immune", false)
 	var regen := float(_type_def.get("regen", 0.0))
@@ -130,6 +137,7 @@ func _spawn_child(pos: Vector2, progress: int, count: int, hp: float, spd: float
 	for i in count:
 		var c := ENEMY.instantiate() as Enemy
 		c.setup(hp, spd, 1, tint)
+		c.armor_element = _element  # children share the wave's element
 		c.radius = r
 		c.removed.connect(_on_enemy_removed)
 		enemies_root.add_child(c)  # _ready puts it at PATH[0]; override below
@@ -145,7 +153,17 @@ func _preview_text(n: int) -> String:
 	var t: Dictionary = Game.WAVE_TYPES[def["type"]]
 	var cnt := maxi(1, int(round((5 + int(n * 2.5)) * float(t.get("count", 1.0)))))
 	var boss := "  BOSS" if def.get("boss", false) else ""
-	return "Next: %s x%d%s" % [str(t.get("name", def["type"])), cnt, boss]
+	var elem := String(def.get("element", ""))
+	var epfx := (elem.capitalize() + " ") if elem != "" else ""
+	return "Next: %s%s x%d%s" % [epfx, str(t.get("name", def["type"])), cnt, boss]
+
+## Colour for the preview label: the wave's element, or a default gold if neutral.
+func _preview_color(n: int) -> Color:
+	if n <= Game.WAVES.size():
+		var elem := String(Game.WAVES[n - 1].get("element", ""))
+		if elem != "":
+			return Game.ELEMENT_COLORS.get(elem, Color(0.95, 0.9, 0.7))
+	return Color(0.95, 0.9, 0.7)
 
 ## Spawns one boss for the current wave. Not counted in _to_spawn — it is an
 ## extra enemy tracked via _alive, so the wave only clears once it dies too.
@@ -154,6 +172,7 @@ func _spawn_boss() -> void:
 		return
 	var boss := ENEMY.instantiate() as Enemy
 	boss.setup(_hp * BOSS_HP_MULT, _spd * BOSS_SPEED_MULT, _reward * BOSS_REWARD_MULT, BOSS_TINT)
+	boss.armor_element = _element
 	boss.radius = BOSS_RADIUS
 	boss.life_cost = BOSS_LIFE_COST
 	boss.is_boss = true

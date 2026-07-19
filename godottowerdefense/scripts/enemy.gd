@@ -21,6 +21,7 @@ var life_cost: int = 1       ## Lives lost if this enemy reaches the end (bosses
 var cc_immune: bool = false  ## Ignores slow / poison / stun.
 var regen_dps: float = 0.0   ## Heals this much per second.
 var split_into: int = 0      ## Children spawned on death (0 = none).
+var armor_element: String = ""  ## Element matchup vs tower damage element ("" = neutral).
 
 var _path: Array = []
 var _target_index: int = 1

@@ -8,6 +8,7 @@ const PROJECTILE := preload("res://scenes/Projectile.tscn")
 
 var id: String = ""
 var display_name: String = ""
+var element: String = ""      ## Damage element for the matchup ("" = neutral).
 var element_color: Color = Color.WHITE
 
 var tower_range: float = 160.0
@@ -54,6 +55,7 @@ func setup_def(def_id: String) -> void:
 	id = def_id
 	var d: Dictionary = Game.TOWER_DEFS[def_id]
 	display_name = d.get("name", def_id)
+	element = d.get("element", "")
 	element_color = d.get("color", Color.WHITE)
 	damage = d.get("damage", 8.0)
 	tower_range = d.get("range", 160.0)
@@ -141,6 +143,7 @@ func _fire(target: Enemy) -> void:
 	_projectiles().add_child(p)
 	p.setup(global_position, target, damage)
 	p.color = element_color
+	p.element = element
 	p.hits_flying = can_hit_flying
 	p.splash_radius = splash_radius
 	p.splash_factor = splash_factor
