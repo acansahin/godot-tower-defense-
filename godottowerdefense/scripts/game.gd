@@ -22,23 +22,75 @@ const PATH: Array = [
 	Vector2(1360, 560),
 ]
 
-# Grass tiles beside the road where a tower can be built.
-# Each spot is chosen to sit within firing range of at least one road segment.
-const TOWER_SPOTS: Array = [
-	Vector2(400, 235),
-	Vector2(690, 235),
-	Vector2(850, 250),
-	Vector2(450, 460),
-	Vector2(700, 460),
-	Vector2(950, 460),
-	Vector2(1120, 470),
-	Vector2(350, 470),
+# Grid placement: towers snap to cells drawn faintly on the grass, flush against
+# the road. Columns share a fixed width; rows are sized per gap so that two rows
+# exactly fill the space between two horizontal roads.
+const CELL_WIDTH := 64.0         ## Column width (px); columns step by this.
+const ROAD_CLEARANCE := 64.0     ## Min distance from a cell centre to the road centre-line (flush allowed).
+
+# Build-grid rows as Vector2(centre_y, cell_height). The three horizontal roads
+# sit at y = 140 / 360 / 560 (stone half-width 32). Two rows fill each gap flush
+# to both roads, plus a strip flush against the outside of the top/bottom roads.
+#   band A (140..360): grass 172..328 (156 tall) -> two 78-tall rows
+#   band B (360..560): grass 392..528 (136 tall) -> two 68-tall rows
+const GRID_ROWS: Array = [
+	Vector2(69.0, 78.0),                          # above the top road
+	Vector2(211.0, 78.0), Vector2(289.0, 78.0),   # between top & middle roads
+	Vector2(426.0, 68.0), Vector2(494.0, 68.0),   # between middle & bottom roads
+	Vector2(626.0, 68.0),                         # below the bottom road
 ]
+const GRID_COL_START := 64.0     ## First column centre.
+const GRID_COL_END := 1216.0     ## Last column centre (columns step by CELL_WIDTH).
 
 const START_GOLD := 150
 const START_LIVES := 20
-const ARCHER_COST := 40
-const CANNON_COST := 90
+
+# --- Element tower definitions -------------------------------------------------
+# Every tower (base element or dual combination) is just a data entry. Fields:
+#   name, cost, color, damage, range, interval, can_hit_flying,
+#   splash_radius/splash_factor (AoE), slow_factor/slow_time (0..1 = slower),
+#   poison_dps/poison_time (damage over time). Missing fields default to "off".
+const TOWER_DEFS := {
+	"fire": {
+		"name": "Fire", "cost": 40, "color": Color(0.95, 0.45, 0.18),
+		"damage": 12.0, "range": 175.0, "interval": 0.45,
+	},
+	"water": {
+		"name": "Water", "cost": 45, "color": Color(0.30, 0.60, 0.95),
+		"damage": 6.0, "range": 165.0, "interval": 0.6,
+		"slow_factor": 0.55, "slow_time": 1.4,
+	},
+	"nature": {
+		"name": "Nature", "cost": 40, "color": Color(0.35, 0.80, 0.35),
+		"damage": 4.0, "range": 165.0, "interval": 0.65,
+		"poison_dps": 10.0, "poison_time": 3.0,
+	},
+	"earth": {
+		"name": "Earth", "cost": 70, "color": Color(0.72, 0.55, 0.34),
+		"damage": 30.0, "range": 150.0, "interval": 1.5, "can_hit_flying": false,
+		"splash_radius": 72.0, "splash_factor": 0.5,
+	},
+	# --- Dual combinations (directly buildable for now) ---
+	"steam": {  # Fire + Water
+		"name": "Steam", "cost": 110, "color": Color(0.70, 0.82, 0.95),
+		"damage": 16.0, "range": 180.0, "interval": 0.5,
+		"slow_factor": 0.6, "slow_time": 1.2,
+	},
+	"lava": {  # Fire + Earth
+		"name": "Lava", "cost": 150, "color": Color(0.92, 0.35, 0.20),
+		"damage": 40.0, "range": 160.0, "interval": 1.3, "can_hit_flying": false,
+		"splash_radius": 88.0, "splash_factor": 0.6,
+		"poison_dps": 8.0, "poison_time": 2.5,  # burn
+	},
+	"ice": {  # Water + Nature
+		"name": "Ice", "cost": 120, "color": Color(0.60, 0.90, 0.98),
+		"damage": 10.0, "range": 175.0, "interval": 0.7,
+		"slow_factor": 0.4, "slow_time": 2.0,
+		"poison_dps": 6.0, "poison_time": 3.0,
+	},
+}
+## Order the palette lists towers in.
+const TOWER_ORDER: Array = ["fire", "water", "nature", "earth", "steam", "lava", "ice"]
 
 var gold: int = 0
 var lives: int = 0
