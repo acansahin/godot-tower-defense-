@@ -49,7 +49,8 @@ const START_LIVES := 20
 # Every tower (base element or dual combination) is just a data entry. Fields:
 #   name, cost, color, damage, range, interval, can_hit_flying,
 #   splash_radius/splash_factor (AoE), slow_factor/slow_time (0..1 = slower),
-#   poison_dps/poison_time (damage over time). Missing fields default to "off".
+#   poison_dps/poison_time (damage over time),
+#   stun_chance/stun_time (chance to freeze the enemy in place). Missing = "off".
 const TOWER_DEFS := {
 	"fire": {
 		"name": "Fire", "cost": 40, "color": Color(0.95, 0.45, 0.18),
@@ -88,9 +89,14 @@ const TOWER_DEFS := {
 		"slow_factor": 0.4, "slow_time": 2.0,
 		"poison_dps": 6.0, "poison_time": 3.0,
 	},
+	"lightning": {  # chance to stun (freeze in place)
+		"name": "Lightning", "cost": 70, "color": Color(1.0, 0.9, 0.25),
+		"damage": 14.0, "range": 185.0, "interval": 0.7,
+		"stun_chance": 0.25, "stun_time": 1.2,
+	},
 }
 ## Order the palette lists towers in.
-const TOWER_ORDER: Array = ["fire", "water", "nature", "earth", "steam", "lava", "ice"]
+const TOWER_ORDER: Array = ["fire", "water", "nature", "earth", "lightning", "steam", "lava", "ice"]
 
 var gold: int = 0
 var lives: int = 0

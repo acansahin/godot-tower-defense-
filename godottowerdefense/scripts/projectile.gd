@@ -14,6 +14,8 @@ var slow_factor: float = 1.0    ## < 1 slows the enemy on hit.
 var slow_time: float = 0.0
 var poison_dps: float = 0.0
 var poison_time: float = 0.0
+var stun_chance: float = 0.0    ## 0..1 chance to freeze the enemy on hit.
+var stun_time: float = 0.0
 
 var _target: Enemy = null
 
@@ -49,6 +51,8 @@ func _apply(enemy: Enemy, mult: float) -> void:
 		enemy.apply_slow(slow_factor, slow_time)
 	if poison_time > 0.0:
 		enemy.apply_poison(poison_dps * mult, poison_time)
+	if stun_time > 0.0 and randf() < stun_chance:
+		enemy.apply_stun(stun_time)
 
 func _apply_splash(main_target: Enemy, center: Vector2) -> void:
 	for e in get_tree().get_nodes_in_group("enemies"):

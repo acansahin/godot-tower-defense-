@@ -26,11 +26,17 @@ var _slow_factor: float = 1.0
 var _slow_time: float = 0.0
 var _poison_dps: float = 0.0
 var _poison_time: float = 0.0
+var _stun_time: float = 0.0
 
 ## Slows to `factor` of base speed for `time` seconds. Strongest slow wins.
 func apply_slow(factor: float, time: float) -> void:
 	_slow_factor = minf(_slow_factor, factor)
 	_slow_time = maxf(_slow_time, time)
+	queue_redraw()
+
+## Freezes the enemy in place for `time` seconds (longest stun wins).
+func apply_stun(time: float) -> void:
+	_stun_time = maxf(_stun_time, time)
 	queue_redraw()
 
 ## Deals `dps` damage per second for `time` seconds. Strongest poison wins.
@@ -76,6 +82,10 @@ func _process(delta: float) -> void:
 
 ## Advances slow / poison timers and applies poison damage over time.
 func _tick_status(delta: float) -> void:
+	if _stun_time > 0.0:
+		_stun_time -= delta
+		if _stun_time <= 0.0:
+			queue_redraw()
 	if _slow_time > 0.0:
 		_slow_time -= delta
 		if _slow_time <= 0.0:
@@ -89,6 +99,8 @@ func _tick_status(delta: float) -> void:
 			queue_redraw()
 
 func _move(delta: float) -> void:
+	if _stun_time > 0.0:
+		return  # frozen in place
 	if _target_index >= _path.size():
 		_escape()
 		return
@@ -150,6 +162,12 @@ func _draw() -> void:
 		draw_arc(Vector2.ZERO, radius + 3.0, 0.0, TAU, 22, Color(0.4, 0.7, 1.0, 0.85), 2.0, true)
 	if _poison_time > 0.0:
 		draw_arc(Vector2.ZERO, radius + 6.0, 0.0, TAU, 22, Color(0.45, 0.9, 0.35, 0.8), 2.0, true)
+	if _stun_time > 0.0:
+		# Yellow ring with spinning "stunned" sparks.
+		draw_arc(Vector2.ZERO, radius + 9.0, 0.0, TAU, 22, Color(1.0, 0.95, 0.3, 0.9), 2.0, true)
+		for i in range(3):
+			var a := _anim_phase * 4.0 + i * TAU / 3.0
+			draw_circle(Vector2(cos(a), sin(a)) * (radius + 9.0), 2.6, Color(1.0, 0.95, 0.45))
 	if is_boss:
 		_draw_crown()
 

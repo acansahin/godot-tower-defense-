@@ -22,6 +22,8 @@ var slow_factor: float = 1.0    ## < 1 slows; 1 = no slow.
 var slow_time: float = 0.0
 var poison_dps: float = 0.0
 var poison_time: float = 0.0
+var stun_chance: float = 0.0    ## chance (0..1) to freeze enemies on hit.
+var stun_time: float = 0.0
 
 ## Upgrade state. setup_def() seeds build_cost / total_spent; upgrade() applies
 ## growth on top of the base stats.
@@ -63,6 +65,8 @@ func setup_def(def_id: String) -> void:
 	slow_time = d.get("slow_time", 0.0)
 	poison_dps = d.get("poison_dps", 0.0)
 	poison_time = d.get("poison_time", 0.0)
+	stun_chance = d.get("stun_chance", 0.0)
+	stun_time = d.get("stun_time", 0.0)
 	build_cost = d.get("cost", 40)
 	total_spent = build_cost
 	queue_redraw()
@@ -144,6 +148,8 @@ func _fire(target: Enemy) -> void:
 	p.slow_time = slow_time
 	p.poison_dps = poison_dps
 	p.poison_time = poison_time
+	p.stun_chance = stun_chance
+	p.stun_time = stun_time
 
 func _draw() -> void:
 	# Faint range indicator in the element's colour.
