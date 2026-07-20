@@ -1,0 +1,44 @@
+name: Build Android APK
+
+# Exports a debug .apk you can sideload onto an Android device. Runs in the same
+# barichello/godot-ci:4.7 container as the Web deploy — that image already ships
+# the Android SDK, the Godot export templates and a debug keystore, so no local
+# Android toolchain is needed. Download the APK from the run's "Artifacts".
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    name: Export Android (debug APK)
+    runs-on: ubuntu-latest
+    container:
+      image: barichello/godot-ci:4.7
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up export templates + Android config
+        run: |
+          # GitHub Actions sets HOME to /github/home, so move the image's
+          # templates and its pre-configured Android SDK path + debug keystore
+          # (under /root/.config/godot) into place where Godot will look.
+          mkdir -p ~/.local/share/godot/export_templates
+          mv /root/.local/share/godot/export_templates/* ~/.local/share/godot/export_templates/
+          mkdir -p ~/.config
+          mv /root/.config/godot ~/.config/godot
+
+      - name: Export "Android" preset (debug APK)
+        run: |
+          mkdir -p build/android
+          cd godottowerdefense
+          godot --headless --verbose --export-debug "Android" "$GITHUB_WORKSPACE/build/android/element-td.apk"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: element-td-android-apk
+          path: build/android/element-td.apk
+          if-no-files-found: error
