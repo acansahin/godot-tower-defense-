@@ -2,8 +2,10 @@ name: Build Android APK
 
 # Exports a debug .apk you can sideload onto an Android device. Runs in the same
 # barichello/godot-ci:4.7 container as the Web deploy — that image already ships
-# the Android SDK, the Godot export templates and a debug keystore, so no local
-# Android toolchain is needed. Download the APK from the run's "Artifacts".
+# the Android SDK and the Godot export templates. We generate our own debug
+# keystore and hand it to Godot via the GODOT_ANDROID_KEYSTORE_DEBUG_* env vars
+# (more robust than relying on the image's pre-baked one). Download the APK from
+# the run's "Artifacts".
 
 on:
   push:
@@ -16,6 +18,10 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: barichello/godot-ci:4.7
+    env:
+      GODOT_ANDROID_KEYSTORE_DEBUG_PATH: ${{ github.workspace }}/debug.keystore
+      GODOT_ANDROID_KEYSTORE_DEBUG_USER: androiddebugkey
+      GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,12 +29,26 @@ jobs:
       - name: Set up export templates + Android config
         run: |
           # GitHub Actions sets HOME to /github/home, so move the image's
-          # templates and its pre-configured Android SDK path + debug keystore
-          # (under /root/.config/godot) into place where Godot will look.
+          # templates and its pre-configured Android SDK path (under
+          # /root/.config/godot) into place where Godot will look.
           mkdir -p ~/.local/share/godot/export_templates
           mv /root/.local/share/godot/export_templates/* ~/.local/share/godot/export_templates/
           mkdir -p ~/.config
           mv /root/.config/godot ~/.config/godot
+
+      - name: Generate debug keystore
+        run: |
+          keytool -keyalg RSA -genkeypair -alias androiddebugkey \
+            -keypass android -keystore "$GITHUB_WORKSPACE/debug.keystore" \
+            -storepass android -dname "CN=Android Debug,O=Android,C=US" \
+            -validity 9999 -deststoretype pkcs12
+
+      - name: Diagnostics (tools + SDK path)
+        run: |
+          echo "== export templates =="; ls -la ~/.local/share/godot/export_templates/*/ 2>/dev/null | head -30 || true
+          echo "== signing tools =="; command -v keytool zipalign apksigner || true
+          echo "== ANDROID_HOME=$ANDROID_HOME  ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT =="
+          echo "== editor android_sdk_path =="; grep -i "android_sdk_path\|debug_keystore" ~/.config/godot/editor_settings-4.7.tres 2>/dev/null || echo "(no editor settings file)"
 
       - name: Export "Android" preset (debug APK)
         run: |
