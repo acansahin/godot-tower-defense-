@@ -74,6 +74,7 @@ func send_now() -> void:
 	if _prep_timer.is_stopped():
 		return
 	_prep_timer.stop()
+	Audio.play("send_early")
 	Game.add_gold(3 + (_wave + 1))  # early-call reward
 	_start_wave()
 
@@ -97,6 +98,7 @@ func _start_wave() -> void:
 	else:
 		_tint = _type_def.get("color", Color.WHITE)
 	_lives_at_start = Game.lives
+	Audio.play("wave_start")
 	wave_started.emit(_wave, Game.WAVES.size())
 	wave_preview.emit(_preview_text(_wave + 1), _preview_color(_wave + 1))
 	if def.get("boss", false):
@@ -178,6 +180,7 @@ func _spawn_boss() -> void:
 	boss.is_boss = true
 	boss.removed.connect(_on_enemy_removed)
 	enemies_root.add_child(boss)
+	Audio.play("boss_spawn")
 	_alive += 1
 
 func _on_enemy_removed() -> void:
@@ -194,6 +197,7 @@ func _on_enemy_removed() -> void:
 
 ## Leak-free bonus + interest on banked gold, granted when a wave is cleared.
 func _grant_wave_rewards() -> void:
+	Audio.play("wave_clear")
 	if Game.lives == _lives_at_start:
 		Game.add_gold(LEAK_FREE_BONUS)
 	var interest := mini(INTEREST_CAP, int(Game.gold * INTEREST_RATE))

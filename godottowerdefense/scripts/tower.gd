@@ -139,6 +139,7 @@ func _projectiles() -> Node:
 
 func _fire(target: Enemy) -> void:
 	_recoil = 1.0
+	Audio.play_tower_fire(id, element)
 	var p := PROJECTILE.instantiate() as Projectile
 	_projectiles().add_child(p)
 	p.setup(global_position, target, damage)

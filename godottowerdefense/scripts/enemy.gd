@@ -143,6 +143,7 @@ func take_damage(amount: float) -> void:
 
 func _die() -> void:
 	_dead = true
+	Audio.play("boss_death" if is_boss else "enemy_death", 0.1)
 	Game.add_gold(reward)
 	# Splitters break into smaller children that continue from here. Emit BEFORE
 	# `removed` so WaveManager adds them to the alive count first (no early clear).
@@ -154,6 +155,7 @@ func _die() -> void:
 
 func _escape() -> void:
 	_dead = true
+	Audio.play("leak")
 	Game.lose_life(life_cost)
 	removed.emit()
 	queue_free()

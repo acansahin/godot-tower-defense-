@@ -40,6 +40,7 @@ func _process(delta: float) -> void:
 
 func _hit(target: Enemy) -> void:
 	var impact := target.global_position
+	Audio.play("hit", 0.15)
 	_apply(target, 1.0)
 	if splash_radius > 0.0:
 		_apply_splash(target, impact)

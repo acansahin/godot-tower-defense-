@@ -234,12 +234,22 @@ each pair of horizontal roads.
 
 ## 6. Generated placeholder resources
 
-There are **no image/audio files** — every visual is procedurally drawn:
+There are **no image/audio files** — every visual is procedurally drawn and every
+sound effect is synthesized in code:
 - Grass, cobblestone road and grass patches: `map.gd` `_draw()`.
 - Build grid cells: `grid.gd` `_draw()`.
 - Enemies (colored blobs with eyes + health bar; flyers add wings + a shadow;
   status rings for slow/poison): `enemy.gd` `_draw()`.
 - Towers (element-coloured orb, level pips, upgrade arrow, sell ✕), projectiles,
   the drag ghost and the palette: their respective `_draw()` methods.
+- **Sound** (`audio.gd`, the `Audio` autoload): every SFX — per-element tower shots,
+  enemy hit/death, boss explosion, build/upgrade/sell/denied UI blips, wave start/clear,
+  and the victory/game-over jingles — is baked once at startup into an `AudioStreamWAV`
+  and replayed through a small pool of `AudioStreamPlayer`s. Voiced as retro **chiptune /
+  8-bit**: NES-style pulse (square) leads with duty cycles, fast arpeggios for chords,
+  triangle-wave bass, and sample-and-hold noise for percussion/explosions. A quiet
+  16-second chiptune loop (triangle bass + pulse-arpeggio melody over an Am–F–C–G
+  progression) plays continuously underneath so between-wave lulls aren't silent. No
+  sound files ship with the game. Press **M** to mute everything.
 - `icon.svg` is a simple hand-written SVG placeholder for the app icon.
 ```

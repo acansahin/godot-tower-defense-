@@ -75,13 +75,16 @@ func _drop(world_pos: Vector2) -> void:
 		return
 	var center := cell.get_center()
 	if not _cell_is_free(center):
+		Audio.play("denied")
 		return
 	if not Game.spend_gold(_cost(kind)):
+		Audio.play("denied")
 		return
 	var tower := TOWER.instantiate() as Tower
 	tower.setup_def(kind)
 	tower.position = center
 	towers_root.add_child(tower)
+	Audio.play("build")
 
 ## Redraw every tower so upgrade badges appear/disappear as gold changes.
 func _refresh_tower_badges(_gold: int) -> void:
@@ -124,14 +127,18 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif tower.can_upgrade() and Game.gold >= tower.upgrade_cost():
 		Game.spend_gold(tower.upgrade_cost())
 		tower.upgrade()
+		Audio.play("upgrade")
 
 ## Removes a tower and refunds half of the gold sunk into it.
 func _sell_tower(tower: Tower) -> void:
+	Audio.play("sell")
 	Game.add_gold(tower.sell_value())
 	tower.queue_free()
 
 func _on_game_over() -> void:
+	Audio.play("gameover")
 	end_screen.show_result(false)
 
 func _on_victory() -> void:
+	Audio.play("victory")
 	end_screen.show_result(true)
