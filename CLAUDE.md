@@ -37,11 +37,17 @@ Both workflows run automatically on push to `main`:
 | Workflow | Output |
 |---|---|
 | `.github/workflows/deploy.yml` | Web export → GitHub Pages |
-| `.github/workflows/android.yml` | Debug APK → download from the run's **Artifacts** |
+| `.github/workflows/android.yml` | Debug APK → run **Artifacts**, and a **GitHub Release** on `v*` tags |
 
 - Both build inside the `barichello/godot-ci:4.7` container. Nothing Android-related is
   installed on the user's machine; never try to build an APK locally.
 - `android.yml` also supports manual `workflow_dispatch`.
+- **Artifacts vs releases:** artifacts expire (~90 days) and need a GitHub login, so they
+  are for testing only. To produce a permanent, publicly downloadable APK, push a tag:
+  `git tag v1.0 && git push origin v1.0`. That builds, stamps `version/name` from the tag
+  and `version/code` from the run number, and attaches the APK to a Release.
+- The APK is **arm64-only** (`armeabi-v7a=false` in `export_presets.cfg`) to keep it small;
+  this drops pre-2017 32-bit phones.
 - The Android job **generates its own debug keystore** and passes it via the
   `GODOT_ANDROID_KEYSTORE_DEBUG_*` env vars — don't rely on the image's baked-in one.
 - The Web export is single-threaded on purpose, so no COOP/COEP headers are needed.

@@ -4,12 +4,18 @@ name: Build Android APK
 # barichello/godot-ci:4.7 container as the Web deploy — that image already ships
 # the Android SDK and the Godot export templates. We generate our own debug
 # keystore and hand it to Godot via the GODOT_ANDROID_KEYSTORE_DEBUG_* env vars
-# (more robust than relying on the image's pre-baked one). Download the APK from
-# the run's "Artifacts".
+# (more robust than relying on the image's baked-in one).
+#
+# Two ways to get the APK:
+#   * push to main  -> build artifact on the run (expires, needs a GitHub login)
+#   * push a v* tag -> the same APK attached to a GitHub Release, which is
+#                      permanent and downloadable by anyone without signing in.
+# Cut a release with:  git tag v1.0 && git push origin v1.0
 
 on:
   push:
     branches: [ main ]
+    tags: [ 'v*' ]
   workflow_dispatch:
 
 jobs:
@@ -43,18 +49,22 @@ jobs:
             -storepass android -dname "CN=Android Debug,O=Android,C=US" \
             -validity 9999 -deststoretype pkcs12
 
-      - name: Diagnostics (tools + SDK path)
+      - name: Stamp version from tag
+        if: startsWith(github.ref, 'refs/tags/v')
         run: |
-          echo "== export templates =="; ls -la ~/.local/share/godot/export_templates/*/ 2>/dev/null | head -30 || true
-          echo "== signing tools =="; command -v keytool zipalign apksigner || true
-          echo "== ANDROID_HOME=$ANDROID_HOME  ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT =="
-          echo "== editor android_sdk_path =="; grep -i "android_sdk_path\|debug_keystore" ~/.config/godot/editor_settings-4.7.tres 2>/dev/null || echo "(no editor settings file)"
+          # Without this every build reports itself as 1.0. versionCode must also
+          # increase for Android to treat a build as an update, so use the run number.
+          VER="${GITHUB_REF_NAME#v}"
+          sed -i "s|^version/name=.*|version/name=\"$VER\"|" godottowerdefense/export_presets.cfg
+          sed -i "s|^version/code=.*|version/code=${{ github.run_number }}|" godottowerdefense/export_presets.cfg
+          grep -E '^version/' godottowerdefense/export_presets.cfg
 
       - name: Export "Android" preset (debug APK)
         run: |
           mkdir -p build/android
           cd godottowerdefense
           godot --headless --verbose --export-debug "Android" "$GITHUB_WORKSPACE/build/android/element-td.apk"
+          ls -lh "$GITHUB_WORKSPACE/build/android/element-td.apk"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -62,3 +72,32 @@ jobs:
           name: element-td-android-apk
           path: build/android/element-td.apk
           if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: build-android
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest        # no container: keeps the release actions on the stock runner
+    permissions:
+      contents: write             # required to create the release
+    steps:
+      - name: Download the built APK
+        uses: actions/download-artifact@v4
+        with:
+          name: element-td-android-apk
+          path: dist
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/element-td.apk
+          generate_release_notes: true
+          body: |
+            **Element TD** — Android build (debug-signed, sideload only).
+
+            Download `element-td.apk`, open it on your phone and allow
+            installation from unknown sources. Requires a 64-bit device
+            (any phone from roughly 2017 onward).
+
+            Prefer not to install anything? Play it in the browser:
+            https://acansahin.github.io/godot-tower-defense-/
