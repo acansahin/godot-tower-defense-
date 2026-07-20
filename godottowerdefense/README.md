@@ -5,11 +5,14 @@ custom map **Element TD**. Built with typed GDScript, deliberately small and
 readable rather than production-architected.
 
 When you press **Play** you get: a grassy map, an S-shaped cobblestone road, a
-faint build grid beside the road, enemies that spawn in escalating waves
-(including occasional **flyers** and periodic **bosses**), a drag-and-drop
-**element tower palette** (Fire / Water / Nature / Earth plus a few dual
-combinations), one-click tower **upgrades**, tower **selling**, a gold economy,
-lives, and a win/lose flow.
+faint build grid beside the road, 20 waves of enemies drawn from a data table of
+**creep archetypes** (including flyers, tanks, swarms, splitters, regenerators and
+periodic **bosses**), a drag-and-drop **element tower palette** (Fire / Water /
+Nature / Earth, the dual towers Steam / Lava / Ice, and Lightning), an
+**element-matchup** system (each base element is strong/weak against another, so
+tower choice vs. an enemy's armor element matters), one-click tower **upgrades**,
+tower **selling**, a gold economy with interest and streak bonuses, lives, and a
+win/lose flow.
 
 Towers are **data-driven**: every tower is one entry in `Game.TOWER_DEFS` with a
 colour and an effect payload (damage, splash, slow, poison). Adding a new tower
@@ -42,7 +45,13 @@ code with primitive shapes and colors.
 - **Sell a tower** by clicking the small red ✕ in its bottom-right corner; you get
   back half of everything you spent on it (shown next to the ✕).
 - **Ground-only towers** (Earth, Lava) can't hit flyers; the others can.
-- Survive all 10 waves to win; lose all your lives and it's game over. Both
+- The HUD shows a **next-wave preview** (archetype, count, boss flag, and armor
+  element colour) before it spawns — a **Send Next ▶** button lets you call it
+  early for a small gold bonus instead of waiting out the prep timer.
+- Each enemy's armor element tints its body; matching it against the right tower
+  element deals bonus damage (and less if it's the wrong one) — see the element
+  matchup below.
+- Survive all 20 waves to win; lose all your lives and it's game over. Both
   screens have a **Restart** button.
 
 ---
@@ -72,7 +81,7 @@ godot-tower-defense/
     ├── enemy.gd            # Path walking, health, flyer visuals, slow/poison
     ├── tower.gd            # Generic tower: targeting, firing, upgrade + sell badges
     ├── projectile.gd       # Homing projectile: damage, splash, slow, poison
-    ├── wave_manager.gd     # Spawns escalating waves, flyers and bosses
+    ├── wave_manager.gd     # Spawns the 20-wave table (archetypes, bosses, economy)
     ├── tower_palette.gd    # Top-right drag-source, lists Game.TOWER_ORDER
     ├── placement_preview.gd # Green/red ghost cell shown while dragging
     ├── hud.gd              # HUD label updates
@@ -120,7 +129,9 @@ HUD (Control)               [hud.gd]
 ├── Bar (ColorRect)
 ├── GoldLabel (Label)
 ├── LivesLabel (Label)
-└── WaveLabel (Label)
+├── WaveLabel (Label)
+├── NextLabel (Label)        -> next-wave preview (archetype/count/boss/element)
+└── SendButton (Button)      -> "Send Next ▶", enabled during the prep gap
 ```
 
 ### `EndScreen.tscn`
@@ -154,16 +165,25 @@ costs, and the mutable `gold` / `lives` with signals.
   colour and cost and emits `drag_started(id)` when pressed. **`Main`** then drags
   the **`Preview`** ghost to the snapped cell and builds on release if the cell is
   free and affordable.
-- **`WaveManager`** spawns enemies with growing count/HP/speed using plain
-  `Timer` nodes (so a restart can't leave a spawn loop running). From wave 3 on,
-  each enemy has a chance to be a **flyer**; every 5th wave also spawns one
-  **boss**.
+- **`WaveManager`** reads the fixed 20-entry `Game.WAVES` table using plain
+  `Timer` nodes (so a restart can't leave a spawn loop running). Each entry picks
+  a **creep archetype** from `Game.WAVE_TYPES` (normal / fast / swarm / tank /
+  immune / regen / air / split — HP, speed, count, CC-immunity, regen and
+  splitting are all multipliers/flags on the archetype), optionally flags a
+  **boss** (HP ×6, reward ×10, costs 10 lives) and an **armor element** that
+  tints the wave and feeds the element matchup. It also runs the economy layer:
+  interest on banked gold each wave clear (8%, capped at 40), a leak-free bonus
+  (+6 gold) if nothing got through, and the early-call bonus from the HUD's
+  **Send Next** button. `wave_preview` emits the next wave's description/colour
+  ahead of time for the HUD.
 - **`Enemy`** walks `Game.PATH`; on death it grants gold, on reaching the end it
   costs `life_cost` lives (1 normally, 10 for a boss). Both cases emit `removed`
   so the wave manager can count down. `make_flying()` marks it airborne
   (squishier, faster, wings + shadow) — only towers with `can_hit_flying` can
-  target it. `apply_slow()` / `apply_poison()` drive the status effects (shown as
-  blue / green rings).
+  target it. `apply_slow()` / `apply_poison()` / `apply_stun()` drive the status
+  effects (shown as blue / green / yellow rings); `armor_element` is the enemy's
+  side of the element matchup (`Game.element_mult`) applied to incoming damage,
+  including poison ticks.
 - **`Tower`** is one generic script. `setup_def(id)` loads a `Game.TOWER_DEFS`
   entry (stats + effect payload + colour). It finds the closest **targetable**
   enemy in range and fires a `Projectile` carrying that payload; `can_hit_flying`
@@ -171,7 +191,9 @@ costs, and the mutable `gold` / `lives` with signals.
   `total_spent` (red sell ✕, refunds `SELL_REFUND`).
 - **`Projectile`** homes onto its target and applies its payload on impact:
   direct damage, an area **splash** (all enemies in radius, `hits_flying`-gated),
-  a **slow**, and/or a **poison** DoT.
+  a **slow**, a **poison** DoT, and/or a chance to **stun**. Direct, splash and
+  poison damage are all scaled by `Game.element_mult(element, enemy.armor_element)`
+  — the tower's element vs. the enemy's armor element.
 - **`Main`** handles input: palette drags build the chosen tower on the grid; a
   click on a tower's body upgrades it, and a click on its ✕ badge sells it (no
   menus).
@@ -187,14 +209,19 @@ costs, and the mutable `gold` / `lives` with signals.
 | Tower stats (all towers) | `game.gd` `TOWER_DEFS` | per-tower cost / dmg / range / interval / effects |
 | Base towers | `TOWER_DEFS` | Fire (dmg), Water (slow), Nature (poison), Earth (splash, ground) |
 | Dual towers | `TOWER_DEFS` | Steam (dmg+slow), Lava (splash+burn, ground), Ice (slow+poison) |
+| Neutral tower | `TOWER_DEFS` | Lightning (25% chance to stun 1.2s) |
 | Upgrade: max level / growth | `tower.gd` | L3, dmg ×1.6, range +20, interval ×0.82, DoT ×1.6 |
 | Upgrade cost | `tower.gd` `upgrade_cost()` | `build_cost × level` (e.g. Fire 40, 80) |
 | Sell refund | `tower.gd` `SELL_REFUND` | 50% of total gold spent |
-| Waves | `wave_manager.gd` `TOTAL_WAVES` | 10 |
-| Prep time between waves | `wave_manager.gd` `PREP_TIME` | 4s |
-| Wave scaling (`n` = wave) | `wave_manager.gd` `_start_wave()` | count `5 + int(2.5·n)`, HP `20 + 10·n + 3·n²`, speed `60 + 6·n`, reward `3 + n` |
-| Flyers | `wave_manager.gd` | from wave 3, 30% chance; HP ×0.65, speed ×1.25 |
-| Bosses | `wave_manager.gd` | every 5th wave; HP ×6, speed ×0.6, reward ×10, costs 10 lives |
+| Element matchup | `game.gd` `ELEMENT_BEATS` | cycle fire→nature→earth→water→fire; ×1.75 dmg if you beat the target's armor element, ×0.6 if it beats you, ×1 if either side is neutral (applies to direct, splash and poison damage) |
+| Waves | `game.gd` `WAVES` | 20 fixed entries (archetype + optional boss/element per wave) |
+| Creep archetypes | `game.gd` `WAVE_TYPES` | normal, fast, swarm, tank, immune (CC-immune), regen, air (flyer), split (splits on death) — each is a set of HP/speed/count/radius multipliers and flags on top of the base scaling |
+| Prep time between waves | `wave_manager.gd` `PREP_TIME` | 4s (skippable via the HUD's Send Next button, for a small gold bonus) |
+| Wave scaling (`n` = wave) | `wave_manager.gd` `_start_wave()` | count `5 + int(2.5·n)`, HP `20 + 10·n + 3·n²`, speed `60 + 6·n`, reward `3 + n`, each × the archetype's multipliers |
+| Flyers (non-Air waves) | `wave_manager.gd` | from wave 3, 15% chance per enemy (halved on top of Air waves existing); `make_flying()` gives HP ×0.65, speed ×1.25 |
+| Bosses | `game.gd` `WAVES` (`"boss": true` per entry) | HP ×6, speed ×0.6, reward ×10, costs 10 lives |
+| Economy: interest | `wave_manager.gd` `INTEREST_RATE`/`INTEREST_CAP` | 8% of banked gold per wave cleared, capped at 40 |
+| Economy: leak-free bonus | `wave_manager.gd` `LEAK_FREE_BONUS` | +6 gold if no enemy reached the end that wave |
 | Road path | `game.gd` `PATH` | 6 waypoints (S-shape) |
 | Build grid | `game.gd` `GRID_ROWS` / `CELL_WIDTH` | 64px cells, rows flush per band |
 

@@ -51,7 +51,7 @@ func _apply(enemy: Enemy, mult: float) -> void:
 	if slow_time > 0.0:
 		enemy.apply_slow(slow_factor, slow_time)
 	if poison_time > 0.0:
-		enemy.apply_poison(poison_dps * mult, poison_time)
+		enemy.apply_poison(poison_dps * mult * Game.element_mult(element, enemy.armor_element), poison_time)
 	if stun_time > 0.0 and randf() < stun_chance:
 		enemy.apply_stun(stun_time)
 
