@@ -38,17 +38,28 @@ const RANGE_GROWTH := 20.0   ## flat range added per level
 const FIRE_SPEEDUP := 0.82   ## fire_interval multiplier per level (lower = faster)
 const SELL_REFUND := 0.5     ## fraction of total_spent returned when sold
 
-# Badge geometry (tower-local). The upgrade arrow sits ON the tower body (inside
-# the cell) so clicking it actually upgrades; the sell badge is tucked into the
-# bottom-right corner — far from the body, so upgrading can't sell by accident.
+# Badge geometry (tower-local). The sell badge is tucked into the bottom-right corner —
+# far from the body, so upgrading can't sell by accident. The upgrade hint is a slim
+# arrow off to the LEFT, clear of the barrel: anything drawn on the body got run over by
+# the barrel as it swung around to track targets.
 const SELL_BADGE_POS := Vector2(22, 24)
 const SELL_BADGE_R := 8.0
-const UPGRADE_BADGE_POS := Vector2(0, -12)
-const UPGRADE_BADGE_R := 12.0
+const UPGRADE_ARROW_X := -26.0  ## Left of the stone base (r=20), still inside the 64px cell.
+const UPGRADE_CHEVRON_PERIOD := 1.4  ## Seconds for one chevron to drift up and fade out.
 
 var _cooldown: float = 0.0
 var _aim_dir: Vector2 = Vector2.UP  ## Barrel direction, eased toward the target.
 var _recoil: float = 0.0            ## 1 → 0 kick after firing.
+var _highlighted: bool = false      ## Hovered by the mouse: draw the range clearly.
+
+## Turns the clear range indicator on/off (Main drives this from mouse hover). Only
+## repaints on an actual change — an idle tower with no target never redraws on its
+## own (see _process), so without this the ring would not appear until it fired.
+func set_highlighted(value: bool) -> void:
+	if _highlighted == value:
+		return
+	_highlighted = value
+	queue_redraw()
 
 ## Configures this tower from a Game.TOWER_DEFS id. Call right after instantiate.
 func setup_def(def_id: String) -> void:
@@ -75,6 +86,10 @@ func setup_def(def_id: String) -> void:
 
 func can_upgrade() -> bool:
 	return level < MAX_LEVEL
+
+## True when the upgrade hint should be on screen: another level exists and it's affordable.
+func _upgrade_ready() -> bool:
+	return can_upgrade() and Game.gold >= upgrade_cost()
 
 ## Gold cost of the NEXT upgrade (build_cost x current level: e.g. 40, 80).
 func upgrade_cost() -> int:
@@ -109,7 +124,8 @@ func _process(delta: float) -> void:
 			_aim_dir = Vector2.from_angle(lerp_angle(_aim_dir.angle(), to.angle(), 0.2))
 	if _recoil > 0.0:
 		_recoil = maxf(0.0, _recoil - delta * 6.0)
-	if target != null or _recoil > 0.0:
+	# An idle tower never repaints on its own, so the animated hint needs to ask for it.
+	if target != null or _recoil > 0.0 or _upgrade_ready():
 		queue_redraw()
 	if _cooldown > 0.0:
 		_cooldown -= delta
@@ -156,8 +172,14 @@ func _fire(target: Enemy) -> void:
 	p.stun_time = stun_time
 
 func _draw() -> void:
-	# Faint range indicator in the element's colour.
-	draw_arc(Vector2.ZERO, tower_range, 0.0, TAU, 48, Color(element_color.r, element_color.g, element_color.b, 0.08), 2.0, true)
+	# Range indicator in the element's colour: quiet by default so a full board stays
+	# readable, clear while hovered so the player can judge coverage.
+	var ec := element_color
+	if _highlighted:
+		draw_circle(Vector2.ZERO, tower_range, Color(ec.r, ec.g, ec.b, 0.07))
+		draw_arc(Vector2.ZERO, tower_range, 0.0, TAU, 64, Color(ec.r, ec.g, ec.b, 0.50), 2.5, true)
+	else:
+		draw_arc(Vector2.ZERO, tower_range, 0.0, TAU, 48, Color(ec.r, ec.g, ec.b, 0.12), 2.0, true)
 	# Flat drop shadow under the base.
 	draw_set_transform(Vector2(0, 16), 0.0, Vector2(1.0, 0.45))
 	draw_circle(Vector2.ZERO, 18.0, Color(0, 0, 0, 0.20))
@@ -166,6 +188,10 @@ func _draw() -> void:
 	draw_circle(Vector2.ZERO, 20.0, Color(0.20, 0.19, 0.23))
 	draw_circle(Vector2.ZERO, 15.0, Color(0.30, 0.28, 0.33))
 	draw_arc(Vector2.ZERO, 20.0, 0.0, TAU, 28, Color(0, 0, 0, 0.4), 1.5, true)
+	# Drawn BEFORE the barrel: the badge sits at (0,-12) with r=12, exactly where the
+	# barrel points when aiming up, and on top it hid the barrel completely — towers
+	# firing at the upper road looked stubby. Underneath, its sides still read clearly.
+	_draw_upgrade_badge()
 	# Barrel + element orb, aimed at the target and kicked back while firing.
 	var back := _aim_dir * (-_recoil * 4.0)
 	var tip := _aim_dir * 24.0 + back
@@ -180,25 +206,48 @@ func _draw() -> void:
 		draw_string(font, tip + Vector2(-5, 5), display_name.substr(0, 1),
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.08, 0.08, 0.10))
 	_draw_level_pips(element_color.lightened(0.35))
-	_draw_upgrade_badge()
+	# Sell badge stays ON TOP: unlike the upgrade badge it is a click target, so it must
+	# never end up hidden under the barrel.
 	_draw_sell_badge()
 
-## Green up-arrow badge above the tower, shown only while an upgrade is both
-## available and affordable. Clicking such a tower upgrades it (see Main). The
-## cost sits above the badge. Called last from each subclass's _draw().
+## Upgrade hint, shown only while another level exists and is affordable: a slim green
+## arrow bobbing gently to the tower's left, with the cost to its right. Clicking the
+## tower anywhere upgrades it (see Main), so this is purely a signal — which is why it can
+## sit off the body, clear of the swinging barrel.
 func _draw_upgrade_badge() -> void:
-	if not can_upgrade() or Game.gold < upgrade_cost():
+	if not _upgrade_ready():
 		return
-	var c := UPGRADE_BADGE_POS
-	draw_circle(c, UPGRADE_BADGE_R, Color(0.15, 0.70, 0.30))
-	draw_arc(c, UPGRADE_BADGE_R, 0.0, TAU, 24, Color(1, 1, 1, 0.95), 2.0, true)
-	draw_colored_polygon(PackedVector2Array([
-		c + Vector2(0, -6), c + Vector2(6, 4), c + Vector2(-6, 4),
-	]), Color.WHITE)
+	# A SHARED clock, not a per-tower timer: towers are built at different moments, so
+	# per-tower phases drifted apart and a row of hints looked like scattered noise.
+	# Off the engine clock every tower animates in lockstep.
+	var t := Time.get_ticks_msec() / 1000.0
+	# Two chevrons half a cycle apart, each drifting upward as it fades — reads as a soft
+	# continuous "up" without anything snapping back to its start.
+	for i in 2:
+		var p := fposmod(t / UPGRADE_CHEVRON_PERIOD + i * 0.5, 1.0)
+		_draw_chevron(Vector2(UPGRADE_ARROW_X, lerpf(6.0, -8.0, p)), sin(p * PI))
 	var font := ThemeDB.fallback_font
 	if font != null:
-		draw_string(font, c + Vector2(-22, -14), "%d g" % upgrade_cost(),
-				HORIZONTAL_ALIGNMENT_CENTER, 44, 14, Color(1, 0.95, 0.6))
+		# Steady (not animated) on the right, where it clears both the HUD bar and neighbours.
+		draw_string(font, Vector2(16, -7), "%d g" % upgrade_cost(),
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1, 0.95, 0.6))
+
+## One soft chevron ("^") at `o`, faded to `alpha`. draw_line has no round-cap option, so
+## dots at the ends and the apex do the rounding — that is what keeps it friendly rather
+## than a hard triangle.
+func _draw_chevron(o: Vector2, alpha: float) -> void:
+	var col := Color(0.45, 1.0, 0.55, alpha)
+	var edge := Color(0.0, 0.0, 0.0, 0.30 * alpha)
+	var l := o + Vector2(-6.0, 4.0)
+	var m := o + Vector2(0.0, -3.0)
+	var r := o + Vector2(6.0, 4.0)
+	# Dark silhouette underneath keeps it legible over light grass.
+	draw_line(l, m, edge, 6.0, true)
+	draw_line(m, r, edge, 6.0, true)
+	draw_line(l, m, col, 3.5, true)
+	draw_line(m, r, col, 3.5, true)
+	for p in [l, m, r]:
+		draw_circle(p, 1.75, col)
 
 ## Red ✕ badge (always shown) to sell the tower for half its invested gold; the
 ## refund amount is printed just below it.

@@ -14,6 +14,7 @@ const TOWER := preload("res://scenes/Tower.tscn")
 @onready var preview = $Preview  ## Drag ghost.
 
 var _drag_kind: String = ""  ## Tower type being dragged from the palette ("" = none).
+var _hovered: Tower = null   ## Tower under the mouse, drawn with a clear range ring.
 
 func _ready() -> void:
 	get_tree().paused = false
@@ -44,19 +45,41 @@ func _on_drag_started(kind: String) -> void:
 	if Game.is_over:
 		return
 	_drag_kind = kind
+	_set_hovered(null)  # the drag preview takes over; don't compete with a hover ring
 	_update_ghost(get_global_mouse_position())
 
 ## While a drag is active this runs before the GUI so the ghost tracks the mouse
-## and the drop is caught wherever the button is released.
+## and the drop is caught wherever the button is released. With no drag, mouse
+## motion instead highlights whichever tower is under the cursor.
 func _input(event: InputEvent) -> void:
+	if event is InputEventMouseMotion:
+		if _drag_kind == "":
+			_update_hover(get_global_mouse_position())
+		else:
+			_update_ghost(get_global_mouse_position())
+		return
 	if _drag_kind == "":
 		return
-	if event is InputEventMouseMotion:
-		_update_ghost(get_global_mouse_position())
-	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT \
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT \
 			and not event.pressed:
 		_drop(get_global_mouse_position())
 		get_viewport().set_input_as_handled()
+
+## Highlights the tower under the cursor (if any) so its range reads clearly.
+func _update_hover(world_pos: Vector2) -> void:
+	var cell: Rect2 = grid.snap(world_pos)
+	_set_hovered(null if cell.size == Vector2.ZERO else _tower_on_cell(cell.get_center()))
+
+## Single place that swaps the highlight, guarding against a tower that has been
+## sold (queue_free'd) while it was still the hovered one.
+func _set_hovered(tower: Tower) -> void:
+	if _hovered == tower:
+		return
+	if is_instance_valid(_hovered):
+		_hovered.set_highlighted(false)
+	_hovered = tower
+	if is_instance_valid(_hovered):
+		_hovered.set_highlighted(true)
 
 func _update_ghost(world_pos: Vector2) -> void:
 	var cell: Rect2 = grid.snap(world_pos)
@@ -64,7 +87,9 @@ func _update_ghost(world_pos: Vector2) -> void:
 		preview.hide()
 		return
 	var center := cell.get_center()
-	preview.show_at(cell, _cell_is_free(center) and Game.gold >= _cost(_drag_kind))
+	var d: Dictionary = Game.TOWER_DEFS[_drag_kind]
+	preview.show_at(cell, _cell_is_free(center) and Game.gold >= _cost(_drag_kind),
+			d.get("range", 160.0), d.get("color", Color.WHITE))
 
 func _drop(world_pos: Vector2) -> void:
 	var kind := _drag_kind
@@ -133,6 +158,8 @@ func _unhandled_input(event: InputEvent) -> void:
 func _sell_tower(tower: Tower) -> void:
 	Audio.play("sell")
 	Game.add_gold(tower.sell_value())
+	if _hovered == tower:
+		_hovered = null  # it is about to be freed; never keep a dangling reference
 	tower.queue_free()
 
 func _on_game_over() -> void:

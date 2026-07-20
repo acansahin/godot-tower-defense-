@@ -34,7 +34,9 @@ const ROAD_CLEARANCE := 64.0     ## Min distance from a cell centre to the road 
 #   band A (140..360): grass 172..328 (156 tall) -> two 78-tall rows
 #   band B (360..560): grass 392..528 (136 tall) -> two 68-tall rows
 const GRID_ROWS: Array = [
-	Vector2(69.0, 78.0),                          # above the top road
+	# Spans y 40..108: flush under the HUD bar (which ends at 40) and flush against the
+	# top road, so it is the same 68px height as the lower rows with no gap either side.
+	Vector2(74.0, 68.0),                          # above the top road
 	Vector2(211.0, 78.0), Vector2(289.0, 78.0),   # between top & middle roads
 	Vector2(426.0, 68.0), Vector2(494.0, 68.0),   # between middle & bottom roads
 	Vector2(626.0, 68.0),                         # below the bottom road
@@ -109,7 +111,7 @@ const WAVE_TYPES := {
 	"fast":   {"name": "Fast",   "color": Color(0.95, 0.85, 0.25), "hp": 0.6, "spd": 1.7, "count": 1.3, "radius": 0.85},
 	"swarm":  {"name": "Swarm",  "color": Color(0.90, 0.50, 0.75), "hp": 0.35, "spd": 1.15, "count": 2.6, "radius": 0.8},
 	"tank":   {"name": "Tank",   "color": Color(0.45, 0.50, 0.55), "hp": 3.0, "spd": 0.6, "count": 0.4, "radius": 1.35},
-	"immune": {"name": "Immune", "color": Color(0.60, 0.62, 0.70), "hp": 1.3, "cc_immune": true},
+	"immune": {"name": "Immune", "color": Color(0.60, 0.62, 0.70), "hp": 1.15, "count": 0.85, "cc_immune": true},
 	"regen":  {"name": "Regen",  "color": Color(0.35, 0.75, 0.40), "hp": 1.0, "count": 0.8, "regen": 0.035},
 	"air":    {"name": "Air",    "color": Color(0.72, 0.78, 0.96), "air": true},
 	"split":  {"name": "Splitter","color": Color(0.85, 0.55, 0.25), "hp": 1.2, "count": 0.7, "split": 2, "radius": 1.15},
@@ -149,7 +151,11 @@ const ELEMENT_COLORS := {
 	"nature": Color(0.35, 0.80, 0.35), "earth": Color(0.72, 0.55, 0.34),
 }
 const ELEMENT_STRONG := 1.75
-const ELEMENT_WEAK := 0.6
+## Mismatched element damage. Kept fairly gentle on purpose: at 0.6 a wave whose armour
+## countered the player's main element (notably the water waves vs. the cheap, popular
+## Fire tower) inflated its effective HP by 67%, which read as a difficulty spike rather
+## than a prompt to diversify.
+const ELEMENT_WEAK := 0.7
 
 ## Damage multiplier for attacker element `atk` hitting armour element `def`.
 func element_mult(atk: String, def: String) -> float:

@@ -93,8 +93,9 @@ text = "• Drag a tower from the palette on the right onto a grid cell to build
 • Click a tower to upgrade it — the green ▲ appears when you can afford it.
 • Click the small red ✕ on a tower to sell it for half of what you spent.
 • Earth and Lava are ground-only — they cannot hit flyers.
+• Immune enemies shrug off slows and stuns — but poison still hurts them.
 • Elements: fire → nature → earth → water → fire.
-    You deal ×1.75 to the element you beat, ×0.6 to the one that beats you.
+    You deal ×1.75 to the element you beat, ×0.7 to the one that beats you.
 • Send Next ▶ starts the next wave early for bonus gold.
 • Press M to mute all sound.
 • Survive all 20 waves to win."

@@ -39,7 +39,10 @@ code with primitive shapes and colors.
   summary), a **Sound** toggle, and **Quit** (hidden on Web).
 - **Drag a tower from the palette** (top-right, lists every tower with its colour
   and cost) onto a grid cell to build it. A green ghost marks a legal cell, red an
-  illegal/unaffordable one.
+  illegal/unaffordable one, and the ghost also previews **the range that tower would
+  cover** — so you can judge placement before spending the gold.
+- **Hover a placed tower** to light up its range ring. Ranges stay faint otherwise, so a
+  full board doesn't turn into a tangle of overlapping circles.
 - Cells are the faint squares on the grass; two rows fit flush between each pair
   of roads. Towers can't be built on the road or on an occupied cell.
 - **Click a tower's body to upgrade it.** When you can afford the next level, a
@@ -240,12 +243,13 @@ costs, and the mutable `gold` / `lives` with signals.
 | Upgrade: max level / growth | `tower.gd` | L3, dmg ×1.6, range +20, interval ×0.82, DoT ×1.6 |
 | Upgrade cost | `tower.gd` `upgrade_cost()` | `build_cost × level` (e.g. Fire 40, 80) |
 | Sell refund | `tower.gd` `SELL_REFUND` | 50% of total gold spent |
-| Element matchup | `game.gd` `ELEMENT_BEATS` | cycle fire→nature→earth→water→fire; ×1.75 dmg if you beat the target's armor element, ×0.6 if it beats you, ×1 if either side is neutral (applies to direct, splash and poison damage) |
+| Element matchup | `game.gd` `ELEMENT_BEATS` | cycle fire→nature→earth→water→fire; ×1.75 dmg if you beat the target's armor element, ×0.7 if it beats you, ×1 if either side is neutral (applies to direct, splash and poison damage) |
 | Waves | `game.gd` `WAVES` | 20 fixed entries (archetype + optional boss/element per wave) |
-| Creep archetypes | `game.gd` `WAVE_TYPES` | normal, fast, swarm, tank, immune (CC-immune), regen, air (flyer), split (splits on death) — each is a set of HP/speed/count/radius multipliers and flags on top of the base scaling |
+| Creep archetypes | `game.gd` `WAVE_TYPES` | normal, fast, swarm, tank, immune, regen, air (flyer), split (splits on death) — each is a set of HP/speed/count/radius multipliers and flags on top of the base scaling |
+| Immune archetype | `game.gd` `WAVE_TYPES` + `enemy.gd` `cc_immune` | ignores **slow and stun**, but **not poison** — poison is damage rather than crowd control, so Nature/Ice/Lava stay the answer to these waves instead of the whole roster going dead |
 | Regen archetype | `game.gd` `WAVE_TYPES` + `enemy.gd` `REGEN_DELAY` | heals 3.5% of max HP/s, but **paused for 2s after taking any damage** — so it only heals through gaps in your coverage instead of setting a hard DPS threshold. Its "+" marker dims while suppressed. Poison ticks count as damage, so a single Nature/Ice/Lava tower shuts the healing off entirely |
 | Prep time between waves | `wave_manager.gd` `PREP_TIME` | 4s (skippable via the HUD's Send Next button, for a small gold bonus) |
-| Wave scaling (`n` = wave) | `wave_manager.gd` `_start_wave()` | count `5 + int(2.5·n)`, HP `20 + 10·n + 3·n²`, speed `60 + 6·n`, reward `3 + n`, each × the archetype's multipliers |
+| Wave scaling (`n` = wave) | `wave_manager.gd` `_start_wave()` | count `5 + int(2.5·n)`, HP `20 + 10·n + 2.55·n²`, speed `60 + 6·n`, reward `3 + n`, each × the archetype's multipliers |
 | Flyers (non-Air waves) | `wave_manager.gd` | from wave 3, 15% chance per enemy (halved on top of Air waves existing); `make_flying()` gives HP ×0.65, speed ×1.25 |
 | Bosses | `game.gd` `WAVES` (`"boss": true` per entry) | HP ×6, speed ×0.6, reward ×10, costs 10 lives |
 | Economy: interest | `wave_manager.gd` `INTEREST_RATE`/`INTEREST_CAP` | 8% of banked gold per wave cleared, capped at 40 |

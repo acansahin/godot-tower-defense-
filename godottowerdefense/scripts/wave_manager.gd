@@ -83,7 +83,10 @@ func _start_wave() -> void:
 	var def: Dictionary = Game.WAVES[_wave - 1]
 	_type_def = Game.WAVE_TYPES[def["type"]]
 	# Base scaling (quadratic HP so towers must keep pace) x archetype multipliers.
-	var base_hp := 20.0 + _wave * 10.0 + _wave * _wave * 3.0
+	# The quadratic term is deliberately gentle: archetype multipliers stack on top of
+	# it, so a steeper curve made the late waves (14+) spike well past what the gold
+	# economy can answer.
+	var base_hp := 20.0 + _wave * 10.0 + _wave * _wave * 2.55
 	var base_spd := 60.0 + _wave * 6.0
 	var base_count := 5 + int(_wave * 2.5)
 	_hp = base_hp * float(_type_def.get("hp", 1.0))

@@ -18,7 +18,7 @@ var is_flying: bool = false  ## Flyers can only be hit by archer towers.
 var is_boss: bool = false    ## Bosses get a crown + heavier presence.
 var life_cost: int = 1       ## Lives lost if this enemy reaches the end (bosses cost more).
 # Archetype traits (set by WaveManager from the wave's WAVE_TYPES entry).
-var cc_immune: bool = false  ## Ignores slow / poison / stun.
+var cc_immune: bool = false  ## Ignores slow / stun. Poison still applies (it's damage, not control).
 var regen_dps: float = 0.0   ## Heals this much per second.
 var split_into: int = 0      ## Children spawned on death (0 = none).
 var armor_element: String = ""  ## Element matchup vs tower damage element ("" = neutral).
@@ -59,9 +59,10 @@ func apply_stun(time: float) -> void:
 	queue_redraw()
 
 ## Deals `dps` damage per second for `time` seconds. Strongest poison wins.
+## Deliberately NOT gated on cc_immune: that flag means crowd-control immunity, and
+## poison is damage rather than control. This is what keeps Nature / Ice / Lava useful
+## against Immune waves instead of leaving most of the roster with no effect at all.
 func apply_poison(dps: float, time: float) -> void:
-	if cc_immune:
-		return
 	_poison_dps = maxf(_poison_dps, dps)
 	_poison_time = maxf(_poison_time, time)
 	queue_redraw()
