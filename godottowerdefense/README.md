@@ -28,12 +28,15 @@ tower reference this is growing toward.
 2. Open the Godot Project Manager → **Import**.
 3. Select `godot-tower-defense/project.godot` and open it.
 4. Godot imports the assets on first open (creates a local `.godot/` cache).
-5. Press **F5** / the ▶ **Play** button. `scenes/Main.tscn` is the main scene.
+5. Press **F5** / the ▶ **Play** button. `scenes/Menu.tscn` is the main scene — the
+   title screen; press **Play** there to start a run.
 
 No external assets, plugins, or downloads are required — all art is drawn in
 code with primitive shapes and colors.
 
 ### Controls
+- The game opens on a **title screen**: **Play**, **How to Play** (a controls
+  summary), a **Sound** toggle, and **Quit** (hidden on Web).
 - **Drag a tower from the palette** (top-right, lists every tower with its colour
   and cost) onto a grid cell to build it. A green ghost marks a legal cell, red an
   illegal/unaffordable one.
@@ -52,7 +55,7 @@ code with primitive shapes and colors.
   element deals bonus damage (and less if it's the wrong one) — see the element
   matchup below.
 - Survive all 20 waves to win; lose all your lives and it's game over. Both
-  screens have a **Restart** button.
+  screens offer **Restart** and **Main Menu**.
 
 ---
 
@@ -67,7 +70,8 @@ godot-tower-defense/
 ├── docs/
 │   └── element-td-towers.md # Element TD tower reference (design notes)
 ├── scenes/
-│   ├── Main.tscn            # The level (main scene)
+│   ├── Menu.tscn            # Title screen (main scene — what the game opens on)
+│   ├── Main.tscn            # The level
 │   ├── Enemy.tscn           # A single enemy (also used for flyers / bosses)
 │   ├── Tower.tscn           # Generic tower (configured from Game.TOWER_DEFS)
 │   ├── Projectile.tscn      # Generic homing projectile (damage + effects)
@@ -75,6 +79,8 @@ godot-tower-defense/
 │   └── EndScreen.tscn       # Victory / Game Over overlay
 └── scripts/
     ├── game.gd              # "Game" autoload: shared state, grid + TOWER_DEFS
+    ├── audio.gd             # "Audio" autoload: synthesized chiptune SFX + music
+    ├── menu.gd              # Title screen: play / how-to-play / sound / quit
     ├── main.gd             # Wires the level together (placement, upgrades, sell)
     ├── map.gd              # Draws grass + cobblestone S-road
     ├── grid.gd            # Builds + draws the faint placement grid, snapping
@@ -92,7 +98,22 @@ godot-tower-defense/
 
 ## 3. Scene structure & node hierarchy
 
-### `Main.tscn` (main scene)
+### `Menu.tscn` (main scene — the title screen)
+```
+Menu (Node2D)               [menu.gd]
+├── Map (Node2D)            [map.gd]   -> the same level art, used as a backdrop
+└── UI (CanvasLayer)
+    └── Root (Control)                 (process_mode = Always)
+        ├── Dim (ColorRect)
+        ├── Center (CenterContainer)   -> Panel/VBox: title + Play / How to Play /
+        │                                 Sound / Quit buttons
+        └── HowPanel (CenterContainer) -> Panel/VBox: controls text + Back (hidden)
+```
+**Play** calls `change_scene_to_file("res://scenes/Main.tscn")`. **Quit** hides itself on
+Web (`OS.has_feature("web")`). The **Sound** button mirrors `Audio.is_muted()`, so it
+stays in sync with the **M** key.
+
+### `Main.tscn` (the level)
 ```
 Main (Node2D)               [main.gd]
 ├── Map (Node2D)            [map.gd]   -> draws grass + road
@@ -143,8 +164,11 @@ EndScreen (Control)         [end_screen.gd]  (process_mode = Always)
         └── VBox (VBoxContainer)
             ├── Title (Label)
             ├── Subtitle (Label)
-            └── RestartButton (Button)
+            ├── RestartButton (Button)   -> reloads the level
+            └── MenuButton (Button)      -> back to Menu.tscn
 ```
+Both buttons clear `get_tree().paused` first — `show_result()` sets it, and it would
+otherwise survive the scene change and leave the next screen frozen.
 
 The `Game` autoload (`scripts/game.gd`) is registered in `project.godot` and is
 globally accessible as `Game`. It holds the shared map layout (`PATH`), the build

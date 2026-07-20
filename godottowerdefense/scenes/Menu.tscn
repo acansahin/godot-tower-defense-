@@ -1,0 +1,105 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/menu.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/map.gd" id="2"]
+
+[node name="Menu" type="Node2D"]
+script = ExtResource("1")
+
+[node name="Map" type="Node2D" parent="."]
+script = ExtResource("2")
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="Root" type="Control" parent="UI"]
+process_mode = 3
+layout_mode = 3
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="Dim" type="ColorRect" parent="UI/Root"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0, 0, 0, 0.45)
+
+[node name="Center" type="CenterContainer" parent="UI/Root"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="Panel" type="PanelContainer" parent="UI/Root/Center"]
+layout_mode = 2
+
+[node name="VBox" type="VBoxContainer" parent="UI/Root/Center/Panel"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="Title" type="Label" parent="UI/Root/Center/Panel/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 56
+text = "ELEMENT TD"
+horizontal_alignment = 1
+
+[node name="Subtitle" type="Label" parent="UI/Root/Center/Panel/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Element-matching tower defense"
+horizontal_alignment = 1
+
+[node name="PlayButton" type="Button" parent="UI/Root/Center/Panel/VBox"]
+custom_minimum_size = Vector2(220, 52)
+layout_mode = 2
+text = "Play"
+
+[node name="HowButton" type="Button" parent="UI/Root/Center/Panel/VBox"]
+custom_minimum_size = Vector2(220, 46)
+layout_mode = 2
+text = "How to Play"
+
+[node name="SoundButton" type="Button" parent="UI/Root/Center/Panel/VBox"]
+custom_minimum_size = Vector2(220, 46)
+layout_mode = 2
+text = "Sound: On"
+
+[node name="QuitButton" type="Button" parent="UI/Root/Center/Panel/VBox"]
+custom_minimum_size = Vector2(220, 46)
+layout_mode = 2
+text = "Quit"
+
+[node name="HowPanel" type="CenterContainer" parent="UI/Root"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="Panel" type="PanelContainer" parent="UI/Root/HowPanel"]
+layout_mode = 2
+
+[node name="VBox" type="VBoxContainer" parent="UI/Root/HowPanel/Panel"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Title" type="Label" parent="UI/Root/HowPanel/Panel/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "How to Play"
+horizontal_alignment = 1
+
+[node name="Body" type="Label" parent="UI/Root/HowPanel/Panel/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 17
+text = "• Drag a tower from the palette on the right onto a grid cell to build it.
+• Click a tower to upgrade it — the green ▲ appears when you can afford it.
+• Click the small red ✕ on a tower to sell it for half of what you spent.
+• Earth and Lava are ground-only — they cannot hit flyers.
+• Elements: fire → nature → earth → water → fire.
+    You deal ×1.75 to the element you beat, ×0.6 to the one that beats you.
+• Send Next ▶ starts the next wave early for bonus gold.
+• Press M to mute all sound.
+• Survive all 20 waves to win."
+
+[node name="BackButton" type="Button" parent="UI/Root/HowPanel/Panel/VBox"]
+custom_minimum_size = Vector2(180, 46)
+layout_mode = 2
+text = "Back"

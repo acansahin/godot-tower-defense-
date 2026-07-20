@@ -73,6 +73,9 @@ func set_muted(value: bool) -> void:
 	_muted = value
 	_apply_mute()
 
+func is_muted() -> bool:
+	return _muted
+
 ## Pause/resume the music loop to match the mute state (SFX are gated in play()).
 func _apply_mute() -> void:
 	if _music != null:
