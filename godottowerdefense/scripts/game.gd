@@ -110,7 +110,7 @@ const WAVE_TYPES := {
 	"swarm":  {"name": "Swarm",  "color": Color(0.90, 0.50, 0.75), "hp": 0.35, "spd": 1.15, "count": 2.6, "radius": 0.8},
 	"tank":   {"name": "Tank",   "color": Color(0.45, 0.50, 0.55), "hp": 3.0, "spd": 0.6, "count": 0.4, "radius": 1.35},
 	"immune": {"name": "Immune", "color": Color(0.60, 0.62, 0.70), "hp": 1.3, "cc_immune": true},
-	"regen":  {"name": "Regen",  "color": Color(0.35, 0.75, 0.40), "hp": 1.4, "regen": 0.06},
+	"regen":  {"name": "Regen",  "color": Color(0.35, 0.75, 0.40), "hp": 1.0, "count": 0.8, "regen": 0.035},
 	"air":    {"name": "Air",    "color": Color(0.72, 0.78, 0.96), "air": true},
 	"split":  {"name": "Splitter","color": Color(0.85, 0.55, 0.25), "hp": 1.2, "count": 0.7, "split": 2, "radius": 1.15},
 }

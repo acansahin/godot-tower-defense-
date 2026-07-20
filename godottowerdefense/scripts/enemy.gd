@@ -29,12 +29,19 @@ var _dead: bool = false
 var _wing_phase: float = 0.0  ## Drives the wing-flap animation.
 var _anim_phase: float = 0.0  ## Drives the idle breathing wobble.
 
+## Seconds an enemy must go undamaged before regen_dps starts healing it again. This is
+## what stops regen from being a hard DPS threshold: while you keep hitting it, it heals
+## nothing, so falling slightly short of the old break-even rate no longer means the
+## enemy is simply unkillable.
+const REGEN_DELAY := 2.0
+
 # Status effects applied by tower projectiles.
 var _slow_factor: float = 1.0
 var _slow_time: float = 0.0
 var _poison_dps: float = 0.0
 var _poison_time: float = 0.0
 var _stun_time: float = 0.0
+var _regen_block: float = 0.0  ## Counts down after damage; regen is paused while > 0.
 
 ## Slows to `factor` of base speed for `time` seconds. Strongest slow wins.
 func apply_slow(factor: float, time: float) -> void:
@@ -100,7 +107,11 @@ func _process(delta: float) -> void:
 
 ## Advances slow / poison timers and applies poison damage over time.
 func _tick_status(delta: float) -> void:
-	if regen_dps > 0.0 and health < max_health:
+	if _regen_block > 0.0:
+		_regen_block -= delta
+		if _regen_block <= 0.0:
+			queue_redraw()  # un-dim the regen marker
+	elif regen_dps > 0.0 and health < max_health:
 		health = minf(max_health, health + regen_dps * delta)
 	if _stun_time > 0.0:
 		_stun_time -= delta
@@ -136,6 +147,7 @@ func _move(delta: float) -> void:
 func take_damage(amount: float) -> void:
 	if _dead:
 		return
+	_regen_block = REGEN_DELAY  # any hit — including a poison tick — suspends regen
 	health -= amount
 	queue_redraw()
 	if health <= 0.0:
@@ -199,10 +211,17 @@ func _draw() -> void:
 	if cc_immune:
 		draw_arc(Vector2.ZERO, radius + 2.0, 0.0, TAU, 26, Color(0.78, 0.82, 0.9, 0.9), 3.0, true)
 	if regen_dps > 0.0:
-		var g := Color(0.5, 1.0, 0.55)
+		# Bright "+" and a pulsing ring only while it is actually healing; dim otherwise.
+		# This makes "my damage is stopping the heal" unmistakable at a glance.
+		var healing := _regen_block <= 0.0 and health < max_health
+		var g := Color(0.5, 1.0, 0.55, 1.0 if healing else 0.3)
 		var p := Vector2(radius * 0.55, -radius * 0.55)
 		draw_line(p + Vector2(-3, 0), p + Vector2(3, 0), g, 2.0)
 		draw_line(p + Vector2(0, -3), p + Vector2(0, 3), g, 2.0)
+		if healing:
+			var pulse: float = 0.5 + 0.5 * sin(_anim_phase * 3.0)
+			draw_arc(Vector2.ZERO, radius + 12.0 + pulse * 3.0, 0.0, TAU, 24,
+					Color(0.45, 1.0, 0.5, 0.30 + 0.45 * pulse), 2.0, true)
 	if is_boss:
 		_draw_crown()
 

@@ -243,6 +243,7 @@ costs, and the mutable `gold` / `lives` with signals.
 | Element matchup | `game.gd` `ELEMENT_BEATS` | cycle fire→nature→earth→water→fire; ×1.75 dmg if you beat the target's armor element, ×0.6 if it beats you, ×1 if either side is neutral (applies to direct, splash and poison damage) |
 | Waves | `game.gd` `WAVES` | 20 fixed entries (archetype + optional boss/element per wave) |
 | Creep archetypes | `game.gd` `WAVE_TYPES` | normal, fast, swarm, tank, immune (CC-immune), regen, air (flyer), split (splits on death) — each is a set of HP/speed/count/radius multipliers and flags on top of the base scaling |
+| Regen archetype | `game.gd` `WAVE_TYPES` + `enemy.gd` `REGEN_DELAY` | heals 3.5% of max HP/s, but **paused for 2s after taking any damage** — so it only heals through gaps in your coverage instead of setting a hard DPS threshold. Its "+" marker dims while suppressed. Poison ticks count as damage, so a single Nature/Ice/Lava tower shuts the healing off entirely |
 | Prep time between waves | `wave_manager.gd` `PREP_TIME` | 4s (skippable via the HUD's Send Next button, for a small gold bonus) |
 | Wave scaling (`n` = wave) | `wave_manager.gd` `_start_wave()` | count `5 + int(2.5·n)`, HP `20 + 10·n + 3·n²`, speed `60 + 6·n`, reward `3 + n`, each × the archetype's multipliers |
 | Flyers (non-Air waves) | `wave_manager.gd` | from wave 3, 15% chance per enemy (halved on top of Air waves existing); `make_flying()` gives HP ×0.65, speed ×1.25 |
