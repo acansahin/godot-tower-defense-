@@ -37,6 +37,14 @@ jobs:
           # Pages serves index.html by default; the single-threaded (nothreads)
           # export needs no cross-origin isolation headers.
 
+      - name: Add web extras
+        run: |
+          # The preset's html/head_include pulls in orientation.js with a relative path,
+          # so it has to sit next to index.html. It is not a Godot resource, so the
+          # export itself never copies it.
+          cp godottowerdefense/web/orientation.js build/web/
+          test -s build/web/orientation.js
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

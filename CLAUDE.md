@@ -45,6 +45,12 @@ Both workflows run automatically on push to `main`:
 - The Android job **generates its own debug keystore** and passes it via the
   `GODOT_ANDROID_KEYSTORE_DEBUG_*` env vars — don't rely on the image's baked-in one.
 - The Web export is single-threaded on purpose, so no COOP/COEP headers are needed.
+- `godottowerdefense/web/orientation.js` is injected into the web page via the preset's
+  `html/head_include` and copied next to `index.html` by `deploy.yml` — it gates portrait
+  phones behind a "rotate your device" panel. It is **not** a Godot resource, so if you
+  add more web-only files you must copy them in the workflow too. Note a page can't force
+  rotation on its own: Chrome only honours an orientation lock in fullscreen, and iOS
+  Safari not at all.
 
 ## Architecture, and where to add things
 

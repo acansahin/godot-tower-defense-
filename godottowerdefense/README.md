@@ -69,6 +69,9 @@ godot-tower-defense/
 ├── .gitignore
 ├── docs/
 │   └── element-td-towers.md # Element TD tower reference (design notes)
+├── web/
+│   └── orientation.js       # Web build only: "rotate your device" gate + fullscreen
+│                            # landscape lock (injected via the preset's head_include)
 ├── scenes/
 │   ├── Menu.tscn            # Title screen (main scene — what the game opens on)
 │   ├── Main.tscn            # The level
