@@ -19,6 +19,10 @@ var _music: AudioStreamPlayer            ## Dedicated looping background-music v
 var _next: int = 0
 var _muted: bool = false
 
+const MAX_PER_FRAME := 3  ## Per-frame cap used by play_capped().
+var _cap_frame: int = -1                ## Frame the counts below belong to.
+var _cap_counts: Dictionary = {}        ## sfx name -> times played this frame.
+
 func _ready() -> void:
 	# Keep playing while the end screen pauses the tree (victory/game-over stinger).
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -58,6 +62,21 @@ func play(sfx_name: String, pitch_var: float = 0.0, volume_db: float = 0.0) -> v
 	p.pitch_scale = 1.0 + randf_range(-pitch_var, pitch_var)
 	p.volume_db = VOLUME_DB + volume_db
 	p.play()
+
+## Like play(), but silently drops the call once this effect has already fired
+## MAX_PER_FRAME times in the current frame. For impacts: a full board at 3x speed
+## lands far more hits per frame than a 12-voice pool can voice, and the overflow only
+## steals players from sounds that matter (deaths, wave starts).
+func play_capped(sfx_name: String, pitch_var: float = 0.0, volume_db: float = 0.0) -> void:
+	var frame := Engine.get_process_frames()
+	if frame != _cap_frame:
+		_cap_frame = frame
+		_cap_counts.clear()
+	var used: int = _cap_counts.get(sfx_name, 0)
+	if used >= MAX_PER_FRAME:
+		return
+	_cap_counts[sfx_name] = used + 1
+	play(sfx_name, pitch_var, volume_db)
 
 ## Picks the shot sound for a tower. The four base elements key off `element`;
 ## lightning and the neutral dual towers (element == "") key off `id`.

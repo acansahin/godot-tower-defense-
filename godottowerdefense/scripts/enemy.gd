@@ -42,6 +42,13 @@ var _poison_dps: float = 0.0
 var _poison_time: float = 0.0
 var _stun_time: float = 0.0
 var _regen_block: float = 0.0  ## Counts down after damage; regen is paused while > 0.
+var _flash: float = 0.0        ## 1 -> 0 white pop after a direct hit.
+
+## White pop confirming a projectile connected. Deliberately NOT driven from
+## take_damage(): poison ticks go through there every single frame, which would leave a
+## poisoned enemy permanently lit instead of flashing on impacts.
+func flash() -> void:
+	_flash = 1.0
 
 ## Slows to `factor` of base speed for `time` seconds. Strongest slow wins.
 func apply_slow(factor: float, time: float) -> void:
@@ -70,6 +77,17 @@ func apply_poison(dps: float, time: float) -> void:
 ## Sets how far along the path this enemy starts (used for split children).
 func set_progress(index: int) -> void:
 	_target_index = index
+
+## How far along the road this enemy is, in pixels (higher = closer to the exit).
+## Drives the First / Last tower targeting modes.
+func progress() -> float:
+	return Game.path_progress(_target_index, global_position)
+
+## False once this enemy has died or escaped. queue_free() only takes effect at the
+## end of the frame, so towers holding a target reference must check this rather than
+## is_instance_valid() alone — otherwise they spend a shot on a corpse.
+func is_alive() -> bool:
+	return not _dead
 
 func setup(hp: float, spd: float, gold_reward: int, tint: Color) -> void:
 	max_health = hp
@@ -100,6 +118,8 @@ func _process(delta: float) -> void:
 	_anim_phase += delta * 3.0
 	if is_flying:
 		_wing_phase += delta * 10.0
+	if _flash > 0.0:
+		_flash = maxf(0.0, _flash - delta * 7.0)
 	queue_redraw()  # animate the idle wobble / wings every frame
 	_tick_status(delta)
 	if _dead:
@@ -157,6 +177,12 @@ func take_damage(amount: float) -> void:
 func _die() -> void:
 	_dead = true
 	Audio.play("boss_death" if is_boss else "enemy_death", 0.1)
+	# Spawn the visuals before the queue_free() below — they read the tree through `self`.
+	DeathBurst.spawn(self, global_position, color, radius)
+	FloatingText.spawn(self, global_position + Vector2(0, -radius),
+			"+%d" % reward, Color(1, 0.85, 0.35), 13)
+	if is_boss:
+		Game.request_shake(7.0)
 	Game.add_gold(reward)
 	# Splitters break into smaller children that continue from here. Emit BEFORE
 	# `removed` so WaveManager adds them to the alive count first (no early clear).
@@ -169,6 +195,7 @@ func _die() -> void:
 func _escape() -> void:
 	_dead = true
 	Audio.play("leak")
+	Game.request_shake(4.0)  # a leak should be felt, not just noticed in the HUD
 	Game.lose_life(life_cost)
 	removed.emit()
 	queue_free()
@@ -190,6 +217,9 @@ func _draw() -> void:
 	var hl := color.lightened(0.25)
 	draw_circle(Vector2(-radius * 0.28, -radius * 0.28), radius * 0.55, Color(hl.r, hl.g, hl.b, 0.55))
 	draw_arc(Vector2.ZERO, radius, 0.0, TAU, 24, Color(0, 0, 0, 0.55), 2.0, true)
+	# Impact pop, over the body but under the eyes so it reads as the whole blob lighting up.
+	if _flash > 0.0:
+		draw_circle(Vector2.ZERO, radius, Color(1, 1, 1, 0.55 * _flash))
 	# Eyes give the blobs a bit of character.
 	draw_circle(Vector2(-5, -3), 2.6, Color.WHITE)
 	draw_circle(Vector2(5, -3), 2.6, Color.WHITE)

@@ -10,9 +10,9 @@ faint build grid beside the road, 20 waves of enemies drawn from a data table of
 periodic **bosses**), a drag-and-drop **element tower palette** (Fire / Water /
 Nature / Earth, the dual towers Steam / Lava / Ice, and Lightning), an
 **element-matchup** system (each base element is strong/weak against another, so
-tower choice vs. an enemy's armor element matters), one-click tower **upgrades**,
-tower **selling**, a gold economy with interest and streak bonuses, lives, and a
-win/lose flow.
+tower choice vs. an enemy's armor element matters), a **tower info panel** with
+upgrades, selling and per-tower **targeting priority**, **time controls** (pause and
+1x/2x/3x), a gold economy with interest and streak bonuses, lives, and a win/lose flow.
 
 Towers are **data-driven**: every tower is one entry in `Game.TOWER_DEFS` with a
 colour and an effect payload (damage, splash, slow, poison). Adding a new tower
@@ -45,11 +45,19 @@ code with primitive shapes and colors.
   full board doesn't turn into a tangle of overlapping circles.
 - Cells are the faint squares on the grass; two rows fit flush between each pair
   of roads. Towers can't be built on the road or on an occupied cell.
-- **Click a tower's body to upgrade it.** When you can afford the next level, a
-  green ▲ arrow (with its cost) appears on the tower — clicking upgrades it
-  instantly (up to level 3). Each level boosts damage, range, fire rate (and DoT).
-- **Sell a tower** by clicking the small red ✕ in its bottom-right corner; you get
-  back half of everything you spent on it (shown next to the ✕).
+- **Click a tower to select it.** A white ring marks it and the **info panel** opens at
+  the bottom-left with its DPS, range, fire rate, element matchup and effects. Click
+  bare ground to close it. The panel holds all three tower actions:
+  - **Upgrade** (up to level 3) — each level boosts damage, range, fire rate and DoT.
+    A green ▲ chevron floats beside any tower whose next level you can already afford,
+    so you can spot upgrade candidates without clicking through them.
+  - **Sell** — refunds half of everything you spent on that tower.
+  - **Target** — cycles the tower's targeting priority between **First** (default;
+    the enemy closest to the exit), **Last**, **Strong** (most HP) and **Close**.
+    Set per tower, so a splash tower can hold the front while a sniper picks off
+    leaders.
+- **Time controls** sit in the bottom-left corner: **Pause** (or **Space**) freezes
+  everything, and the speed button (or **F**) cycles **1x → 2x → 3x**.
 - **Ground-only towers** (Earth, Lava) can't hit flyers; the others can.
 - The HUD shows a **next-wave preview** (archetype, count, boss flag, and armor
   element colour) before it spawns — a **Send Next ▶** button lets you call it
@@ -95,8 +103,11 @@ godot-tower-defense/
     ├── projectile.gd       # Homing projectile: damage, splash, slow, poison
     ├── wave_manager.gd     # Spawns the 20-wave table (archetypes, bosses, economy)
     ├── tower_palette.gd    # Top-right drag-source, lists Game.TOWER_ORDER
+    ├── tower_info.gd       # Bottom-left panel for the selected tower (stats + actions)
     ├── placement_preview.gd # Green/red ghost cell shown while dragging
-    ├── hud.gd              # HUD label updates
+    ├── floating_text.gd    # Rising, fading damage / gold label (built in code)
+    ├── death_burst.gd      # Expanding ring of dots left by a dying enemy
+    ├── hud.gd              # HUD labels + the time controls (pause / speed)
     └── end_screen.gd       # Win/lose overlay + restart
 ```
 
@@ -127,11 +138,14 @@ Main (Node2D)               [main.gd]
 ├── Enemies (Node2D)                   -> enemies spawned here at runtime
 ├── Towers (Node2D)                    -> built towers live here
 ├── Projectiles (Node2D)               -> tower projectiles live here
+├── Effects (Node2D)                   -> floating text + death bursts live here
+├── Camera2D                           -> centred/identity; offset only for screen shake
 ├── Preview (Node2D)        [placement_preview.gd]  -> drag ghost (hidden)
 ├── WaveManager (Node)      [wave_manager.gd]
 └── UI (CanvasLayer)
     ├── HUD (instance of HUD.tscn)          [hud.gd]
     ├── TowerPalette (Control)              [tower_palette.gd]
+    ├── TowerInfo (Control)                 [tower_info.gd]  -> selected tower (hidden)
     └── EndScreen (instance of EndScreen.tscn)  [end_screen.gd]
 ```
 
@@ -158,8 +172,13 @@ HUD (Control)               [hud.gd]
 ├── LivesLabel (Label)
 ├── WaveLabel (Label)
 ├── NextLabel (Label)        -> next-wave preview (archetype/count/boss/element)
-└── SendButton (Button)      -> "Send Next ▶", enabled during the prep gap
+├── SendButton (Button)      -> "Send Next ▶", enabled during the prep gap
+├── PauseButton (Button)     -> bottom-left, pause / resume
+└── SpeedButton (Button)     -> bottom-left, cycles 1x / 2x / 3x
 ```
+`HUD.tscn` sets `process_mode = ALWAYS` on the root. That is what lets the pause button
+*un*pause: a PAUSABLE node stops receiving input the moment `get_tree().paused` is set,
+so the control that paused the game could never undo it.
 
 ### `EndScreen.tscn`
 ```
@@ -215,18 +234,28 @@ costs, and the mutable `gold` / `lives` with signals.
   side of the element matchup (`Game.element_mult`) applied to incoming damage,
   including poison ticks.
 - **`Tower`** is one generic script. `setup_def(id)` loads a `Game.TOWER_DEFS`
-  entry (stats + effect payload + colour). It finds the closest **targetable**
-  enemy in range and fires a `Projectile` carrying that payload; `can_hit_flying`
-  gates flyers. It tracks an upgrade `level` (pips + green upgrade arrow) and
-  `total_spent` (red sell ✕, refunds `SELL_REFUND`).
+  entry (stats + effect payload + colour). It picks a **targetable** enemy in range
+  under its `target_mode` (First / Last / Strong / Close) and fires a `Projectile`
+  carrying that payload; `can_hit_flying` gates flyers. Targeting is **sticky**: while
+  the current target is alive, in range and legal the tower keeps it, which stops the
+  barrel twitching between equal candidates and skips the group scan on most frames —
+  that scan is O(enemies) *per tower*, the dominant per-frame cost in a full late wave.
+  It tracks an upgrade `level` (pips + green upgrade chevron) and `total_spent`; both
+  the Upgrade and Sell actions live in the info panel, not on the tower itself.
 - **`Projectile`** homes onto its target and applies its payload on impact:
   direct damage, an area **splash** (all enemies in radius, `hits_flying`-gated),
   a **slow**, a **poison** DoT, and/or a chance to **stun**. Direct, splash and
   poison damage are all scaled by `Game.element_mult(element, enemy.armor_element)`
   — the tower's element vs. the enemy's armor element.
-- **`Main`** handles input: palette drags build the chosen tower on the grid; a
-  click on a tower's body upgrades it, and a click on its ✕ badge sells it (no
-  menus).
+- **`Main`** handles input: palette drags build the chosen tower on the grid, and a
+  click selects a tower (or deselects, on bare ground), which drives **`TowerInfo`**.
+  It also owns the `Camera2D` and applies the screen shake that `Game.shake_requested`
+  broadcasts, so an `Enemy` can ask for a kick without knowing the camera exists.
+- **`FloatingText` / `DeathBurst`** are one-shot visuals parented to `Effects`. Both are
+  built with `.new()` rather than from a `.tscn` — they are a bare `Node2D` plus a
+  script, which also avoids a script preloading the very scene it is attached to.
+  Damage numbers are spawned from `projectile.gd` `_apply()`, **not**
+  `enemy.take_damage()`, which also fires on every poison tick.
 
 ---
 
@@ -243,6 +272,10 @@ costs, and the mutable `gold` / `lives` with signals.
 | Upgrade: max level / growth | `tower.gd` | L3, dmg ×1.6, range +20, interval ×0.82, DoT ×1.6 |
 | Upgrade cost | `tower.gd` `upgrade_cost()` | `build_cost × level` (e.g. Fire 40, 80) |
 | Sell refund | `tower.gd` `SELL_REFUND` | 50% of total gold spent |
+| Targeting priority | `tower.gd` `TargetMode` | First (default) / Last / Strong / Close, per tower; **First** replaced the old fixed "closest", which kept dropping a nearly-escaped leader for whatever wandered past the muzzle |
+| Game speed | `hud.gd` `SPEEDS` | 1x / 2x / 3x via `Engine.time_scale`; pause via `get_tree().paused` |
+| Screen shake | `main.gd` `SHAKE_DECAY`, `enemy.gd` | 7px on a boss death, 4px on a leak, bled off at 26 px/s |
+| Impact SFX cap | `audio.gd` `MAX_PER_FRAME` | 3 per effect per frame — a full board at 3x otherwise floods the 12-voice pool |
 | Element matchup | `game.gd` `ELEMENT_BEATS` | cycle fire→nature→earth→water→fire; ×1.75 dmg if you beat the target's armor element, ×0.7 if it beats you, ×1 if either side is neutral (applies to direct, splash and poison damage) |
 | Waves | `game.gd` `WAVES` | 20 fixed entries (archetype + optional boss/element per wave) |
 | Creep archetypes | `game.gd` `WAVE_TYPES` | normal, fast, swarm, tank, immune, regen, air (flyer), split (splits on death) — each is a set of HP/speed/count/radius multipliers and flags on top of the base scaling |
@@ -271,9 +304,14 @@ sound effect is synthesized in code:
 - Grass, cobblestone road and grass patches: `map.gd` `_draw()`.
 - Build grid cells: `grid.gd` `_draw()`.
 - Enemies (colored blobs with eyes + health bar; flyers add wings + a shadow;
-  status rings for slow/poison): `enemy.gd` `_draw()`.
-- Towers (element-coloured orb, level pips, upgrade arrow, sell ✕), projectiles,
-  the drag ghost and the palette: their respective `_draw()` methods.
+  status rings for slow/poison; a white pop on impact): `enemy.gd` `_draw()`.
+- Towers (element-coloured orb, level pips, upgrade chevron, muzzle flash),
+  projectiles, the drag ghost, the palette and the tower info panel: their
+  respective `_draw()` methods.
+- Combat feedback: floating damage numbers (`floating_text.gd`) sized and coloured by
+  the element matchup — big and gold at ×1.75, small and grey at ×0.7 — plus the
+  gold-gain pop and the death puff (`death_burst.gd`). These are the only place the
+  element matchup is visible while you play.
 - **Sound** (`audio.gd`, the `Audio` autoload): every SFX — per-element tower shots,
   enemy hit/death, boss explosion, build/upgrade/sell/denied UI blips, wave start/clear,
   and the victory/game-over jingles — is baked once at startup into an `AudioStreamWAV`

@@ -26,13 +26,20 @@ func show_result(won: bool) -> void:
 	show()
 
 func _restart() -> void:
-	get_tree().paused = false
+	_clear_time_state()
 	Game.reset()
 	get_tree().reload_current_scene()
 
 ## Back to the title screen. Clearing the pause first is essential — show_result() set it,
 ## and it survives the scene change, which would leave the menu frozen.
 func _to_menu() -> void:
-	get_tree().paused = false
+	_clear_time_state()
 	Game.reset()
 	get_tree().change_scene_to_file("res://scenes/Menu.tscn")
+
+## Both the pause flag and Engine.time_scale are global and outlive the scene, so
+## every exit from the level has to hand them back at their defaults — otherwise the
+## menu comes up frozen, or running at 3x.
+func _clear_time_state() -> void:
+	get_tree().paused = false
+	Engine.time_scale = 1.0

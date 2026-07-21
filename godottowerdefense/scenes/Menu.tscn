@@ -90,12 +90,15 @@ horizontal_alignment = 1
 layout_mode = 2
 theme_override_font_sizes/font_size = 17
 text = "• Drag a tower from the palette on the right onto a grid cell to build it.
-• Click a tower to upgrade it — the green ▲ appears when you can afford it.
-• Click the small red ✕ on a tower to sell it for half of what you spent.
+• Click a tower to select it — the panel shows its stats, and holds Upgrade,
+    Sell and Target. The green ▲ marks towers you can already afford to upgrade.
+• Target sets who a tower shoots: First (nearest the exit), Last, Strong or Close.
+• Pause / Space freezes the game; the speed button / F cycles 1x, 2x, 3x.
 • Earth and Lava are ground-only — they cannot hit flyers.
 • Immune enemies shrug off slows and stuns — but poison still hurts them.
 • Elements: fire → nature → earth → water → fire.
     You deal ×1.75 to the element you beat, ×0.7 to the one that beats you.
+    Big gold damage numbers mean a bonus; small grey ones mean you are resisted.
 • Send Next ▶ starts the next wave early for bonus gold.
 • Press M to mute all sound.
 • Survive all 20 waves to win."
