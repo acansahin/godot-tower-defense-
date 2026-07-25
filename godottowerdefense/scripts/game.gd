@@ -8,6 +8,9 @@ signal gold_changed(amount: int)
 signal lives_changed(amount: int)
 signal game_over
 signal victory
+## Camera kick in pixels. Broadcast here so an Enemy can ask for one without knowing
+## anything about the level's camera; Main owns the actual Camera2D.
+signal shake_requested(amount: float)
 
 const SCREEN_SIZE := Vector2(1280, 720)
 
@@ -171,10 +174,32 @@ var gold: int = 0
 var lives: int = 0
 var is_over: bool = false
 
+## Cumulative distance from PATH[0] to each waypoint, built once in _ready(). Towers
+## rank enemies by how far along the road they are (the First / Last targeting modes)
+## off this table, so no enemy has to carry its own odometer.
+var _path_cum: PackedFloat32Array = PackedFloat32Array()
+
+func _ready() -> void:
+	_path_cum.resize(PATH.size())
+	for i in range(1, PATH.size()):
+		_path_cum[i] = _path_cum[i - 1] + (PATH[i] as Vector2).distance_to(PATH[i - 1])
+
+## How far along the road a walker is, in pixels — higher means closer to the exit.
+## `target_index` is the waypoint it is currently heading for, `pos` where it is now.
+## Since enemies walk each leg in a straight line, the distance back to the previous
+## waypoint is exactly how far into that leg they are.
+func path_progress(target_index: int, pos: Vector2) -> float:
+	var i: int = clampi(target_index, 1, PATH.size() - 1)
+	return _path_cum[i - 1] + pos.distance_to(PATH[i - 1])
+
 func reset() -> void:
 	gold = START_GOLD
 	lives = START_LIVES
 	is_over = false
+
+## Asks the level for a short camera kick (boss deaths, leaks).
+func request_shake(amount: float) -> void:
+	shake_requested.emit(amount)
 
 func add_gold(amount: int) -> void:
 	gold += amount

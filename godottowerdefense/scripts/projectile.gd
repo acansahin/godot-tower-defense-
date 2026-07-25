@@ -19,16 +19,29 @@ var stun_chance: float = 0.0    ## 0..1 chance to freeze the enemy on hit.
 var stun_time: float = 0.0
 
 var _target: Enemy = null
+var pool: Node = null  ## The $Projectiles pool that owns this bolt (see projectiles.gd); null = unpooled.
 
 func setup(start: Vector2, target: Enemy, dmg: float) -> void:
 	global_position = start
 	_target = target
 	damage = dmg
+	# A pooled bolt was already drawn once in its previous colour; the firing tower has just
+	# overwritten `color`, so ask for a repaint (a fresh instance would paint anyway).
+	queue_redraw()
+
+## Returns this bolt to its pool (or frees it if unpooled), dropping the target reference so
+## a not-yet-freed dead enemy is not kept alive by a parked projectile.
+func _recycle() -> void:
+	_target = null
+	if pool != null:
+		pool.recycle(self)
+	else:
+		queue_free()
 
 func _process(delta: float) -> void:
 	# Target may have died mid-flight.
 	if not is_instance_valid(_target):
-		queue_free()
+		_recycle()
 		return
 	var to_target := _target.global_position - global_position
 	rotation = to_target.angle()
@@ -40,31 +53,57 @@ func _process(delta: float) -> void:
 
 func _hit(target: Enemy) -> void:
 	var impact := target.global_position
-	Audio.play("hit", 0.15)
-	_apply(target, 1.0)
+	# Capped rather than played outright: a late wave at 3x speed lands dozens of
+	# impacts per frame, and an uncapped burst just turns the 12-voice pool to mush.
+	Audio.play_capped("hit", 0.15)
+	_apply(target, 1.0, true)
 	if splash_radius > 0.0:
 		_apply_splash(target, impact)
-	queue_free()
+	_recycle()
 
 ## Applies damage (scaled by mult and the element matchup) plus any slow / poison.
-func _apply(enemy: Enemy, mult: float) -> void:
-	enemy.take_damage(damage * mult * Game.element_mult(element, enemy.armor_element))
+## `show_number` is only set for the direct hit — a wide splash would otherwise bury
+## the screen under a dozen simultaneous numbers.
+func _apply(enemy: Enemy, mult: float, show_number: bool) -> void:
+	var matchup := Game.element_mult(element, enemy.armor_element)
+	var dealt := damage * mult * matchup
+	enemy.flash()
+	if show_number:
+		_show_damage(enemy.global_position, dealt, matchup)
+	enemy.take_damage(dealt)
 	if slow_time > 0.0:
 		enemy.apply_slow(slow_factor, slow_time)
 	if poison_time > 0.0:
-		enemy.apply_poison(poison_dps * mult * Game.element_mult(element, enemy.armor_element), poison_time)
+		enemy.apply_poison(poison_dps * mult * matchup, poison_time)
 	if stun_time > 0.0 and randf() < stun_chance:
 		enemy.apply_stun(stun_time)
 
+## Floating damage number, colour- and size-coded by the element matchup. This is the
+## only place the matchup is visible during play: without it, the panel's "x1.75 vs
+## Nature" is a promise the player never sees kept.
+func _show_damage(pos: Vector2, dealt: float, matchup: float) -> void:
+	var col := Color(1, 1, 1, 0.95)
+	var font_size := 13
+	if matchup > 1.0:
+		col = Color(1.0, 0.85, 0.25)   # strong: big and gold
+		font_size = 18
+	elif matchup < 1.0:
+		col = Color(0.62, 0.66, 0.74)  # resisted: small and grey
+		font_size = 11
+	FloatingText.spawn(self, pos + Vector2(0, -14.0), "%d" % int(round(dealt)),
+			col, font_size)
+
 func _apply_splash(main_target: Enemy, center: Vector2) -> void:
-	for e in get_tree().get_nodes_in_group("enemies"):
+	var radius_sq := splash_radius * splash_radius
+	# Only enemies near the impact, not the whole group (see enemy_index.gd).
+	for e in EnemyIndex.query(center, splash_radius):
 		var enemy := e as Enemy
 		if enemy == null or enemy == main_target:
 			continue
 		if enemy.is_flying and not hits_flying:
 			continue
-		if center.distance_to(enemy.global_position) <= splash_radius:
-			_apply(enemy, splash_factor)
+		if center.distance_squared_to(enemy.global_position) <= radius_sq:
+			_apply(enemy, splash_factor, false)
 
 func _draw() -> void:
 	# The node rotates toward its target, so local -x is "behind": draw a tapered

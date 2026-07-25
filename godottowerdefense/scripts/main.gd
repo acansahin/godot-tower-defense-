@@ -1,8 +1,10 @@
 extends Node2D
 ## Wires the level together: grid-based tower placement (drag from the palette
-## onto a cell), one-click tower upgrades, and the HUD, then kicks off the waves.
+## onto a cell), click-to-upgrade / tap-the-× to sell, and the HUD, then kicks off
+## the waves.
 
 const TOWER := preload("res://scenes/Tower.tscn")
+const SHAKE_DECAY := 26.0  ## Pixels of camera shake bled off per second.
 
 @onready var grid = $Grid
 @onready var enemies_root: Node2D = $Enemies
@@ -11,10 +13,12 @@ const TOWER := preload("res://scenes/Tower.tscn")
 @onready var hud: HUD = $UI/HUD
 @onready var palette = $UI/TowerPalette
 @onready var end_screen: EndScreen = $UI/EndScreen
+@onready var camera: Camera2D = $Camera2D
 @onready var preview = $Preview  ## Drag ghost.
 
 var _drag_kind: String = ""  ## Tower type being dragged from the palette ("" = none).
 var _hovered: Tower = null   ## Tower under the mouse, drawn with a clear range ring.
+var _shake: float = 0.0      ## Current camera shake magnitude in px; decays to 0.
 
 func _ready() -> void:
 	get_tree().paused = false
@@ -26,7 +30,6 @@ func _ready() -> void:
 
 	Game.gold_changed.connect(hud.set_gold)
 	Game.gold_changed.connect(palette.set_gold)
-	Game.gold_changed.connect(_refresh_tower_badges)
 	Game.lives_changed.connect(hud.set_lives)
 	Game.game_over.connect(_on_game_over)
 	Game.victory.connect(_on_victory)
@@ -35,9 +38,25 @@ func _ready() -> void:
 	wave_manager.prep_started.connect(hud.enable_send)
 	hud.send_pressed.connect(wave_manager.send_now)
 	palette.drag_started.connect(_on_drag_started)
+	Game.shake_requested.connect(_add_shake)
 
 	wave_manager.enemies_root = enemies_root
 	wave_manager.start()
+
+# --- Camera shake --------------------------------------------------------------
+
+## Kept deliberately small: the mouse position is read back through the camera
+## transform, so a violent shake would also drag the cursor's world position around
+## and make clicks feel imprecise mid-shake.
+func _add_shake(amount: float) -> void:
+	_shake = maxf(_shake, amount)
+
+func _process(delta: float) -> void:
+	if _shake <= 0.0:
+		return
+	_shake = maxf(0.0, _shake - SHAKE_DECAY * delta)
+	camera.offset = Vector2.ZERO if _shake <= 0.0 \
+			else Vector2(randf_range(-_shake, _shake), randf_range(-_shake, _shake))
 
 # --- Placement: drag a palette item onto a grid cell ---------------------------
 
@@ -111,11 +130,6 @@ func _drop(world_pos: Vector2) -> void:
 	towers_root.add_child(tower)
 	Audio.play("build")
 
-## Redraw every tower so upgrade badges appear/disappear as gold changes.
-func _refresh_tower_badges(_gold: int) -> void:
-	for c in towers_root.get_children():
-		(c as Node2D).queue_redraw()
-
 func _cost(kind: String) -> int:
 	return int(Game.TOWER_DEFS[kind]["cost"])
 
@@ -131,30 +145,39 @@ func _tower_on_cell(center: Vector2) -> Tower:
 			return t
 	return null
 
-# --- Upgrades: click a tower that shows the upgrade badge ----------------------
+# --- Click a tower: upgrade it, or sell it via the corner "×" -------------------
 
+## A left click / tap on a tower upgrades it — unless it landed on the tower's sell "×",
+## which sells instead. Clicking bare ground does nothing. Every action lives on the tower
+## itself now (no info panel), which keeps the whole board tappable on a phone.
 func _unhandled_input(event: InputEvent) -> void:
 	if Game.is_over or _drag_kind != "":
 		return
 	if not (event is InputEventMouseButton and event.pressed \
 			and event.button_index == MOUSE_BUTTON_LEFT):
 		return
-	var cell: Rect2 = grid.snap(get_global_mouse_position())
+	var world := get_global_mouse_position()
+	var cell: Rect2 = grid.snap(world)
 	if cell.size == Vector2.ZERO:
 		return
 	var tower := _tower_on_cell(cell.get_center())
 	if tower == null:
 		return
-	# Clicking the red ✕ badge sells the tower; clicking anywhere else upgrades it
-	# (when affordable and not maxed — exactly when the green badge is showing).
-	if tower.is_sell_hit(get_global_mouse_position() - tower.position):
+	if tower.is_sell_hit(world):
 		_sell_tower(tower)
-	elif tower.can_upgrade() and Game.gold >= tower.upgrade_cost():
-		Game.spend_gold(tower.upgrade_cost())
-		tower.upgrade()
-		Audio.play("upgrade")
+	else:
+		_upgrade_tower(tower)
 
-## Removes a tower and refunds half of the gold sunk into it.
+## Upgrades the tower if another level exists and the gold is there; a denied buzz otherwise,
+## so a mistap on a maxed / too-expensive tower gives feedback instead of doing nothing.
+func _upgrade_tower(tower: Tower) -> void:
+	if not tower.can_upgrade() or not Game.spend_gold(tower.upgrade_cost()):
+		Audio.play("denied")
+		return
+	tower.upgrade()
+	Audio.play("upgrade")
+
+## Removes the tower and refunds half of the gold sunk into it.
 func _sell_tower(tower: Tower) -> void:
 	Audio.play("sell")
 	Game.add_gold(tower.sell_value())

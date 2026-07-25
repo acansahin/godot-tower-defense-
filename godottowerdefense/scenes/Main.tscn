@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/map.gd" id="2"]
@@ -8,6 +8,8 @@
 [ext_resource type="PackedScene" path="res://scenes/EndScreen.tscn" id="6"]
 [ext_resource type="Script" path="res://scripts/placement_preview.gd" id="8"]
 [ext_resource type="Script" path="res://scripts/tower_palette.gd" id="9"]
+[ext_resource type="Script" path="res://scripts/projectiles.gd" id="11"]
+[ext_resource type="Script" path="res://scripts/effects.gd" id="12"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1")
@@ -23,6 +25,13 @@ script = ExtResource("5")
 [node name="Towers" type="Node2D" parent="."]
 
 [node name="Projectiles" type="Node2D" parent="."]
+script = ExtResource("11")
+
+[node name="Effects" type="Node2D" parent="."]
+script = ExtResource("12")
+
+[node name="Camera2D" type="Camera2D" parent="."]
+position = Vector2(640, 360)
 
 [node name="Preview" type="Node2D" parent="."]
 visible = false

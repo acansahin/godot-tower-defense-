@@ -100,6 +100,19 @@ Each of these cost real time; don't rediscover them.
 - **GDScript `abs()` returns Variant**, so `var s := 4.0 * abs(x) - 1.0` fails with
   "cannot infer type". Use `absf()`, or type it explicitly (`var s: float = …`). Apply the
   same care to `:=` on ternary expressions.
+- **`const X := PackedStringArray([...])` doesn't compile** — that is a constructor call,
+  not a constant expression. Use a plain `const X: Array = [...]` and cast on read
+  (`String(X[i])`). Same for `PackedFloat32Array` and friends.
+- **A freed object fails a *typed* parameter check before the function body runs.** So
+  `func f(e: Enemy)` that starts with `if not is_instance_valid(e)` still throws when
+  handed a freed node — the guard never executes. Test `is_instance_valid()` at the
+  *call site* whenever you hold a node reference across frames.
+- **A new script with `class_name` is invisible to headless runs until the project is
+  reimported.** Godot resolves global classes through `.godot/global_script_class_cache.cfg`,
+  which only the editor's scan rebuilds. If `run_project` reports
+  `Identifier "Foo" not declared`, run
+  `"C:\Program Files\Godot\Godot.exe.exe" --headless --path <repo>/godottowerdefense --import`
+  once, then re-run. (CI is unaffected — it imports from scratch.)
 - **The element matchup must apply to damage-over-time too.** Poison damage is baked at
   hit time in `projectile.gd` `_apply()` and must be multiplied by
   `Game.element_mult(element, enemy.armor_element)`, exactly like direct and splash

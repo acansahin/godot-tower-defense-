@@ -4,7 +4,9 @@ class_name Tower
 ## Fires a Projectile that applies whichever effects the definition sets (damage,
 ## splash, slow, poison). New tower types are just new data entries — no subclass.
 
-const PROJECTILE := preload("res://scenes/Projectile.tscn")
+## Targeting is fixed to the enemy closest to the exit ("First"): that is what actually
+## protects your lives — a nearly-escaped leader matters more than whatever wandered past
+## the muzzle. There is no per-tower target picker (clicking a tower upgrades it instead).
 
 var id: String = ""
 var display_name: String = ""
@@ -38,18 +40,27 @@ const RANGE_GROWTH := 20.0   ## flat range added per level
 const FIRE_SPEEDUP := 0.82   ## fire_interval multiplier per level (lower = faster)
 const SELL_REFUND := 0.5     ## fraction of total_spent returned when sold
 
-# Badge geometry (tower-local). The sell badge is tucked into the bottom-right corner —
-# far from the body, so upgrading can't sell by accident. The upgrade hint is a slim
-# arrow off to the LEFT, clear of the barrel: anything drawn on the body got run over by
-# the barrel as it swung around to track targets.
-const SELL_BADGE_POS := Vector2(22, 24)
-const SELL_BADGE_R := 8.0
+# Upgrade hint geometry (tower-local). A slim arrow off to the LEFT, clear of the
+# barrel: anything drawn on the body got run over by the barrel as it swung around to
+# track targets. The upgrade action is now a click on the tower itself, so this is purely
+# a signal that the tower has an affordable level waiting.
 const UPGRADE_ARROW_X := -26.0  ## Left of the stone base (r=20), still inside the 64px cell.
 const UPGRADE_CHEVRON_PERIOD := 1.4  ## Seconds for one chevron to drift up and fade out.
 
+# Sell button geometry (tower-local): a small red "×" tucked into the bottom-right corner
+# of the cell. Tapping it sells the tower; tapping anywhere else on the tower upgrades it.
+# Kept in the corner, clear of the barrel's swing and the level pips, and sized for touch.
+const SELL_BTN_POS := Vector2(20.0, 18.0)  ## Bottom-right of the base, inside the 64px cell.
+const SELL_BTN_RADIUS := 9.0               ## Drawn disc radius.
+const SELL_BTN_HIT := 13.0                 ## Tap radius (a touch bigger than the disc for phones).
+
 var _cooldown: float = 0.0
+var _target: Enemy = null           ## Held between frames; see _find_target().
+var _range_sq: float = 25600.0      ## tower_range² (160² default), cached for distance checks; setup_def/upgrade keep it in sync.
+var _proj_pool: Node = null         ## Cached $Projectiles pool node; resolved once on first fire.
 var _aim_dir: Vector2 = Vector2.UP  ## Barrel direction, eased toward the target.
 var _recoil: float = 0.0            ## 1 → 0 kick after firing.
+var _was_upgrade_ready: bool = false  ## Last frame's _upgrade_ready(); the badge redraws only when this flips.
 var _highlighted: bool = false      ## Hovered by the mouse: draw the range clearly.
 
 ## Turns the clear range indicator on/off (Main drives this from mouse hover). Only
@@ -61,6 +72,11 @@ func set_highlighted(value: bool) -> void:
 	_highlighted = value
 	queue_redraw()
 
+## True when `world_pos` lands on the sell "×" (bottom-right corner). Main tests this on a
+## click to decide sell vs. upgrade. No rotation/scale on the tower, so world = pos + local.
+func is_sell_hit(world_pos: Vector2) -> bool:
+	return world_pos.distance_to(global_position + SELL_BTN_POS) <= SELL_BTN_HIT
+
 ## Configures this tower from a Game.TOWER_DEFS id. Call right after instantiate.
 func setup_def(def_id: String) -> void:
 	id = def_id
@@ -70,6 +86,7 @@ func setup_def(def_id: String) -> void:
 	element_color = d.get("color", Color.WHITE)
 	damage = d.get("damage", 8.0)
 	tower_range = d.get("range", 160.0)
+	_range_sq = tower_range * tower_range
 	fire_interval = d.get("interval", 0.5)
 	can_hit_flying = d.get("can_hit_flying", true)
 	splash_radius = d.get("splash_radius", 0.0)
@@ -102,6 +119,7 @@ func upgrade() -> void:
 	level += 1
 	damage *= DAMAGE_GROWTH
 	tower_range += RANGE_GROWTH
+	_range_sq = tower_range * tower_range
 	fire_interval *= FIRE_SPEEDUP
 	poison_dps *= DAMAGE_GROWTH  # DoT scales with the tower's damage growth
 	queue_redraw()
@@ -109,11 +127,6 @@ func upgrade() -> void:
 ## Gold returned when this tower is sold (half of everything sunk into it).
 func sell_value() -> int:
 	return int(total_spent * SELL_REFUND)
-
-## True if a tower-local click landed on the sell (✕) badge. Kept tight so only a
-## deliberate corner click sells.
-func is_sell_hit(local_pos: Vector2) -> bool:
-	return local_pos.distance_to(SELL_BADGE_POS) <= SELL_BADGE_R + 1.0
 
 func _process(delta: float) -> void:
 	var target := _find_target()
@@ -125,39 +138,61 @@ func _process(delta: float) -> void:
 	if _recoil > 0.0:
 		_recoil = maxf(0.0, _recoil - delta * 6.0)
 	# An idle tower never repaints on its own, so the animated hint needs to ask for it.
-	if target != null or _recoil > 0.0 or _upgrade_ready():
+	# The `ready != _was_upgrade_ready` term gives a single repaint when affordability
+	# flips (gold spent/earned) so the affordable-upgrade hint clears/appears on its own.
+	var up_ready := _upgrade_ready()
+	if target != null or _recoil > 0.0 or up_ready or up_ready != _was_upgrade_ready:
 		queue_redraw()
+	_was_upgrade_ready = up_ready
 	if _cooldown > 0.0:
 		_cooldown -= delta
 	elif target != null:
 		_fire(target)
 		_cooldown = fire_interval
 
+## Picks this frame's target. Deliberately sticky: while the current one is still
+## valid the tower keeps it, which stops the barrel twitching between equally-good
+## enemies AND skips the scan on most frames. When a scan IS needed it goes through
+## EnemyIndex (a shared per-frame spatial hash), so it inspects only enemies near this
+## tower rather than the whole group — what used to be an O(enemies)-per-tower cost.
 func _find_target() -> Enemy:
+	# is_instance_valid() must be tested out here rather than inside _is_targetable:
+	# once the held enemy is freed, the typed `enemy: Enemy` parameter check rejects it
+	# and raises before the function body could ever guard against it.
+	if is_instance_valid(_target) and _is_targetable(_target):
+		return _target
 	var best: Enemy = null
-	var best_dist := tower_range
-	for e in get_tree().get_nodes_in_group("enemies"):
+	var best_score := -INF
+	# Only enemies in cells overlapping our range, not the whole group (see enemy_index.gd).
+	for e in EnemyIndex.query(global_position, tower_range):
 		var enemy := e as Enemy
-		if enemy == null:
+		if not _is_targetable(enemy):
 			continue
-		if enemy.is_flying and not can_hit_flying:
-			continue
-		var d := global_position.distance_to(enemy.global_position)
-		if d <= best_dist:
-			best_dist = d
+		# "First": rank by how far along the path the enemy is — closest to the exit wins.
+		var score := enemy.progress()
+		if score > best_score:
+			best_score = score
 			best = enemy
+	_target = best
 	return best
 
-## Container that new projectiles are added to (kept off the tower so they
-## keep flying independently).
-func _projectiles() -> Node:
-	return get_tree().current_scene.get_node("Projectiles")
+## True if `enemy` is still alive, in range, and not a flyer this tower cannot reach.
+## Callers must have already ruled out freed instances (see _find_target).
+func _is_targetable(enemy: Enemy) -> bool:
+	if enemy == null or not enemy.is_alive():
+		return false
+	if enemy.is_flying and not can_hit_flying:
+		return false
+	return global_position.distance_squared_to(enemy.global_position) <= _range_sq
 
 func _fire(target: Enemy) -> void:
 	_recoil = 1.0
 	Audio.play_tower_fire(id, element)
-	var p := PROJECTILE.instantiate() as Projectile
-	_projectiles().add_child(p)
+	# Pull a bolt from the shared $Projectiles pool instead of instantiating one per shot;
+	# the pool keeps it parented off the tower so it flies independently (see projectiles.gd).
+	if not is_instance_valid(_proj_pool):
+		_proj_pool = get_tree().current_scene.get_node("Projectiles")
+	var p := _proj_pool.acquire() as Projectile
 	p.setup(global_position, target, damage)
 	p.color = element_color
 	p.element = element
@@ -200,20 +235,34 @@ func _draw() -> void:
 	draw_circle(tip, 11.0, element_color)
 	draw_arc(tip, 11.0, 0.0, TAU, 20, Color(0, 0, 0, 0.4), 2.0, true)
 	draw_circle(tip + Vector2(-3, -3), 3.5, Color(1, 1, 1, 0.5))  # highlight
+	# Muzzle flash on the handful of frames right after firing. _recoil already decays
+	# 1 -> 0 for the barrel kick, so this rides along for free.
+	if _recoil > 0.55:
+		var flash: float = (_recoil - 0.55) / 0.45
+		draw_circle(tip, 15.0 + 11.0 * flash, Color(1, 1, 1, 0.35 * flash))
 	# Element initial on the orb.
 	var font := ThemeDB.fallback_font
 	if font != null and display_name != "":
 		draw_string(font, tip + Vector2(-5, 5), display_name.substr(0, 1),
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.08, 0.08, 0.10))
 	_draw_level_pips(element_color.lightened(0.35))
-	# Sell badge stays ON TOP: unlike the upgrade badge it is a click target, so it must
-	# never end up hidden under the barrel.
-	_draw_sell_badge()
+	# Drawn last so it stays tappable even when the barrel swings over the corner.
+	_draw_sell_button()
+
+## Small red "×" at the bottom-right corner: the sell control. A tap here sells the tower
+## (Main routes it via is_sell_hit); a tap anywhere else on the tower upgrades it.
+func _draw_sell_button() -> void:
+	var c := SELL_BTN_POS
+	draw_circle(c, SELL_BTN_RADIUS, Color(0.70, 0.16, 0.16, 0.95))
+	draw_arc(c, SELL_BTN_RADIUS, 0.0, TAU, 16, Color(0, 0, 0, 0.45), 1.5, true)
+	var s := 3.6
+	draw_line(c + Vector2(-s, -s), c + Vector2(s, s), Color(1, 1, 1, 0.95), 2.0, true)
+	draw_line(c + Vector2(-s, s), c + Vector2(s, -s), Color(1, 1, 1, 0.95), 2.0, true)
 
 ## Upgrade hint, shown only while another level exists and is affordable: a slim green
-## arrow bobbing gently to the tower's left, with the cost to its right. Clicking the
-## tower anywhere upgrades it (see Main), so this is purely a signal — which is why it can
-## sit off the body, clear of the swinging barrel.
+## arrow bobbing gently to the tower's left. Purely a signal — the upgrade action is a
+## click on the tower itself, so nothing here is a click target and it can sit off the
+## body, clear of the swinging barrel.
 func _draw_upgrade_badge() -> void:
 	if not _upgrade_ready():
 		return
@@ -226,11 +275,6 @@ func _draw_upgrade_badge() -> void:
 	for i in 2:
 		var p := fposmod(t / UPGRADE_CHEVRON_PERIOD + i * 0.5, 1.0)
 		_draw_chevron(Vector2(UPGRADE_ARROW_X, lerpf(6.0, -8.0, p)), sin(p * PI))
-	var font := ThemeDB.fallback_font
-	if font != null:
-		# Steady (not animated) on the right, where it clears both the HUD bar and neighbours.
-		draw_string(font, Vector2(16, -7), "%d g" % upgrade_cost(),
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1, 0.95, 0.6))
 
 ## One soft chevron ("^") at `o`, faded to `alpha`. draw_line has no round-cap option, so
 ## dots at the ends and the apex do the rounding — that is what keeps it friendly rather
@@ -248,21 +292,6 @@ func _draw_chevron(o: Vector2, alpha: float) -> void:
 	draw_line(m, r, col, 3.5, true)
 	for p in [l, m, r]:
 		draw_circle(p, 1.75, col)
-
-## Red ✕ badge (always shown) to sell the tower for half its invested gold; the
-## refund amount is printed just below it.
-func _draw_sell_badge() -> void:
-	var c := SELL_BADGE_POS
-	draw_circle(c, SELL_BADGE_R, Color(0.72, 0.16, 0.16))
-	draw_arc(c, SELL_BADGE_R, 0.0, TAU, 20, Color(1, 1, 1, 0.9), 2.0, true)
-	var d := 3.5
-	draw_line(c + Vector2(-d, -d), c + Vector2(d, d), Color.WHITE, 2.0)
-	draw_line(c + Vector2(-d, d), c + Vector2(d, -d), Color.WHITE, 2.0)
-	var font := ThemeDB.fallback_font
-	if font != null:
-		# Refund printed to the left of the badge.
-		draw_string(font, Vector2(-34, c.y + 4), "+%d g" % sell_value(),
-				HORIZONTAL_ALIGNMENT_RIGHT, 46, 13, Color(1, 0.85, 0.4))
 
 ## Small dots under the tower base, one per level, so the player can read the
 ## current upgrade tier at a glance. Called from each subclass's _draw().
