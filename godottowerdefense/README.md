@@ -287,7 +287,7 @@ costs, and the mutable `gold` / `lives` with signals. Two more autoloads sit bes
 | Starting lives | `game.gd` `START_LIVES` | 20 |
 | Tower stats (all towers) | `game.gd` `TOWER_DEFS` | per-tower cost / dmg / range / interval / effects |
 | Base towers | `TOWER_DEFS` | Fire (dmg), Water (slow), Nature (poison), Earth (splash, ground) |
-| Dual towers | `TOWER_DEFS` | Steam (dmg+slow), Lava (splash+burn, ground), Ice (slow+poison) |
+| Dual towers | `TOWER_DEFS` | Steam (dmg+slow), Lava (splash+burn, ground), Ice (slow+poison; from **Lv2 the slow becomes an area effect** — `slow_splash`, chill only, no extra damage — and the radius **widens again at Lv3** (`SLOW_SPLASH_GROWTH`), with a `frost_ring.gd` impact burst) |
 | Neutral tower | `TOWER_DEFS` | Lightning (25% chance to stun 1.2s) |
 | Upgrade: max level / growth | `tower.gd` | L3, dmg ×1.6, range +20, interval ×0.82, DoT ×1.6 |
 | Upgrade cost | `tower.gd` `upgrade_cost()` | `build_cost × level` (e.g. Fire 40, 80) |
@@ -297,7 +297,7 @@ costs, and the mutable `gold` / `lives` with signals. Two more autoloads sit bes
 | Screen shake | `main.gd` `SHAKE_DECAY`, `enemy.gd` | 7px on a boss death, 4px on a leak, bled off at 26 px/s |
 | Impact SFX cap | `audio.gd` `MAX_PER_FRAME` | 3 per effect per frame — a full board at 3x otherwise floods the 12-voice pool |
 | Element matchup | `game.gd` `ELEMENT_BEATS` | cycle fire→nature→earth→water→fire; ×1.75 dmg if you beat the target's armor element, ×0.7 if it beats you, ×1 if either side is neutral (applies to direct, splash and poison damage) |
-| Waves | `game.gd` `WAVES` | 20 fixed entries (archetype + optional boss/element per wave) |
+| Waves | `game.gd` `WAVES` | 20 fixed entries (archetype + optional `boss`/`element`, plus an optional per-wave `hp`/`count` multiplier to smooth a single wave without touching the shared archetype) |
 | Creep archetypes | `game.gd` `WAVE_TYPES` | normal, fast, swarm, tank, immune, regen, air (flyer), split (splits on death) — each is a set of HP/speed/count/radius multipliers and flags on top of the base scaling |
 | Immune archetype | `game.gd` `WAVE_TYPES` + `enemy.gd` `cc_immune` | ignores **slow and stun**, but **not poison** — poison is damage rather than crowd control, so Nature/Ice/Lava stay the answer to these waves instead of the whole roster going dead |
 | Regen archetype | `game.gd` `WAVE_TYPES` + `enemy.gd` `REGEN_DELAY` | heals 3.5% of max HP/s, but **paused for 2s after taking any damage** — so it only heals through gaps in your coverage instead of setting a hard DPS threshold. Its "+" marker dims while suppressed. Poison ticks count as damage, so a single Nature/Ice/Lava tower shuts the healing off entirely |

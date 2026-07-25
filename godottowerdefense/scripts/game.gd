@@ -54,6 +54,7 @@ const START_LIVES := 20
 # Every tower (base element or dual combination) is just a data entry. Fields:
 #   name, cost, color, damage, range, interval, can_hit_flying,
 #   splash_radius/splash_factor (AoE), slow_factor/slow_time (0..1 = slower),
+#   slow_splash (Lv2+ radius the slow ALSO spreads to — slow only, no damage),
 #   poison_dps/poison_time (damage over time),
 #   stun_chance/stun_time (chance to freeze the enemy in place). Missing = "off".
 const TOWER_DEFS := {
@@ -92,6 +93,7 @@ const TOWER_DEFS := {
 		"name": "Ice", "cost": 120, "color": Color(0.60, 0.90, 0.98),
 		"damage": 10.0, "range": 175.0, "interval": 0.7,
 		"slow_factor": 0.4, "slow_time": 2.0,
+		"slow_splash": 90.0,  # from Lv2 the chill spreads to enemies within this radius of the target
 		"poison_dps": 6.0, "poison_time": 3.0,
 	},
 	"lightning": {  # chance to stun (freeze in place)
@@ -117,7 +119,7 @@ const WAVE_TYPES := {
 	"immune": {"name": "Immune", "color": Color(0.60, 0.62, 0.70), "hp": 1.15, "count": 0.85, "cc_immune": true},
 	"regen":  {"name": "Regen",  "color": Color(0.35, 0.75, 0.40), "hp": 1.0, "count": 0.8, "regen": 0.035},
 	"air":    {"name": "Air",    "color": Color(0.72, 0.78, 0.96), "air": true},
-	"split":  {"name": "Splitter","color": Color(0.85, 0.55, 0.25), "hp": 1.2, "count": 0.7, "split": 2, "radius": 1.15},
+	"split":  {"name": "Splitter","color": Color(0.85, 0.55, 0.25), "hp": 1.0, "count": 0.6, "split": 2, "radius": 1.15},
 }
 
 ## 20 waves; boss on every 5th. Kept short — stats come from the scaling formula.
@@ -140,8 +142,8 @@ const WAVES: Array = [
 	{"type": "regen", "element": "nature"},
 	{"type": "split", "element": "earth"},
 	{"type": "swarm", "element": "water"},
-	{"type": "tank", "element": "fire"},
-	{"type": "normal", "boss": true, "element": "nature"},
+	{"type": "tank", "element": "fire", "hp": 0.85},  # per-wave -15% HP (mild trim so it isn't a spike)
+	{"type": "normal", "boss": true, "element": "nature", "hp": 1.3},  # per-wave +30% HP: the finale, the clear peak
 ]
 
 # --- Element matchup -----------------------------------------------------------

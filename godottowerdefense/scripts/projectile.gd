@@ -4,6 +4,8 @@ class_name Projectile
 ## optional splash (all enemies in radius for splash_factor damage), and optional
 ## slow / poison debuffs. Configured by the firing tower; drawn as a coloured bolt.
 
+const FrostRing := preload("res://scripts/frost_ring.gd")  ## Ice's area-slow impact visual.
+
 var speed: float = 420.0
 var damage: float = 10.0
 var color: Color = Color.WHITE
@@ -13,6 +15,7 @@ var splash_factor: float = 0.5
 var hits_flying: bool = true    ## False skips flyers (ground-only towers) for splash.
 var slow_factor: float = 1.0    ## < 1 slows the enemy on hit.
 var slow_time: float = 0.0
+var slow_splash_radius: float = 0.0  ## If > 0, the slow (only) also chills enemies within this radius of impact.
 var poison_dps: float = 0.0
 var poison_time: float = 0.0
 var stun_chance: float = 0.0    ## 0..1 chance to freeze the enemy on hit.
@@ -59,6 +62,9 @@ func _hit(target: Enemy) -> void:
 	_apply(target, 1.0, true)
 	if splash_radius > 0.0:
 		_apply_splash(target, impact)
+	if slow_splash_radius > 0.0 and slow_time > 0.0:
+		_apply_slow_splash(target, impact)
+		FrostRing.spawn(self, impact, slow_splash_radius)  # show the frost field
 	_recycle()
 
 ## Applies damage (scaled by mult and the element matchup) plus any slow / poison.
@@ -104,6 +110,21 @@ func _apply_splash(main_target: Enemy, center: Vector2) -> void:
 			continue
 		if center.distance_squared_to(enemy.global_position) <= radius_sq:
 			_apply(enemy, splash_factor, false)
+
+## Spreads ONLY the slow to enemies around the impact (Ice's Lv2 upgrade). Deliberately
+## deals no damage and applies no poison — just the chill — so the upgrade turns Ice into an
+## area-control tower without also making it an AoE nuke. cc-immune enemies still shrug it
+## off (apply_slow ignores them), same as a direct hit.
+func _apply_slow_splash(main_target: Enemy, center: Vector2) -> void:
+	var radius_sq := slow_splash_radius * slow_splash_radius
+	for e in EnemyIndex.query(center, slow_splash_radius):
+		var enemy := e as Enemy
+		if enemy == null or enemy == main_target:
+			continue  # the main target already got slowed by the direct hit
+		if enemy.is_flying and not hits_flying:
+			continue
+		if center.distance_squared_to(enemy.global_position) <= radius_sq:
+			enemy.apply_slow(slow_factor, slow_time)
 
 func _draw() -> void:
 	# The node rotates toward its target, so local -x is "behind": draw a tapered

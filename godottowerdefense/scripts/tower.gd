@@ -23,6 +23,8 @@ var splash_radius: float = 0.0
 var splash_factor: float = 0.5
 var slow_factor: float = 1.0    ## < 1 slows; 1 = no slow.
 var slow_time: float = 0.0
+var slow_splash_radius: float = 0.0  ## Active radius the slow ALSO spreads to (0 = single target); enabled from Lv2.
+var _slow_splash_base: float = 0.0   ## The def's slow_splash radius; becomes active once level >= 2.
 var poison_dps: float = 0.0
 var poison_time: float = 0.0
 var stun_chance: float = 0.0    ## chance (0..1) to freeze enemies on hit.
@@ -39,6 +41,7 @@ const DAMAGE_GROWTH := 1.6   ## damage multiplier per level
 const RANGE_GROWTH := 20.0   ## flat range added per level
 const FIRE_SPEEDUP := 0.82   ## fire_interval multiplier per level (lower = faster)
 const SELL_REFUND := 0.5     ## fraction of total_spent returned when sold
+const SLOW_SPLASH_GROWTH := 0.3  ## slow_splash radius gains this fraction of its base per level past 2 (Lv3 = ×1.3)
 
 # Upgrade hint geometry (tower-local). A slim arrow off to the LEFT, clear of the
 # barrel: anything drawn on the body got run over by the barrel as it swung around to
@@ -93,6 +96,8 @@ func setup_def(def_id: String) -> void:
 	splash_factor = d.get("splash_factor", 0.5)
 	slow_factor = d.get("slow_factor", 1.0)
 	slow_time = d.get("slow_time", 0.0)
+	_slow_splash_base = d.get("slow_splash", 0.0)
+	_update_slow_splash()
 	poison_dps = d.get("poison_dps", 0.0)
 	poison_time = d.get("poison_time", 0.0)
 	stun_chance = d.get("stun_chance", 0.0)
@@ -122,7 +127,17 @@ func upgrade() -> void:
 	_range_sq = tower_range * tower_range
 	fire_interval *= FIRE_SPEEDUP
 	poison_dps *= DAMAGE_GROWTH  # DoT scales with the tower's damage growth
+	_update_slow_splash()        # Ice's area-slow unlocks at level 2
 	queue_redraw()
+
+## Turns the slow into an area effect once the tower hits level 2 (only for towers whose
+## def sets slow_splash — currently just Ice), and widens the radius further at level 3.
+## Below level 2 the slow stays single-target.
+func _update_slow_splash() -> void:
+	if level < 2:
+		slow_splash_radius = 0.0
+	else:
+		slow_splash_radius = _slow_splash_base * (1.0 + SLOW_SPLASH_GROWTH * float(level - 2))
 
 ## Gold returned when this tower is sold (half of everything sunk into it).
 func sell_value() -> int:
@@ -201,6 +216,7 @@ func _fire(target: Enemy) -> void:
 	p.splash_factor = splash_factor
 	p.slow_factor = slow_factor
 	p.slow_time = slow_time
+	p.slow_splash_radius = slow_splash_radius
 	p.poison_dps = poison_dps
 	p.poison_time = poison_time
 	p.stun_chance = stun_chance
