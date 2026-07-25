@@ -89,11 +89,14 @@ func _start_wave() -> void:
 	var base_hp := 20.0 + _wave * 10.0 + _wave * _wave * 2.55
 	var base_spd := 60.0 + _wave * 6.0
 	var base_count := 5 + int(_wave * 2.5)
-	_hp = base_hp * float(_type_def.get("hp", 1.0))
+	# Optional per-wave `hp` / `count` multipliers on the WAVES entry (default 1.0) stack on
+	# top of the archetype multipliers, so a single wave can be smoothed without rebalancing
+	# the whole archetype (which is shared across several waves).
+	_hp = base_hp * float(_type_def.get("hp", 1.0)) * float(def.get("hp", 1.0))
 	_spd = base_spd * float(_type_def.get("spd", 1.0))
 	_reward = 3 + _wave
 	_interval = maxf(0.3, 0.9 - _wave * 0.04)
-	_to_spawn = maxi(1, int(round(base_count * float(_type_def.get("count", 1.0)))))
+	_to_spawn = maxi(1, int(round(base_count * float(_type_def.get("count", 1.0)) * float(def.get("count", 1.0)))))
 	# Element waves colour the body by element; neutral waves keep the archetype colour.
 	_element = String(def.get("element", ""))
 	if _element != "":
@@ -156,7 +159,8 @@ func _preview_text(n: int) -> String:
 		return "Next: —"
 	var def: Dictionary = Game.WAVES[n - 1]
 	var t: Dictionary = Game.WAVE_TYPES[def["type"]]
-	var cnt := maxi(1, int(round((5 + int(n * 2.5)) * float(t.get("count", 1.0)))))
+	# Mirror the per-wave count override from _start_wave so the preview matches the spawn.
+	var cnt := maxi(1, int(round((5 + int(n * 2.5)) * float(t.get("count", 1.0)) * float(def.get("count", 1.0)))))
 	var boss := "  BOSS" if def.get("boss", false) else ""
 	var elem := String(def.get("element", ""))
 	var epfx := (elem.capitalize() + " ") if elem != "" else ""

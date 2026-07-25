@@ -5,12 +5,15 @@ extends Node2D
 ## processing) instead of new()/queue_free() removes a lot of node churn on busy waves.
 ##
 ## FloatingText / DeathBurst have class_name, so they are built with their global
-## constructors here and route their own spawn() helpers through this pool (see those files).
+## constructors here. FrostRing has none (it is preloaded), so it is typed loosely. All three
+## route their own spawn() helpers through this pool (see those files).
 
 const SOFT_CAP := 512  ## Idle instances kept per type; any freed past this are actually released.
+const FrostRing := preload("res://scripts/frost_ring.gd")
 
 var _free_text: Array[FloatingText] = []
 var _free_burst: Array[DeathBurst] = []
+var _free_frost: Array = []  ## FrostRing has no class_name, so this stays untyped.
 
 func acquire_text() -> FloatingText:
 	var t: FloatingText
@@ -51,3 +54,23 @@ func recycle_burst(b: DeathBurst) -> void:
 		b.queue_free()
 		return
 	_free_burst.append(b)
+
+func acquire_frost():
+	var f
+	if _free_frost.is_empty():
+		f = FrostRing.new()
+		f.pool = self
+		add_child(f)
+	else:
+		f = _free_frost.pop_back()
+		f.visible = true
+		f.set_process(true)
+	return f
+
+func recycle_frost(f) -> void:
+	f.set_process(false)
+	f.visible = false
+	if _free_frost.size() >= SOFT_CAP:
+		f.queue_free()
+		return
+	_free_frost.append(f)
