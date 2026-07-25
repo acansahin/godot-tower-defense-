@@ -24,6 +24,7 @@ config/icon="res://icon.svg"
 
 Game="*res://scripts/game.gd"
 Audio="*res://scripts/audio.gd"
+EnemyIndex="*res://scripts/enemy_index.gd"
 
 [display]
 

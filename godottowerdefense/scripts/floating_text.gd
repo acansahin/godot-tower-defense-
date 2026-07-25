@@ -15,19 +15,31 @@ var _font_size: int = 14
 var _half_width: float = 0.0  ## Cached so _draw doesn't re-measure every frame.
 var _drift: float = 0.0       ## Horizontal jitter so stacked hits don't overlap exactly.
 var _age: float = 0.0
+var pool: Node = null  ## The $Effects pool that owns this label (see effects.gd); null = unpooled.
 
-## Pops one in the level's Effects layer. `ctx` is any node already in the tree.
+## Cached $Effects pool node, re-resolved automatically after a scene reload frees it.
+static var _effects: Node = null
+
+## Pops one in the level's Effects layer, drawn from the pool. `ctx` is any node in the tree.
 static func spawn(ctx: Node, pos: Vector2, text: String, color: Color,
 		font_size: int = 14) -> void:
-	var root := ctx.get_tree().current_scene.get_node_or_null("Effects")
-	if root == null:
-		return
-	var t := FloatingText.new()
-	root.add_child(t)
+	if not is_instance_valid(_effects):
+		_effects = ctx.get_tree().current_scene.get_node_or_null("Effects")
+		if _effects == null:
+			return
+	var t: FloatingText = _effects.acquire_text()
 	t.global_position = pos
 	t.setup(text, color, font_size)
 
+## Returns this label to its pool (or frees it if unpooled).
+func _recycle() -> void:
+	if pool != null:
+		pool.recycle_text(self)
+	else:
+		queue_free()
+
 func setup(text: String, color: Color, font_size: int) -> void:
+	_age = 0.0  # a reused label restarts its rise/fade from the top
 	_text = text
 	_color = color
 	_font_size = font_size
@@ -41,7 +53,7 @@ func setup(text: String, color: Color, font_size: int) -> void:
 func _process(delta: float) -> void:
 	_age += delta
 	if _age >= LIFETIME:
-		queue_free()
+		_recycle()
 		return
 	queue_redraw()
 

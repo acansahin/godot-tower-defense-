@@ -12,19 +12,31 @@ var _color: Color = Color.WHITE
 var _radius: float = 16.0
 var _age: float = 0.0
 var _angles: PackedFloat32Array = PackedFloat32Array()
+var pool: Node = null  ## The $Effects pool that owns this burst (see effects.gd); null = unpooled.
 
-## Spawns one in the level's Effects layer. `ctx` is any node already in the tree —
-## call it *before* the dying enemy queue_free()s itself.
+## Cached $Effects pool node, re-resolved automatically after a scene reload frees it.
+static var _effects: Node = null
+
+## Spawns one in the level's Effects layer, drawn from the pool. `ctx` is any node in the
+## tree — call it *before* the dying enemy queue_free()s itself.
 static func spawn(ctx: Node, pos: Vector2, color: Color, radius: float) -> void:
-	var root := ctx.get_tree().current_scene.get_node_or_null("Effects")
-	if root == null:
-		return
-	var b := DeathBurst.new()
-	root.add_child(b)
+	if not is_instance_valid(_effects):
+		_effects = ctx.get_tree().current_scene.get_node_or_null("Effects")
+		if _effects == null:
+			return
+	var b: DeathBurst = _effects.acquire_burst()
 	b.global_position = pos
 	b.setup(color, radius)
 
+## Returns this burst to its pool (or frees it if unpooled).
+func _recycle() -> void:
+	if pool != null:
+		pool.recycle_burst(self)
+	else:
+		queue_free()
+
 func setup(color: Color, radius: float) -> void:
+	_age = 0.0  # a reused burst restarts its expand/fade
 	_color = color
 	_radius = radius
 	_angles.resize(DOTS)
@@ -36,7 +48,7 @@ func setup(color: Color, radius: float) -> void:
 func _process(delta: float) -> void:
 	_age += delta
 	if _age >= LIFETIME:
-		queue_free()
+		_recycle()
 		return
 	queue_redraw()
 

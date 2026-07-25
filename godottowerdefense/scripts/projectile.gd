@@ -19,16 +19,29 @@ var stun_chance: float = 0.0    ## 0..1 chance to freeze the enemy on hit.
 var stun_time: float = 0.0
 
 var _target: Enemy = null
+var pool: Node = null  ## The $Projectiles pool that owns this bolt (see projectiles.gd); null = unpooled.
 
 func setup(start: Vector2, target: Enemy, dmg: float) -> void:
 	global_position = start
 	_target = target
 	damage = dmg
+	# A pooled bolt was already drawn once in its previous colour; the firing tower has just
+	# overwritten `color`, so ask for a repaint (a fresh instance would paint anyway).
+	queue_redraw()
+
+## Returns this bolt to its pool (or frees it if unpooled), dropping the target reference so
+## a not-yet-freed dead enemy is not kept alive by a parked projectile.
+func _recycle() -> void:
+	_target = null
+	if pool != null:
+		pool.recycle(self)
+	else:
+		queue_free()
 
 func _process(delta: float) -> void:
 	# Target may have died mid-flight.
 	if not is_instance_valid(_target):
-		queue_free()
+		_recycle()
 		return
 	var to_target := _target.global_position - global_position
 	rotation = to_target.angle()
@@ -46,7 +59,7 @@ func _hit(target: Enemy) -> void:
 	_apply(target, 1.0, true)
 	if splash_radius > 0.0:
 		_apply_splash(target, impact)
-	queue_free()
+	_recycle()
 
 ## Applies damage (scaled by mult and the element matchup) plus any slow / poison.
 ## `show_number` is only set for the direct hit — a wide splash would otherwise bury
@@ -81,13 +94,15 @@ func _show_damage(pos: Vector2, dealt: float, matchup: float) -> void:
 			col, font_size)
 
 func _apply_splash(main_target: Enemy, center: Vector2) -> void:
-	for e in get_tree().get_nodes_in_group("enemies"):
+	var radius_sq := splash_radius * splash_radius
+	# Only enemies near the impact, not the whole group (see enemy_index.gd).
+	for e in EnemyIndex.query(center, splash_radius):
 		var enemy := e as Enemy
 		if enemy == null or enemy == main_target:
 			continue
 		if enemy.is_flying and not hits_flying:
 			continue
-		if center.distance_to(enemy.global_position) <= splash_radius:
+		if center.distance_squared_to(enemy.global_position) <= radius_sq:
 			_apply(enemy, splash_factor, false)
 
 func _draw() -> void:

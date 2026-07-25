@@ -4,16 +4,9 @@ class_name Tower
 ## Fires a Projectile that applies whichever effects the definition sets (damage,
 ## splash, slow, poison). New tower types are just new data entries — no subclass.
 
-const PROJECTILE := preload("res://scenes/Projectile.tscn")
-
-## Which enemy in range this tower shoots at. FIRST — the one closest to the exit — is
-## the default because that is what actually protects your lives; CLOSE, the old fixed
-## behaviour, makes a tower drop a nearly-escaped leader for whatever wanders past its
-## muzzle. Kept as a plain int so the "cycle to next mode" arithmetic needs no casts.
-enum TargetMode { FIRST, LAST, STRONG, CLOSE }
-## Labels for the panel, in TargetMode order. A plain Array literal on purpose:
-## PackedStringArray(...) is a call, so it is not a constant expression.
-const TARGET_MODE_NAMES: Array = ["First", "Last", "Strong", "Close"]
+## Targeting is fixed to the enemy closest to the exit ("First"): that is what actually
+## protects your lives — a nearly-escaped leader matters more than whatever wandered past
+## the muzzle. There is no per-tower target picker (clicking a tower upgrades it instead).
 
 var id: String = ""
 var display_name: String = ""
@@ -49,19 +42,26 @@ const SELL_REFUND := 0.5     ## fraction of total_spent returned when sold
 
 # Upgrade hint geometry (tower-local). A slim arrow off to the LEFT, clear of the
 # barrel: anything drawn on the body got run over by the barrel as it swung around to
-# track targets. Actions themselves live in the info panel, so this is purely a signal
-# that the tower has an affordable level waiting.
+# track targets. The upgrade action is now a click on the tower itself, so this is purely
+# a signal that the tower has an affordable level waiting.
 const UPGRADE_ARROW_X := -26.0  ## Left of the stone base (r=20), still inside the 64px cell.
 const UPGRADE_CHEVRON_PERIOD := 1.4  ## Seconds for one chevron to drift up and fade out.
 
-var target_mode: int = TargetMode.FIRST
+# Sell button geometry (tower-local): a small red "×" tucked into the bottom-right corner
+# of the cell. Tapping it sells the tower; tapping anywhere else on the tower upgrades it.
+# Kept in the corner, clear of the barrel's swing and the level pips, and sized for touch.
+const SELL_BTN_POS := Vector2(20.0, 18.0)  ## Bottom-right of the base, inside the 64px cell.
+const SELL_BTN_RADIUS := 9.0               ## Drawn disc radius.
+const SELL_BTN_HIT := 13.0                 ## Tap radius (a touch bigger than the disc for phones).
 
 var _cooldown: float = 0.0
 var _target: Enemy = null           ## Held between frames; see _find_target().
+var _range_sq: float = 25600.0      ## tower_range² (160² default), cached for distance checks; setup_def/upgrade keep it in sync.
+var _proj_pool: Node = null         ## Cached $Projectiles pool node; resolved once on first fire.
 var _aim_dir: Vector2 = Vector2.UP  ## Barrel direction, eased toward the target.
 var _recoil: float = 0.0            ## 1 → 0 kick after firing.
+var _was_upgrade_ready: bool = false  ## Last frame's _upgrade_ready(); the badge redraws only when this flips.
 var _highlighted: bool = false      ## Hovered by the mouse: draw the range clearly.
-var _selected: bool = false         ## Clicked: range stays clear and a ring marks it.
 
 ## Turns the clear range indicator on/off (Main drives this from mouse hover). Only
 ## repaints on an actual change — an idle tower with no target never redraws on its
@@ -72,12 +72,10 @@ func set_highlighted(value: bool) -> void:
 	_highlighted = value
 	queue_redraw()
 
-## Marks this tower as the one the info panel is showing.
-func set_selected(value: bool) -> void:
-	if _selected == value:
-		return
-	_selected = value
-	queue_redraw()
+## True when `world_pos` lands on the sell "×" (bottom-right corner). Main tests this on a
+## click to decide sell vs. upgrade. No rotation/scale on the tower, so world = pos + local.
+func is_sell_hit(world_pos: Vector2) -> bool:
+	return world_pos.distance_to(global_position + SELL_BTN_POS) <= SELL_BTN_HIT
 
 ## Configures this tower from a Game.TOWER_DEFS id. Call right after instantiate.
 func setup_def(def_id: String) -> void:
@@ -88,6 +86,7 @@ func setup_def(def_id: String) -> void:
 	element_color = d.get("color", Color.WHITE)
 	damage = d.get("damage", 8.0)
 	tower_range = d.get("range", 160.0)
+	_range_sq = tower_range * tower_range
 	fire_interval = d.get("interval", 0.5)
 	can_hit_flying = d.get("can_hit_flying", true)
 	splash_radius = d.get("splash_radius", 0.0)
@@ -120,6 +119,7 @@ func upgrade() -> void:
 	level += 1
 	damage *= DAMAGE_GROWTH
 	tower_range += RANGE_GROWTH
+	_range_sq = tower_range * tower_range
 	fire_interval *= FIRE_SPEEDUP
 	poison_dps *= DAMAGE_GROWTH  # DoT scales with the tower's damage growth
 	queue_redraw()
@@ -138,27 +138,23 @@ func _process(delta: float) -> void:
 	if _recoil > 0.0:
 		_recoil = maxf(0.0, _recoil - delta * 6.0)
 	# An idle tower never repaints on its own, so the animated hint needs to ask for it.
-	if target != null or _recoil > 0.0 or _upgrade_ready():
+	# The `ready != _was_upgrade_ready` term gives a single repaint when affordability
+	# flips (gold spent/earned) so the affordable-upgrade hint clears/appears on its own.
+	var up_ready := _upgrade_ready()
+	if target != null or _recoil > 0.0 or up_ready or up_ready != _was_upgrade_ready:
 		queue_redraw()
+	_was_upgrade_ready = up_ready
 	if _cooldown > 0.0:
 		_cooldown -= delta
 	elif target != null:
 		_fire(target)
 		_cooldown = fire_interval
 
-## Advances to the next targeting mode, wrapping. Driven by the tower info panel.
-func cycle_target_mode() -> void:
-	target_mode = (target_mode + 1) % TargetMode.size()
-	_target = null  # re-pick immediately under the new rule instead of next reload
-	queue_redraw()
-
-func target_mode_name() -> String:
-	return String(TARGET_MODE_NAMES[target_mode])
-
 ## Picks this frame's target. Deliberately sticky: while the current one is still
 ## valid the tower keeps it, which stops the barrel twitching between equally-good
-## enemies AND skips the group scan on most frames. That scan is O(enemies) *per
-## tower*, so in a 50-enemy wave with a full board it was the dominant per-frame cost.
+## enemies AND skips the scan on most frames. When a scan IS needed it goes through
+## EnemyIndex (a shared per-frame spatial hash), so it inspects only enemies near this
+## tower rather than the whole group — what used to be an O(enemies)-per-tower cost.
 func _find_target() -> Enemy:
 	# is_instance_valid() must be tested out here rather than inside _is_targetable:
 	# once the held enemy is freed, the typed `enemy: Enemy` parameter check rejects it
@@ -167,11 +163,13 @@ func _find_target() -> Enemy:
 		return _target
 	var best: Enemy = null
 	var best_score := -INF
-	for e in get_tree().get_nodes_in_group("enemies"):
+	# Only enemies in cells overlapping our range, not the whole group (see enemy_index.gd).
+	for e in EnemyIndex.query(global_position, tower_range):
 		var enemy := e as Enemy
 		if not _is_targetable(enemy):
 			continue
-		var score := _score(enemy)
+		# "First": rank by how far along the path the enemy is — closest to the exit wins.
+		var score := enemy.progress()
 		if score > best_score:
 			best_score = score
 			best = enemy
@@ -185,30 +183,16 @@ func _is_targetable(enemy: Enemy) -> bool:
 		return false
 	if enemy.is_flying and not can_hit_flying:
 		return false
-	return global_position.distance_to(enemy.global_position) <= tower_range
-
-## Ranks a candidate under the current mode — higher wins.
-func _score(enemy: Enemy) -> float:
-	match target_mode:
-		TargetMode.FIRST:
-			return enemy.progress()
-		TargetMode.LAST:
-			return -enemy.progress()
-		TargetMode.STRONG:
-			return enemy.health
-		_:  # CLOSE
-			return -global_position.distance_to(enemy.global_position)
-
-## Container that new projectiles are added to (kept off the tower so they
-## keep flying independently).
-func _projectiles() -> Node:
-	return get_tree().current_scene.get_node("Projectiles")
+	return global_position.distance_squared_to(enemy.global_position) <= _range_sq
 
 func _fire(target: Enemy) -> void:
 	_recoil = 1.0
 	Audio.play_tower_fire(id, element)
-	var p := PROJECTILE.instantiate() as Projectile
-	_projectiles().add_child(p)
+	# Pull a bolt from the shared $Projectiles pool instead of instantiating one per shot;
+	# the pool keeps it parented off the tower so it flies independently (see projectiles.gd).
+	if not is_instance_valid(_proj_pool):
+		_proj_pool = get_tree().current_scene.get_node("Projectiles")
+	var p := _proj_pool.acquire() as Projectile
 	p.setup(global_position, target, damage)
 	p.color = element_color
 	p.element = element
@@ -226,15 +210,11 @@ func _draw() -> void:
 	# Range indicator in the element's colour: quiet by default so a full board stays
 	# readable, clear while hovered so the player can judge coverage.
 	var ec := element_color
-	if _highlighted or _selected:
+	if _highlighted:
 		draw_circle(Vector2.ZERO, tower_range, Color(ec.r, ec.g, ec.b, 0.07))
 		draw_arc(Vector2.ZERO, tower_range, 0.0, TAU, 64, Color(ec.r, ec.g, ec.b, 0.50), 2.5, true)
 	else:
 		draw_arc(Vector2.ZERO, tower_range, 0.0, TAU, 48, Color(ec.r, ec.g, ec.b, 0.12), 2.0, true)
-	# Bright ring hugging the base, so it stays obvious which tower the panel describes
-	# even when several towers overlap ranges.
-	if _selected:
-		draw_arc(Vector2.ZERO, 24.0, 0.0, TAU, 28, Color(1, 1, 1, 0.85), 2.5, true)
 	# Flat drop shadow under the base.
 	draw_set_transform(Vector2(0, 16), 0.0, Vector2(1.0, 0.45))
 	draw_circle(Vector2.ZERO, 18.0, Color(0, 0, 0, 0.20))
@@ -266,10 +246,22 @@ func _draw() -> void:
 		draw_string(font, tip + Vector2(-5, 5), display_name.substr(0, 1),
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.08, 0.08, 0.10))
 	_draw_level_pips(element_color.lightened(0.35))
+	# Drawn last so it stays tappable even when the barrel swings over the corner.
+	_draw_sell_button()
+
+## Small red "×" at the bottom-right corner: the sell control. A tap here sells the tower
+## (Main routes it via is_sell_hit); a tap anywhere else on the tower upgrades it.
+func _draw_sell_button() -> void:
+	var c := SELL_BTN_POS
+	draw_circle(c, SELL_BTN_RADIUS, Color(0.70, 0.16, 0.16, 0.95))
+	draw_arc(c, SELL_BTN_RADIUS, 0.0, TAU, 16, Color(0, 0, 0, 0.45), 1.5, true)
+	var s := 3.6
+	draw_line(c + Vector2(-s, -s), c + Vector2(s, s), Color(1, 1, 1, 0.95), 2.0, true)
+	draw_line(c + Vector2(-s, s), c + Vector2(s, -s), Color(1, 1, 1, 0.95), 2.0, true)
 
 ## Upgrade hint, shown only while another level exists and is affordable: a slim green
-## arrow bobbing gently to the tower's left. Purely a signal — the actual Upgrade button
-## lives in the info panel, so nothing here is a click target and it can sit off the
+## arrow bobbing gently to the tower's left. Purely a signal — the upgrade action is a
+## click on the tower itself, so nothing here is a click target and it can sit off the
 ## body, clear of the swinging barrel.
 func _draw_upgrade_badge() -> void:
 	if not _upgrade_ready():

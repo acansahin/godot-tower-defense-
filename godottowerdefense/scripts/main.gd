@@ -1,6 +1,6 @@
 extends Node2D
 ## Wires the level together: grid-based tower placement (drag from the palette
-## onto a cell), tower selection + the info panel, and the HUD, then kicks off
+## onto a cell), click-to-upgrade / tap-the-× to sell, and the HUD, then kicks off
 ## the waves.
 
 const TOWER := preload("res://scenes/Tower.tscn")
@@ -13,13 +13,11 @@ const SHAKE_DECAY := 26.0  ## Pixels of camera shake bled off per second.
 @onready var hud: HUD = $UI/HUD
 @onready var palette = $UI/TowerPalette
 @onready var end_screen: EndScreen = $UI/EndScreen
-@onready var tower_info = $UI/TowerInfo
 @onready var camera: Camera2D = $Camera2D
 @onready var preview = $Preview  ## Drag ghost.
 
 var _drag_kind: String = ""  ## Tower type being dragged from the palette ("" = none).
 var _hovered: Tower = null   ## Tower under the mouse, drawn with a clear range ring.
-var _selected: Tower = null  ## Tower the info panel is showing (null = panel hidden).
 var _shake: float = 0.0      ## Current camera shake magnitude in px; decays to 0.
 
 func _ready() -> void:
@@ -32,7 +30,6 @@ func _ready() -> void:
 
 	Game.gold_changed.connect(hud.set_gold)
 	Game.gold_changed.connect(palette.set_gold)
-	Game.gold_changed.connect(_refresh_tower_badges)
 	Game.lives_changed.connect(hud.set_lives)
 	Game.game_over.connect(_on_game_over)
 	Game.victory.connect(_on_victory)
@@ -41,9 +38,6 @@ func _ready() -> void:
 	wave_manager.prep_started.connect(hud.enable_send)
 	hud.send_pressed.connect(wave_manager.send_now)
 	palette.drag_started.connect(_on_drag_started)
-	tower_info.upgrade_pressed.connect(_upgrade_selected)
-	tower_info.sell_pressed.connect(_sell_selected)
-	tower_info.target_pressed.connect(_cycle_selected_target)
 	Game.shake_requested.connect(_add_shake)
 
 	wave_manager.enemies_root = enemies_root
@@ -71,9 +65,6 @@ func _on_drag_started(kind: String) -> void:
 		return
 	_drag_kind = kind
 	_set_hovered(null)  # the drag preview takes over; don't compete with a hover ring
-	# Also clears the panel, which overlaps the lower grid rows — leaving it up would
-	# let a drop land on a cell hidden underneath it.
-	_select(null)
 	_update_ghost(get_global_mouse_position())
 
 ## While a drag is active this runs before the GUI so the ghost tracks the mouse
@@ -139,13 +130,6 @@ func _drop(world_pos: Vector2) -> void:
 	towers_root.add_child(tower)
 	Audio.play("build")
 
-## Redraw every tower so upgrade badges appear/disappear as gold changes, and let the
-## info panel re-evaluate whether its Upgrade button is affordable.
-func _refresh_tower_badges(_gold: int) -> void:
-	for c in towers_root.get_children():
-		(c as Node2D).queue_redraw()
-	tower_info.refresh()
-
 func _cost(kind: String) -> int:
 	return int(Game.TOWER_DEFS[kind]["cost"])
 
@@ -161,63 +145,50 @@ func _tower_on_cell(center: Vector2) -> Tower:
 			return t
 	return null
 
-# --- Selection: click a tower to open its info panel ---------------------------
+# --- Click a tower: upgrade it, or sell it via the corner "×" -------------------
 
-## Click a tower to select it; click bare ground to deselect. Upgrading and selling
-## moved into the panel deliberately — a bare click used to upgrade instantly, which
-## on a touchscreen meant a mistimed tap silently spent gold.
+## A left click / tap on a tower upgrades it — unless it landed on the tower's sell "×",
+## which sells instead. Clicking bare ground does nothing. Every action lives on the tower
+## itself now (no info panel), which keeps the whole board tappable on a phone.
 func _unhandled_input(event: InputEvent) -> void:
 	if Game.is_over or _drag_kind != "":
 		return
 	if not (event is InputEventMouseButton and event.pressed \
 			and event.button_index == MOUSE_BUTTON_LEFT):
 		return
-	var cell: Rect2 = grid.snap(get_global_mouse_position())
-	_select(null if cell.size == Vector2.ZERO else _tower_on_cell(cell.get_center()))
-
-## Single place that swaps the selection, keeping the tower's ring and the panel in
-## step. Guards a tower that was sold while still selected.
-func _select(tower: Tower) -> void:
-	if is_instance_valid(_selected):
-		_selected.set_selected(false)
-	_selected = tower
-	if is_instance_valid(_selected):
-		_selected.set_selected(true)
-	tower_info.show_tower(_selected)
-
-func _upgrade_selected() -> void:
-	if not is_instance_valid(_selected):
+	var world := get_global_mouse_position()
+	var cell: Rect2 = grid.snap(world)
+	if cell.size == Vector2.ZERO:
 		return
-	if not _selected.can_upgrade() or not Game.spend_gold(_selected.upgrade_cost()):
+	var tower := _tower_on_cell(cell.get_center())
+	if tower == null:
 		return
-	_selected.upgrade()
+	if tower.is_sell_hit(world):
+		_sell_tower(tower)
+	else:
+		_upgrade_tower(tower)
+
+## Upgrades the tower if another level exists and the gold is there; a denied buzz otherwise,
+## so a mistap on a maxed / too-expensive tower gives feedback instead of doing nothing.
+func _upgrade_tower(tower: Tower) -> void:
+	if not tower.can_upgrade() or not Game.spend_gold(tower.upgrade_cost()):
+		Audio.play("denied")
+		return
+	tower.upgrade()
 	Audio.play("upgrade")
-	tower_info.refresh()
 
-## Removes the selected tower and refunds half of the gold sunk into it.
-func _sell_selected() -> void:
-	if not is_instance_valid(_selected):
-		return
-	var tower := _selected
-	_select(null)  # clears the panel before the node goes away
+## Removes the tower and refunds half of the gold sunk into it.
+func _sell_tower(tower: Tower) -> void:
 	Audio.play("sell")
 	Game.add_gold(tower.sell_value())
 	if _hovered == tower:
 		_hovered = null  # it is about to be freed; never keep a dangling reference
 	tower.queue_free()
 
-func _cycle_selected_target() -> void:
-	if not is_instance_valid(_selected):
-		return
-	_selected.cycle_target_mode()
-	tower_info.refresh()
-
 func _on_game_over() -> void:
 	Audio.play("gameover")
-	_select(null)  # don't leave the panel sitting under the overlay
 	end_screen.show_result(false)
 
 func _on_victory() -> void:
 	Audio.play("victory")
-	_select(null)
 	end_screen.show_result(true)
