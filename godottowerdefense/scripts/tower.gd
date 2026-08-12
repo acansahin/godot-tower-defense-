@@ -13,7 +13,7 @@ var display_name: String = ""
 var element: String = ""      ## Damage element for the matchup ("" = neutral).
 var element_color: Color = Color.WHITE
 
-var tower_range: float = 160.0
+var tower_range: float = 240.0
 var fire_interval: float = 0.4
 var damage: float = 8.0
 var can_hit_flying: bool = true
@@ -38,7 +38,7 @@ var total_spent: int = 0   ## Gold sunk into this tower (build + upgrades); half
 
 const MAX_LEVEL := 3
 const DAMAGE_GROWTH := 1.6   ## damage multiplier per level
-const RANGE_GROWTH := 20.0   ## flat range added per level
+const RANGE_GROWTH := 30.0   ## flat range added per level (px; scales with Game.CELL_WIDTH)
 const FIRE_SPEEDUP := 0.82   ## fire_interval multiplier per level (lower = faster)
 const SELL_REFUND := 0.5     ## fraction of total_spent returned when sold
 const SLOW_SPLASH_GROWTH := 0.3  ## slow_splash radius gains this fraction of its base per level past 2 (Lv3 = ×1.3)
@@ -47,19 +47,23 @@ const SLOW_SPLASH_GROWTH := 0.3  ## slow_splash radius gains this fraction of it
 # barrel: anything drawn on the body got run over by the barrel as it swung around to
 # track targets. The upgrade action is now a click on the tower itself, so this is purely
 # a signal that the tower has an affordable level waiting.
-const UPGRADE_ARROW_X := -26.0  ## Left of the stone base (r=20), still inside the 64px cell.
+const UPGRADE_ARROW_X := -38.0  ## Left of the stone base (r=30), still inside the 96px cell.
 const UPGRADE_CHEVRON_PERIOD := 1.4  ## Seconds for one chevron to drift up and fade out.
 
 # Sell button geometry (tower-local): a small red "×" tucked into the bottom-right corner
 # of the cell. Tapping it sells the tower; tapping anywhere else on the tower upgrades it.
 # Kept in the corner, clear of the barrel's swing and the level pips, and sized for touch.
-const SELL_BTN_POS := Vector2(20.0, 18.0)  ## Bottom-right of the base, inside the 64px cell.
-const SELL_BTN_RADIUS := 9.0               ## Drawn disc radius.
-const SELL_BTN_HIT := 13.0                 ## Tap radius (a touch bigger than the disc for phones).
+const SELL_BTN_POS := Vector2(30.0, 28.0)  ## Bottom-right of the base, inside the 96px cell.
+const SELL_BTN_RADIUS := 14.0              ## Drawn disc radius.
+## Tap radius, deliberately well past the drawn disc. This is the smallest target in the
+## game and it cannot get much bigger: it is a sub-region of a 96px cell, which is itself
+## only ~48 CSS px once the board is stretched onto a phone. If mis-taps (sell instead of
+## upgrade, or the reverse) prove annoying in play, the fix is a confirm step, not more px.
+const SELL_BTN_HIT := 26.0
 
 var _cooldown: float = 0.0
 var _target: Enemy = null           ## Held between frames; see _find_target().
-var _range_sq: float = 25600.0      ## tower_range² (160² default), cached for distance checks; setup_def/upgrade keep it in sync.
+var _range_sq: float = 57600.0      ## tower_range² (240² default), cached for distance checks; setup_def/upgrade keep it in sync.
 var _proj_pool: Node = null         ## Cached $Projectiles pool node; resolved once on first fire.
 var _aim_dir: Vector2 = Vector2.UP  ## Barrel direction, eased toward the target.
 var _recoil: float = 0.0            ## 1 → 0 kick after firing.
@@ -232,35 +236,35 @@ func _draw() -> void:
 	else:
 		draw_arc(Vector2.ZERO, tower_range, 0.0, TAU, 48, Color(ec.r, ec.g, ec.b, 0.12), 2.0, true)
 	# Flat drop shadow under the base.
-	draw_set_transform(Vector2(0, 16), 0.0, Vector2(1.0, 0.45))
-	draw_circle(Vector2.ZERO, 18.0, Color(0, 0, 0, 0.20))
+	draw_set_transform(Vector2(0, 24), 0.0, Vector2(1.0, 0.45))
+	draw_circle(Vector2.ZERO, 27.0, Color(0, 0, 0, 0.20))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	# Layered stone base for depth.
-	draw_circle(Vector2.ZERO, 20.0, Color(0.20, 0.19, 0.23))
-	draw_circle(Vector2.ZERO, 15.0, Color(0.30, 0.28, 0.33))
-	draw_arc(Vector2.ZERO, 20.0, 0.0, TAU, 28, Color(0, 0, 0, 0.4), 1.5, true)
-	# Drawn BEFORE the barrel: the badge sits at (0,-12) with r=12, exactly where the
-	# barrel points when aiming up, and on top it hid the barrel completely — towers
-	# firing at the upper road looked stubby. Underneath, its sides still read clearly.
+	draw_circle(Vector2.ZERO, 30.0, Color(0.20, 0.19, 0.23))
+	draw_circle(Vector2.ZERO, 22.0, Color(0.30, 0.28, 0.33))
+	draw_arc(Vector2.ZERO, 30.0, 0.0, TAU, 28, Color(0, 0, 0, 0.4), 2.0, true)
+	# Drawn BEFORE the barrel: the badge sits where the barrel points when aiming up,
+	# and on top it hid the barrel completely — towers firing at the upper road looked
+	# stubby. Underneath, its sides still read clearly.
 	_draw_upgrade_badge()
 	# Barrel + element orb, aimed at the target and kicked back while firing.
-	var back := _aim_dir * (-_recoil * 4.0)
-	var tip := _aim_dir * 24.0 + back
-	draw_line(back, tip, Color(0.30, 0.28, 0.33), 10.0)
-	draw_circle(tip, 15.0, Color(element_color.r, element_color.g, element_color.b, 0.28))  # glow
-	draw_circle(tip, 11.0, element_color)
-	draw_arc(tip, 11.0, 0.0, TAU, 20, Color(0, 0, 0, 0.4), 2.0, true)
-	draw_circle(tip + Vector2(-3, -3), 3.5, Color(1, 1, 1, 0.5))  # highlight
+	var back := _aim_dir * (-_recoil * 6.0)
+	var tip := _aim_dir * 36.0 + back
+	draw_line(back, tip, Color(0.30, 0.28, 0.33), 15.0)
+	draw_circle(tip, 22.0, Color(element_color.r, element_color.g, element_color.b, 0.28))  # glow
+	draw_circle(tip, 16.0, element_color)
+	draw_arc(tip, 16.0, 0.0, TAU, 20, Color(0, 0, 0, 0.4), 3.0, true)
+	draw_circle(tip + Vector2(-4, -4), 5.0, Color(1, 1, 1, 0.5))  # highlight
 	# Muzzle flash on the handful of frames right after firing. _recoil already decays
 	# 1 -> 0 for the barrel kick, so this rides along for free.
 	if _recoil > 0.55:
 		var flash: float = (_recoil - 0.55) / 0.45
-		draw_circle(tip, 15.0 + 11.0 * flash, Color(1, 1, 1, 0.35 * flash))
+		draw_circle(tip, 22.0 + 16.0 * flash, Color(1, 1, 1, 0.35 * flash))
 	# Element initial on the orb.
 	var font := ThemeDB.fallback_font
 	if font != null and display_name != "":
-		draw_string(font, tip + Vector2(-5, 5), display_name.substr(0, 1),
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.08, 0.08, 0.10))
+		draw_string(font, tip + Vector2(-7, 7), display_name.substr(0, 1),
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 21, Color(0.08, 0.08, 0.10))
 	_draw_level_pips(element_color.lightened(0.35))
 	# Drawn last so it stays tappable even when the barrel swings over the corner.
 	_draw_sell_button()
@@ -270,10 +274,10 @@ func _draw() -> void:
 func _draw_sell_button() -> void:
 	var c := SELL_BTN_POS
 	draw_circle(c, SELL_BTN_RADIUS, Color(0.70, 0.16, 0.16, 0.95))
-	draw_arc(c, SELL_BTN_RADIUS, 0.0, TAU, 16, Color(0, 0, 0, 0.45), 1.5, true)
-	var s := 3.6
-	draw_line(c + Vector2(-s, -s), c + Vector2(s, s), Color(1, 1, 1, 0.95), 2.0, true)
-	draw_line(c + Vector2(-s, s), c + Vector2(s, -s), Color(1, 1, 1, 0.95), 2.0, true)
+	draw_arc(c, SELL_BTN_RADIUS, 0.0, TAU, 16, Color(0, 0, 0, 0.45), 2.0, true)
+	var s := 5.4
+	draw_line(c + Vector2(-s, -s), c + Vector2(s, s), Color(1, 1, 1, 0.95), 3.0, true)
+	draw_line(c + Vector2(-s, s), c + Vector2(s, -s), Color(1, 1, 1, 0.95), 3.0, true)
 
 ## Upgrade hint, shown only while another level exists and is affordable: a slim green
 ## arrow bobbing gently to the tower's left. Purely a signal — the upgrade action is a
@@ -290,7 +294,7 @@ func _draw_upgrade_badge() -> void:
 	# continuous "up" without anything snapping back to its start.
 	for i in 2:
 		var p := fposmod(t / UPGRADE_CHEVRON_PERIOD + i * 0.5, 1.0)
-		_draw_chevron(Vector2(UPGRADE_ARROW_X, lerpf(6.0, -8.0, p)), sin(p * PI))
+		_draw_chevron(Vector2(UPGRADE_ARROW_X, lerpf(9.0, -12.0, p)), sin(p * PI))
 
 ## One soft chevron ("^") at `o`, faded to `alpha`. draw_line has no round-cap option, so
 ## dots at the ends and the apex do the rounding — that is what keeps it friendly rather
@@ -298,23 +302,23 @@ func _draw_upgrade_badge() -> void:
 func _draw_chevron(o: Vector2, alpha: float) -> void:
 	var col := Color(0.45, 1.0, 0.55, alpha)
 	var edge := Color(0.0, 0.0, 0.0, 0.30 * alpha)
-	var l := o + Vector2(-6.0, 4.0)
-	var m := o + Vector2(0.0, -3.0)
-	var r := o + Vector2(6.0, 4.0)
+	var l := o + Vector2(-9.0, 6.0)
+	var m := o + Vector2(0.0, -4.5)
+	var r := o + Vector2(9.0, 6.0)
 	# Dark silhouette underneath keeps it legible over light grass.
-	draw_line(l, m, edge, 6.0, true)
-	draw_line(m, r, edge, 6.0, true)
-	draw_line(l, m, col, 3.5, true)
-	draw_line(m, r, col, 3.5, true)
+	draw_line(l, m, edge, 9.0, true)
+	draw_line(m, r, edge, 9.0, true)
+	draw_line(l, m, col, 5.0, true)
+	draw_line(m, r, col, 5.0, true)
 	for p in [l, m, r]:
-		draw_circle(p, 1.75, col)
+		draw_circle(p, 2.6, col)
 
 ## Small dots under the tower base, one per level, so the player can read the
 ## current upgrade tier at a glance. Called from each subclass's _draw().
 func _draw_level_pips(col: Color) -> void:
-	var spacing := 8.0
+	var spacing := 12.0
 	var start_x := -(level - 1) * spacing * 0.5
 	for i in level:
-		var c := Vector2(start_x + i * spacing, 6.0)
-		draw_circle(c, 2.6, col)
-		draw_arc(c, 2.6, 0.0, TAU, 12, Color(0, 0, 0, 0.5), 1.0, true)
+		var c := Vector2(start_x + i * spacing, 9.0)
+		draw_circle(c, 4.0, col)
+		draw_arc(c, 4.0, 0.0, TAU, 12, Color(0, 0, 0, 0.5), 1.5, true)

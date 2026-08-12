@@ -43,8 +43,10 @@ code with primitive shapes and colors.
   cover** — so you can judge placement before spending the gold.
 - **Hover a placed tower** to light up its range ring. Ranges stay faint otherwise, so a
   full board doesn't turn into a tangle of overlapping circles.
-- Cells are the faint squares on the grass; two rows fit flush between each pair
-  of roads. Towers can't be built on the road or on an occupied cell.
+- Cells are the faint squares on the grass — 40 of them, one 96px row flush against
+  each side of every road. Towers can't be built on the road or on an occupied cell.
+  A drop that lands slightly off still snaps to the nearest cell (see
+  `grid.gd` `SNAP_TOLERANCE`); the ghost shows you which one before you let go.
 - **Click / tap a tower to upgrade it** (up to level 3) — each level boosts damage, range,
   fire rate and DoT. A green ▲ chevron floats beside any tower whose next level you can
   already afford, so you can spot upgrade candidates at a glance.
@@ -201,7 +203,8 @@ otherwise survive the scene change and leave the next screen frozen.
 
 The `Game` autoload (`scripts/game.gd`) is registered in `project.godot` and is
 globally accessible as `Game`. It holds the shared map layout (`PATH`), the build
-grid definition (`GRID_ROWS`, `CELL_WIDTH`, `ROAD_CLEARANCE`, `GRID_COL_*`), the
+grid definition (`GRID_ROWS`, `CELL_WIDTH`, `ROAD_HALF`, `ROAD_CLEARANCE`,
+`PLAY_RIGHT`, `GRID_COL_*`) plus the shared `dist_to_road()` helper, the
 costs, and the mutable `gold` / `lives` with signals. Two more autoloads sit beside it:
 `Audio` (`scripts/audio.gd`, synthesized SFX/music) and `EnemyIndex`
 (`scripts/enemy_index.gd`, the per-frame enemy spatial hash used for targeting).
@@ -213,9 +216,12 @@ costs, and the mutable `gold` / `lives` with signals. Two more autoloads sit bes
 - **`Game` (autoload)** owns gold & lives and broadcasts `gold_changed`,
   `lives_changed`, `game_over`, `victory`. It also stores the road `PATH` and
   the grid constants so every script reads one source of truth.
-- **`Grid`** precomputes the buildable cells (flush against the road, two rows
-  filling each gap between horizontal roads, tiled flush to the vertical bends),
-  draws them faintly, and answers `snap(world_pos) -> Rect2` for placement.
+- **`Grid`** precomputes the buildable cells (flush against the road, one row on
+  each side of every horizontal road, tiled flush to the vertical bends), draws
+  them faintly, and answers two lookups: `snap()` (exact — used for upgrade, sell
+  and hover, where being generous would spend gold on a mistap) and
+  `snap_forgiving()` (nearest cell within `SNAP_TOLERANCE` — used only for placing).
+  Cells stop at `Game.PLAY_RIGHT` so none ever sits under the tower palette.
 - **`TowerPalette`** (top-right) draws every tower in `Game.TOWER_ORDER` with its
   colour and cost and emits `drag_started(id)` when pressed. **`Main`** then drags
   the **`Preview`** ghost to the snapped cell and builds on release if the cell is
@@ -289,7 +295,7 @@ costs, and the mutable `gold` / `lives` with signals. Two more autoloads sit bes
 | Base towers | `TOWER_DEFS` | Fire (dmg), Water (slow), Nature (poison), Earth (splash, ground) |
 | Dual towers | `TOWER_DEFS` | Steam (dmg+slow), Lava (splash+burn, ground), Ice (slow+poison; from **Lv2 the slow becomes an area effect** — `slow_splash`, chill only, no extra damage — and the radius **widens again at Lv3** (`SLOW_SPLASH_GROWTH`), with a `frost_ring.gd` impact burst) |
 | Neutral tower | `TOWER_DEFS` | Lightning (25% chance to stun 1.2s) |
-| Upgrade: max level / growth | `tower.gd` | L3, dmg ×1.6, range +20, interval ×0.82, DoT ×1.6 |
+| Upgrade: max level / growth | `tower.gd` | L3, dmg ×1.6, range +30, interval ×0.82, DoT ×1.6 |
 | Upgrade cost | `tower.gd` `upgrade_cost()` | `build_cost × level` (e.g. Fire 40, 80) |
 | Sell refund | `tower.gd` `SELL_REFUND` | 50% of total gold spent (tap the corner × to sell) |
 | Targeting | `tower.gd` `_find_target()` | Fixed to "First" — the enemy furthest along the path (closest to the exit); no per-tower picker |
@@ -307,13 +313,32 @@ costs, and the mutable `gold` / `lives` with signals. Two more autoloads sit bes
 | Bosses | `game.gd` `WAVES` (`"boss": true` per entry) | HP ×6, speed ×0.6, reward ×10, costs 10 lives |
 | Economy: interest | `wave_manager.gd` `INTEREST_RATE`/`INTEREST_CAP` | 8% of banked gold per wave cleared, capped at 40 |
 | Economy: leak-free bonus | `wave_manager.gd` `LEAK_FREE_BONUS` | +6 gold if no enemy reached the end that wave |
-| Road path | `game.gd` `PATH` | 6 waypoints (S-shape) |
-| Build grid | `game.gd` `GRID_ROWS` / `CELL_WIDTH` | 64px cells, rows flush per band |
+| Road path | `game.gd` `PATH` | 6 waypoints (S-shape), 80px wide (`ROAD_HALF` 40), ~3168px long |
+| Build grid | `game.gd` `GRID_ROWS` / `CELL_WIDTH` | 96px square cells, 40 of them (11 / 9 / 9 / 11 per row) |
+| Tower ranges | `game.gd` `TOWER_DEFS` | 225–278px ≈ 2.3–2.9 cells |
+| Drop forgiveness | `grid.gd` `SNAP_TOLERANCE` | 24px outside a cell still counts (placement only) |
+| Enemy size | `wave_manager.gd` | radius 24 × the archetype multiplier; boss 38 (must stay under the 80px road width) |
+| Board scale | see note below | everything is sized so a cell lands at ~48 CSS px on a landscape phone |
 
 The road (`PATH`) and the grid rows (`GRID_ROWS`) are defined as plain arrays in
-`game.gd`. The road drawing, enemy walking and grid all follow from `PATH`; the
-grid rows are hand-placed for the fixed S-map so two towers sit flush between
-each pair of horizontal roads.
+`game.gd`. The road drawing, enemy walking, grid and map decoration all follow
+from `PATH`; the grid rows are hand-placed for the fixed S-map so one row of
+towers sits flush against each side of every horizontal road.
+
+**The whole board is sized for a phone, and the sizes are coupled.** The game is
+authored in a fixed 1280×720 world that `canvas_items` stretch fits to the screen,
+so on a landscape phone everything arrives at roughly half scale — a 96px cell
+lands at ~48 CSS px, right at the minimum comfortable tap target, which is why the
+cells are as large as they are and why only 40 fit. The vertical budget is exact:
+the HUD bar ends at y 40 and the bottom-corner buttons start at y 664, and
+4 rows × 96 + 3 roads × 80 = 624 fills that gap with nothing to spare.
+
+If you ever change `CELL_WIDTH`, these have to move with it or the game quietly
+rebalances itself: `TOWER_DEFS` ranges and splash radii, `tower.gd`
+`RANGE_GROWTH`, `projectile.gd` `speed` (so flight *time* holds), the enemy radii
+in `wave_manager.gd`, `enemy_index.gd` `CELL`, and every `_draw()` literal.
+Ranges are what keep the difficulty fixed: about 10 towers can cover any given
+point of road, and that number depends on range measured *in cells*, not pixels.
 
 ---
 

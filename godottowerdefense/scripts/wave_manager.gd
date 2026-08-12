@@ -24,7 +24,9 @@ const FLYER_CHANCE := 0.3
 const BOSS_HP_MULT := 6.0
 const BOSS_SPEED_MULT := 0.6
 const BOSS_REWARD_MULT := 10
-const BOSS_RADIUS := 30.0
+## Not a straight 1.5x of the old 30: a boss has to stay narrower than the road it
+## walks (2 * Game.ROAD_HALF = 80), so 38 -> 76 wide is the ceiling here.
+const BOSS_RADIUS := 38.0
 const BOSS_LIFE_COST := 10   ## Lives lost if a boss reaches the end.
 const BOSS_TINT := Color(0.45, 0.1, 0.5)
 
@@ -120,7 +122,7 @@ func _spawn_one() -> void:
 	var enemy := ENEMY.instantiate() as Enemy
 	enemy.setup(_hp, _spd, _reward, _tint)
 	enemy.armor_element = _element
-	enemy.radius = 16.0 * float(_type_def.get("radius", 1.0))
+	enemy.radius = 24.0 * float(_type_def.get("radius", 1.0))
 	enemy.cc_immune = _type_def.get("cc_immune", false)
 	var regen := float(_type_def.get("regen", 0.0))
 	if regen > 0.0:
@@ -149,7 +151,7 @@ func _spawn_child(pos: Vector2, progress: int, count: int, hp: float, spd: float
 		c.radius = r
 		c.removed.connect(_on_enemy_removed)
 		enemies_root.add_child(c)  # _ready puts it at PATH[0]; override below
-		c.global_position = pos + Vector2(randf_range(-10.0, 10.0), randf_range(-10.0, 10.0))
+		c.global_position = pos + Vector2(randf_range(-15.0, 15.0), randf_range(-15.0, 15.0))
 		c.set_progress(progress)
 		_alive += 1
 

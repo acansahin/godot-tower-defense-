@@ -101,7 +101,7 @@ func _set_hovered(tower: Tower) -> void:
 		_hovered.set_highlighted(true)
 
 func _update_ghost(world_pos: Vector2) -> void:
-	var cell: Rect2 = grid.snap(world_pos)
+	var cell: Rect2 = grid.snap_forgiving(world_pos)
 	if cell.size == Vector2.ZERO:
 		preview.hide()
 		return
@@ -114,7 +114,8 @@ func _drop(world_pos: Vector2) -> void:
 	var kind := _drag_kind
 	_drag_kind = ""
 	preview.hide()
-	var cell: Rect2 = grid.snap(world_pos)
+	# Forgiving: the ghost already showed the player this exact cell while they dragged.
+	var cell: Rect2 = grid.snap_forgiving(world_pos)
 	if cell.size == Vector2.ZERO:
 		return
 	var center := cell.get_center()

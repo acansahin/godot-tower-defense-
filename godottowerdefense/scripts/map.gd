@@ -3,15 +3,51 @@ extends Node2D
 ## and the cobblestone S-road (drop shadow, shaded border, varied stones, and
 ## direction chevrons) built from Game.PATH. Pure _draw(), no nodes needed.
 
-# Scattered grass decoration, placed by hand to sit off the road.
-const PATCHES_DARK := [Vector2(180, 500), Vector2(1050, 250), Vector2(600, 665), Vector2(150, 200)]
-const PATCHES_LIGHT := [Vector2(1160, 640), Vector2(760, 90), Vector2(430, 640), Vector2(1000, 60)]
-const BUSHES := [Vector2(120, 300), Vector2(1180, 300), Vector2(60, 640), Vector2(700, 40), Vector2(1220, 120)]
-const ROCKS := [Vector2(520, 100), Vector2(880, 640), Vector2(200, 660), Vector2(1120, 40)]
-const FLOWERS := [
-	Vector2(320, 250), Vector2(1080, 470), Vector2(640, 250), Vector2(470, 660),
-	Vector2(820, 470), Vector2(160, 420), Vector2(1180, 470), Vector2(360, 100),
-]
+# Grass decoration is scattered procedurally from a fixed seed rather than hand-placed.
+# Same seed = same layout every run, so it is still "art" and not noise — but it costs
+# nothing to maintain: these used to be 21 literal Vector2s that all silently landed on
+# the stone the moment the road moved.
+const DECOR_SEED := 20250812
+const DECOR_CLEARANCE := 24.0  ## Extra gap kept between a decoration and the road edge.
+
+# How many of each to scatter, and the minimum gap from the road for each kind.
+const N_PATCHES_DARK := 5
+const N_PATCHES_LIGHT := 5
+const N_BUSHES := 6
+const N_ROCKS := 5
+const N_FLOWERS := 10
+
+var _patches_dark: PackedVector2Array
+var _patches_light: PackedVector2Array
+var _bushes: PackedVector2Array
+var _rocks: PackedVector2Array
+var _flowers: PackedVector2Array
+
+func _ready() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = DECOR_SEED
+	# Big blobs need to clear the road by their own radius; small ones only by a hair.
+	_patches_dark = _scatter(rng, N_PATCHES_DARK, 86.0)
+	_patches_light = _scatter(rng, N_PATCHES_LIGHT, 76.0)
+	_bushes = _scatter(rng, N_BUSHES, 20.0)
+	_rocks = _scatter(rng, N_ROCKS, 14.0)
+	_flowers = _scatter(rng, N_FLOWERS, 6.0)
+	queue_redraw()
+
+## `count` points on the grass, each at least `clear` px of its own bulk away from the
+## stone. Rejection sampling with a bounded number of tries: if a point cannot be placed
+## the scatter simply ends up shorter, which is invisible and beats looping forever.
+func _scatter(rng: RandomNumberGenerator, count: int, clear: float) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	var min_dist := Game.ROAD_HALF + DECOR_CLEARANCE + clear
+	var tries := 0
+	while out.size() < count and tries < count * 40:
+		tries += 1
+		var p := Vector2(rng.randf_range(0.0, Game.SCREEN_SIZE.x),
+				rng.randf_range(0.0, Game.SCREEN_SIZE.y))
+		if Game.dist_to_road(p) >= min_dist:
+			out.append(p)
+	return out
 
 func _draw() -> void:
 	var w := Game.SCREEN_SIZE.x
@@ -23,40 +59,40 @@ func _draw() -> void:
 	draw_rect(Rect2(0, h * 0.55, w, h * 0.45), Color(0, 0, 0, 0.06))
 
 	# Two-tone grass patches for texture.
-	for p in PATCHES_DARK:
-		draw_circle(p, 62.0, Color(0.27, 0.50, 0.21, 0.6))
-	for p in PATCHES_LIGHT:
-		draw_circle(p, 54.0, Color(0.35, 0.60, 0.28, 0.5))
+	for p in _patches_dark:
+		draw_circle(p, 86.0, Color(0.27, 0.50, 0.21, 0.6))
+	for p in _patches_light:
+		draw_circle(p, 76.0, Color(0.35, 0.60, 0.28, 0.5))
 
 	_draw_flora()
 
 	var path: Array = Game.PATH
-	var road_w := 64.0
-	_draw_road(path, road_w + 12.0, Vector2(0, 5), Color(0, 0, 0, 0.18))   # drop shadow
-	_draw_road(path, road_w + 10.0, Vector2.ZERO, Color(0.26, 0.26, 0.29)) # dark border
+	var road_w := Game.ROAD_HALF * 2.0
+	_draw_road(path, road_w + 16.0, Vector2(0, 7), Color(0, 0, 0, 0.18))   # drop shadow
+	_draw_road(path, road_w + 13.0, Vector2.ZERO, Color(0.26, 0.26, 0.29)) # dark border
 	_draw_road(path, road_w, Vector2.ZERO, Color(0.55, 0.55, 0.58))        # stone surface
-	_draw_road(path, road_w - 10.0, Vector2.ZERO, Color(1, 1, 1, 0.05))    # centre highlight
+	_draw_road(path, road_w - 13.0, Vector2.ZERO, Color(1, 1, 1, 0.05))    # centre highlight
 	_draw_cobbles(path)                                                    # cobble detail
 	_draw_arrows(path)                                                     # travel direction
 
 	# Corner vignette.
 	for c in [Vector2(0, 0), Vector2(w, 0), Vector2(0, h), Vector2(w, h)]:
-		draw_circle(c, 340.0, Color(0, 0, 0, 0.05))
+		draw_circle(c, 400.0, Color(0, 0, 0, 0.05))
 
 func _draw_flora() -> void:
-	for b in BUSHES:  # bushes = clustered dark-green blobs
-		draw_circle(b + Vector2(-9, 2), 11.0, Color(0.20, 0.42, 0.18))
-		draw_circle(b + Vector2(9, 2), 11.0, Color(0.20, 0.42, 0.18))
-		draw_circle(b + Vector2(0, -5), 13.0, Color(0.24, 0.47, 0.20))
-	for r in ROCKS:  # rocks = grey stone with a highlight
-		draw_circle(r, 9.0, Color(0.45, 0.45, 0.48))
-		draw_circle(r + Vector2(-2, -2), 4.0, Color(0.60, 0.60, 0.63))
-	for f in FLOWERS:  # flowers = tiny petals around a yellow centre
+	for b in _bushes:  # bushes = clustered dark-green blobs
+		draw_circle(b + Vector2(-13, 3), 15.0, Color(0.20, 0.42, 0.18))
+		draw_circle(b + Vector2(13, 3), 15.0, Color(0.20, 0.42, 0.18))
+		draw_circle(b + Vector2(0, -7), 18.0, Color(0.24, 0.47, 0.20))
+	for r in _rocks:  # rocks = grey stone with a highlight
+		draw_circle(r, 13.0, Color(0.45, 0.45, 0.48))
+		draw_circle(r + Vector2(-3, -3), 6.0, Color(0.60, 0.60, 0.63))
+	for f in _flowers:  # flowers = tiny petals around a yellow centre
 		var petal := Color(0.95, 0.6, 0.75) if int(f.x) % 2 == 0 else Color(0.7, 0.6, 0.95)
 		for a in range(4):
 			var ang := a * PI * 0.5
-			draw_circle(f + Vector2(cos(ang), sin(ang)) * 3.2, 2.0, petal)
-		draw_circle(f, 1.8, Color(1.0, 0.85, 0.3))
+			draw_circle(f + Vector2(cos(ang), sin(ang)) * 4.5, 2.8, petal)
+		draw_circle(f, 2.5, Color(1.0, 0.85, 0.3))
 
 func _draw_road(path: Array, width: float, offset: Vector2, color: Color) -> void:
 	for i in range(path.size() - 1):
@@ -67,7 +103,7 @@ func _draw_road(path: Array, width: float, offset: Vector2, color: Color) -> voi
 
 func _draw_cobbles(path: Array) -> void:
 	var stones := [Color(0.50, 0.50, 0.53), Color(0.46, 0.46, 0.49), Color(0.42, 0.42, 0.46)]
-	var step := 26.0
+	var step := 32.0
 	for i in range(path.size() - 1):
 		var a: Vector2 = path[i]
 		var b: Vector2 = path[i + 1]
@@ -81,17 +117,17 @@ func _draw_cobbles(path: Array) -> void:
 		var row := 0
 		while d < length:
 			var center := a + dir * d
-			var offset: float = 18.0 if row % 2 == 0 else -18.0
-			draw_circle(center + normal * offset, 7.0, stones[(row) % 3])
-			draw_circle(center, 7.0, stones[(row + 1) % 3])
-			draw_circle(center - normal * offset, 7.0, stones[(row + 2) % 3])
+			var offset: float = 24.0 if row % 2 == 0 else -24.0
+			draw_circle(center + normal * offset, 9.0, stones[(row) % 3])
+			draw_circle(center, 9.0, stones[(row + 1) % 3])
+			draw_circle(center - normal * offset, 9.0, stones[(row + 2) % 3])
 			d += step
 			row += 1
 
 ## Faint chevrons along the road pointing the way enemies travel.
 func _draw_arrows(path: Array) -> void:
 	var col := Color(1, 1, 1, 0.14)
-	var spacing := 90.0
+	var spacing := 110.0
 	for i in range(path.size() - 1):
 		var a: Vector2 = path[i]
 		var b: Vector2 = path[i + 1]
@@ -104,7 +140,7 @@ func _draw_arrows(path: Array) -> void:
 		var d := spacing * 0.5
 		while d < length:
 			var c := a + dir * d
-			var tip := c + dir * 9.0
-			draw_line(c + normal * 9.0, tip, col, 3.0)
-			draw_line(c - normal * 9.0, tip, col, 3.0)
+			var tip := c + dir * 13.0
+			draw_line(c + normal * 13.0, tip, col, 4.0)
+			draw_line(c - normal * 13.0, tip, col, 4.0)
 			d += spacing

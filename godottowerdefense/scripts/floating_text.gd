@@ -7,7 +7,7 @@ class_name FloatingText
 ## very scene it is attached to.
 
 const LIFETIME := 0.75
-const RISE := 34.0  ## Pixels travelled over the full lifetime.
+const RISE := 50.0  ## Pixels travelled over the full lifetime.
 
 var _text: String = ""
 var _color: Color = Color.WHITE
@@ -43,7 +43,7 @@ func setup(text: String, color: Color, font_size: int) -> void:
 	_text = text
 	_color = color
 	_font_size = font_size
-	_drift = randf_range(-9.0, 9.0)
+	_drift = randf_range(-13.0, 13.0)
 	var font := ThemeDB.fallback_font
 	if font != null:
 		_half_width = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1,
