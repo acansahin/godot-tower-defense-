@@ -280,11 +280,14 @@ func _draw_body(ci: CanvasItem) -> void:
 	# Impact pop, over the body but under the eyes so it reads as the whole blob lighting up.
 	if _flash > 0.0:
 		ci.draw_circle(Vector2.ZERO, radius, Color(1, 1, 1, 0.55 * _flash))
-	# Eyes give the blobs a bit of character.
-	ci.draw_circle(Vector2(-5, -3), 2.6, Color.WHITE)
-	ci.draw_circle(Vector2(5, -3), 2.6, Color.WHITE)
-	ci.draw_circle(Vector2(-5, -3), 1.2, Color.BLACK)
-	ci.draw_circle(Vector2(5, -3), 1.2, Color.BLACK)
+	# Eyes give the blobs a bit of character. Derived from `radius` rather than fixed
+	# pixels: archetypes scale the body from 0.8x to 1.35x, and a boss is bigger again,
+	# so hardcoded eyes drift to the wrong size and spacing on everything but a Normal.
+	var eye := Vector2(radius * 0.31, -radius * 0.19)
+	ci.draw_circle(Vector2(-eye.x, eye.y), radius * 0.16, Color.WHITE)
+	ci.draw_circle(eye, radius * 0.16, Color.WHITE)
+	ci.draw_circle(Vector2(-eye.x, eye.y), radius * 0.075, Color.BLACK)
+	ci.draw_circle(eye, radius * 0.075, Color.BLACK)
 
 ## Top layer: status rings, archetype/regen markers, boss crown, and the health bar, drawn
 ## onto the `_overlay` canvas item `ci`. Sits over the body (rings hug just outside the body
@@ -292,37 +295,37 @@ func _draw_body(ci: CanvasItem) -> void:
 func _draw_overlay(ci: CanvasItem) -> void:
 	# Status rings: blue = slowed, green = poisoned.
 	if _slow_time > 0.0:
-		ci.draw_arc(Vector2.ZERO, radius + 3.0, 0.0, TAU, 22, Color(0.4, 0.7, 1.0, 0.85), 2.0, true)
+		ci.draw_arc(Vector2.ZERO, radius + 4.0, 0.0, TAU, 22, Color(0.4, 0.7, 1.0, 0.85), 3.0, true)
 	if _poison_time > 0.0:
-		ci.draw_arc(Vector2.ZERO, radius + 6.0, 0.0, TAU, 22, Color(0.45, 0.9, 0.35, 0.8), 2.0, true)
+		ci.draw_arc(Vector2.ZERO, radius + 9.0, 0.0, TAU, 22, Color(0.45, 0.9, 0.35, 0.8), 3.0, true)
 	if _stun_time > 0.0:
 		# Yellow ring with spinning "stunned" sparks.
-		ci.draw_arc(Vector2.ZERO, radius + 9.0, 0.0, TAU, 22, Color(1.0, 0.95, 0.3, 0.9), 2.0, true)
+		ci.draw_arc(Vector2.ZERO, radius + 13.0, 0.0, TAU, 22, Color(1.0, 0.95, 0.3, 0.9), 3.0, true)
 		for i in range(3):
 			var a := _anim_phase * 4.0 + i * TAU / 3.0
-			ci.draw_circle(Vector2(cos(a), sin(a)) * (radius + 9.0), 2.6, Color(1.0, 0.95, 0.45))
+			ci.draw_circle(Vector2(cos(a), sin(a)) * (radius + 13.0), 3.9, Color(1.0, 0.95, 0.45))
 	# Archetype markers so wave types read at a glance.
 	if cc_immune:
-		ci.draw_arc(Vector2.ZERO, radius + 2.0, 0.0, TAU, 26, Color(0.78, 0.82, 0.9, 0.9), 3.0, true)
+		ci.draw_arc(Vector2.ZERO, radius + 3.0, 0.0, TAU, 26, Color(0.78, 0.82, 0.9, 0.9), 4.0, true)
 	if regen_dps > 0.0:
 		# Bright "+" and a pulsing ring only while it is actually healing; dim otherwise.
 		# This makes "my damage is stopping the heal" unmistakable at a glance.
 		var healing := _regen_block <= 0.0 and health < max_health
 		var g := Color(0.5, 1.0, 0.55, 1.0 if healing else 0.3)
 		var p := Vector2(radius * 0.55, -radius * 0.55)
-		ci.draw_line(p + Vector2(-3, 0), p + Vector2(3, 0), g, 2.0)
-		ci.draw_line(p + Vector2(0, -3), p + Vector2(0, 3), g, 2.0)
+		ci.draw_line(p + Vector2(-4.5, 0), p + Vector2(4.5, 0), g, 3.0)
+		ci.draw_line(p + Vector2(0, -4.5), p + Vector2(0, 4.5), g, 3.0)
 		if healing:
 			var pulse: float = 0.5 + 0.5 * sin(_anim_phase * 3.0)
-			ci.draw_arc(Vector2.ZERO, radius + 12.0 + pulse * 3.0, 0.0, TAU, 24,
-					Color(0.45, 1.0, 0.5, 0.30 + 0.45 * pulse), 2.0, true)
+			ci.draw_arc(Vector2.ZERO, radius + 18.0 + pulse * 4.5, 0.0, TAU, 24,
+					Color(0.45, 1.0, 0.5, 0.30 + 0.45 * pulse), 3.0, true)
 	if is_boss:
 		_draw_crown(ci)
 
 	# Health bar above the head (scales with body size so bosses read clearly).
 	var bar_w := radius * 2.2
-	var bar_h := 5.0
-	var top := Vector2(-bar_w * 0.5, -radius - 14.0)
+	var bar_h := 7.0
+	var top := Vector2(-bar_w * 0.5, -radius - 20.0)
 	ci.draw_rect(Rect2(top, Vector2(bar_w, bar_h)), Color(0.15, 0.05, 0.05))
 	var ratio: float = clamp(health / max_health, 0.0, 1.0)
 	var hp_col := Color(0.30, 0.85, 0.30)
@@ -334,31 +337,31 @@ func _draw_overlay(ci: CanvasItem) -> void:
 ## Gold crown sitting on a boss's head, drawn onto the overlay canvas item `ci`.
 func _draw_crown(ci: CanvasItem) -> void:
 	var gold := Color(1.0, 0.82, 0.2)
-	var y := -radius + 2.0
+	var y := -radius + 3.0
 	var wd := radius * 0.9
-	ci.draw_rect(Rect2(-wd, y, wd * 2.0, 5.0), gold)
+	ci.draw_rect(Rect2(-wd, y, wd * 2.0, 7.0), gold)
 	for i in range(3):
 		var cx := -wd + wd * i
 		ci.draw_colored_polygon(PackedVector2Array([
-			Vector2(cx - 6, y), Vector2(cx + 6, y), Vector2(cx, y - 11),
+			Vector2(cx - 9, y), Vector2(cx + 9, y), Vector2(cx, y - 16),
 		]), gold)
-		ci.draw_circle(Vector2(cx, y - 11.0), 2.2, Color(0.9, 0.2, 0.2))  # gem tip
-	ci.draw_rect(Rect2(-wd, y, wd * 2.0, 5.0), Color(0, 0, 0, 0.3), false, 1.0)
+		ci.draw_circle(Vector2(cx, y - 16.0), 3.3, Color(0.9, 0.2, 0.2))  # gem tip
+	ci.draw_rect(Rect2(-wd, y, wd * 2.0, 7.0), Color(0, 0, 0, 0.3), false, 1.5)
 
 ## Flapping wings and a ground shadow, drawn behind the body for flyers.
 func _draw_wings() -> void:
-	draw_circle(Vector2(0, radius + 10.0), radius * 0.7, Color(0, 0, 0, 0.18))
-	var flap: float = sin(_wing_phase) * 6.0
+	draw_circle(Vector2(0, radius + 15.0), radius * 0.7, Color(0, 0, 0, 0.18))
+	var flap: float = sin(_wing_phase) * 9.0
 	var wing_col := Color(0.90, 0.93, 1.0, 0.9)
 	var left := PackedVector2Array([
-		Vector2(-radius * 0.4, -2.0),
-		Vector2(-radius - 12.0, -8.0 - flap),
-		Vector2(-radius - 6.0, 4.0),
+		Vector2(-radius * 0.4, -3.0),
+		Vector2(-radius - 18.0, -12.0 - flap),
+		Vector2(-radius - 9.0, 6.0),
 	])
 	var right := PackedVector2Array([
-		Vector2(radius * 0.4, -2.0),
-		Vector2(radius + 12.0, -8.0 - flap),
-		Vector2(radius + 6.0, 4.0),
+		Vector2(radius * 0.4, -3.0),
+		Vector2(radius + 18.0, -12.0 - flap),
+		Vector2(radius + 9.0, 6.0),
 	])
 	draw_colored_polygon(left, wing_col)
 	draw_colored_polygon(right, wing_col)

@@ -10,7 +10,9 @@ extends Node
 ## splash projectile that frame reuses it. This replaces what was up to O(towers × enemies)
 ## scanning plus one temp-array allocation per scanning tower.
 
-const CELL := 128.0  ## Hash cell size (px). A query of radius R touches ~(2R/CELL + 1)² cells.
+## Hash cell size (px). A query of radius R touches ~(2R/CELL + 1)² cells, so this wants to
+## track the query radii — i.e. tower ranges, which scale with Game.CELL_WIDTH.
+const CELL := 192.0
 
 var _frame: int = -1
 var _cells: Dictionary = {}  ## Vector2i cell -> Array of Enemy in that cell.

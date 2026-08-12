@@ -47,10 +47,10 @@ script = ExtResource("3")
 [node name="TowerPalette" type="Control" parent="UI"]
 anchor_left = 1.0
 anchor_right = 1.0
-offset_left = -150.0
-offset_top = 54.0
+offset_left = -200.0
+offset_top = 44.0
 offset_right = -8.0
-offset_bottom = 428.0
+offset_bottom = 432.0
 script = ExtResource("9")
 
 [node name="EndScreen" parent="UI" instance=ExtResource("6")]

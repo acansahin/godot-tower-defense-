@@ -17,41 +17,55 @@ const SCREEN_SIZE := Vector2(1280, 720)
 # Waypoints that define the S-shaped road. Enemies walk these in order.
 # First point is off-screen left (spawn), last is off-screen right (exit).
 const PATH: Array = [
-	Vector2(-80, 140),
-	Vector2(950, 140),
-	Vector2(950, 360),
-	Vector2(250, 360),
-	Vector2(250, 560),
-	Vector2(1360, 560),
+	Vector2(-144, 176),
+	Vector2(848, 176),
+	Vector2(848, 352),
+	Vector2(224, 352),
+	Vector2(224, 528),
+	Vector2(1424, 528),
 ]
 
-# Grid placement: towers snap to cells drawn faintly on the grass, flush against
-# the road. Columns share a fixed width; rows are sized per gap so that two rows
-# exactly fill the space between two horizontal roads.
-const CELL_WIDTH := 64.0         ## Column width (px); columns step by this.
-const ROAD_CLEARANCE := 64.0     ## Min distance from a cell centre to the road centre-line (flush allowed).
+# Grid placement: towers snap to square cells drawn faintly on the grass, flush
+# against the road. The whole board is sized for touch: on a landscape phone the
+# 1280x720 design viewport stretches by ~0.5, so a 96px cell lands at ~48 CSS px
+# — right at the minimum comfortable tap target. Everything else in the game is
+# drawn to match that scale.
+const CELL_WIDTH := 96.0         ## Cell size (px), square; columns step by this.
+const ROAD_HALF := 40.0          ## Road stone half-width; cell edges tile flush to this.
+## Min distance from a cell centre to the road centre-line. Every cell the layout
+## produces sits at exactly ROAD_HALF + CELL_WIDTH * 0.5 = 88, so this is that value
+## with a little slack — the check is `>=` and leaning on float equality would be
+## fragile. Nothing is generated between 86 and 88, so the slack costs nothing.
+const ROAD_CLEARANCE := 86.0
+## Right edge of the buildable area. The tower palette is anchored to the right of
+## the screen, so the grid stops short of it — otherwise cells sit under the panel
+## where they cannot be seen and (because the panel eats the click) the towers on
+## them could never be upgraded or sold.
+const PLAY_RIGHT := 1072.0
 
-# Build-grid rows as Vector2(centre_y, cell_height). The three horizontal roads
-# sit at y = 140 / 360 / 560 (stone half-width 32). Two rows fill each gap flush
-# to both roads, plus a strip flush against the outside of the top/bottom roads.
-#   band A (140..360): grass 172..328 (156 tall) -> two 78-tall rows
-#   band B (360..560): grass 392..528 (136 tall) -> two 68-tall rows
+# Build-grid rows as Vector2(centre_y, cell_height). The three horizontal roads sit
+# at y = 176 / 352 / 528. The vertical budget between the HUD bar (ends at 40) and
+# the bottom-corner buttons (start at 664) is 624px, which four 96-tall rows and
+# three 80-wide roads fill exactly. Every row is a flush 88px from its nearest road,
+# and the two middle rows are 88px from *two* roads, so they cover both.
 const GRID_ROWS: Array = [
-	# Spans y 40..108: flush under the HUD bar (which ends at 40) and flush against the
-	# top road, so it is the same 68px height as the lower rows with no gap either side.
-	Vector2(74.0, 68.0),                          # above the top road
-	Vector2(211.0, 78.0), Vector2(289.0, 78.0),   # between top & middle roads
-	Vector2(426.0, 68.0), Vector2(494.0, 68.0),   # between middle & bottom roads
-	Vector2(626.0, 68.0),                         # below the bottom road
+	Vector2(88.0, 96.0),   # above the top road (flush under the HUD bar)
+	Vector2(264.0, 96.0),  # between top & middle roads
+	Vector2(440.0, 96.0),  # between middle & bottom roads
+	Vector2(616.0, 96.0),  # below the bottom road
 ]
 const GRID_COL_START := 64.0     ## First column centre.
-const GRID_COL_END := 1216.0     ## Last column centre (columns step by CELL_WIDTH).
+const GRID_COL_END := 1024.0     ## Last column centre (= PLAY_RIGHT - CELL_WIDTH * 0.5).
 
 const START_GOLD := 150
 const START_LIVES := 20
 
 # --- Element tower definitions -------------------------------------------------
-# Every tower (base element or dual combination) is just a data entry. Fields:
+# Every tower (base element or dual combination) is just a data entry.
+# All radii here are in pixels and scale with CELL_WIDTH: a range covers roughly
+# 2.5 cells, which is what keeps the number of towers able to hit any given point
+# of road (~10 when fully built) independent of how big the cells are. Change the
+# cell size and these have to move with it or the difficulty shifts. Fields:
 #   name, cost, color, damage, range, interval, can_hit_flying,
 #   splash_radius/splash_factor (AoE), slow_factor/slow_time (0..1 = slower),
 #   slow_splash (Lv2+ radius the slow ALSO spreads to — slow only, no damage),
@@ -60,45 +74,45 @@ const START_LIVES := 20
 const TOWER_DEFS := {
 	"fire": {
 		"name": "Fire", "cost": 40, "color": Color(0.95, 0.45, 0.18), "element": "fire",
-		"damage": 12.0, "range": 175.0, "interval": 0.45,
+		"damage": 12.0, "range": 262.0, "interval": 0.45,
 	},
 	"water": {
 		"name": "Water", "cost": 45, "color": Color(0.30, 0.60, 0.95), "element": "water",
-		"damage": 6.0, "range": 165.0, "interval": 0.6,
+		"damage": 6.0, "range": 248.0, "interval": 0.6,
 		"slow_factor": 0.55, "slow_time": 1.4,
 	},
 	"nature": {
 		"name": "Nature", "cost": 40, "color": Color(0.35, 0.80, 0.35), "element": "nature",
-		"damage": 4.0, "range": 165.0, "interval": 0.65,
+		"damage": 4.0, "range": 248.0, "interval": 0.65,
 		"poison_dps": 10.0, "poison_time": 3.0,
 	},
 	"earth": {
 		"name": "Earth", "cost": 70, "color": Color(0.72, 0.55, 0.34), "element": "earth",
-		"damage": 30.0, "range": 150.0, "interval": 1.5, "can_hit_flying": false,
-		"splash_radius": 72.0, "splash_factor": 0.5,
+		"damage": 30.0, "range": 225.0, "interval": 1.5, "can_hit_flying": false,
+		"splash_radius": 108.0, "splash_factor": 0.5,
 	},
 	# --- Dual combinations (directly buildable for now) ---
 	"steam": {  # Fire + Water
 		"name": "Steam", "cost": 110, "color": Color(0.70, 0.82, 0.95),
-		"damage": 16.0, "range": 180.0, "interval": 0.5,
+		"damage": 16.0, "range": 270.0, "interval": 0.5,
 		"slow_factor": 0.6, "slow_time": 1.2,
 	},
 	"lava": {  # Fire + Earth
 		"name": "Lava", "cost": 150, "color": Color(0.92, 0.35, 0.20),
-		"damage": 40.0, "range": 160.0, "interval": 1.3, "can_hit_flying": false,
-		"splash_radius": 88.0, "splash_factor": 0.6,
+		"damage": 40.0, "range": 240.0, "interval": 1.3, "can_hit_flying": false,
+		"splash_radius": 132.0, "splash_factor": 0.6,
 		"poison_dps": 8.0, "poison_time": 2.5,  # burn
 	},
 	"ice": {  # Water + Nature
 		"name": "Ice", "cost": 120, "color": Color(0.60, 0.90, 0.98),
-		"damage": 10.0, "range": 175.0, "interval": 0.7,
+		"damage": 10.0, "range": 262.0, "interval": 0.7,
 		"slow_factor": 0.4, "slow_time": 2.0,
-		"slow_splash": 90.0,  # from Lv2 the chill spreads to enemies within this radius of the target
+		"slow_splash": 135.0,  # from Lv2 the chill spreads to enemies within this radius of the target
 		"poison_dps": 6.0, "poison_time": 3.0,
 	},
 	"lightning": {  # chance to stun (freeze in place)
 		"name": "Lightning", "cost": 70, "color": Color(1.0, 0.9, 0.25),
-		"damage": 14.0, "range": 185.0, "interval": 0.7,
+		"damage": 14.0, "range": 278.0, "interval": 0.7,
 		"stun_chance": 0.25, "stun_time": 1.2,
 	},
 }
@@ -193,6 +207,23 @@ func _ready() -> void:
 func path_progress(target_index: int, pos: Vector2) -> float:
 	var i: int = clampi(target_index, 1, PATH.size() - 1)
 	return _path_cum[i - 1] + pos.distance_to(PATH[i - 1])
+
+## Shortest distance from `p` to the road centre-line. Shared because two very
+## different things need it: the build grid rejects cells that would sit on the
+## stone, and the map scatters its flora only where the road is not.
+func dist_to_road(p: Vector2) -> float:
+	var best := INF
+	for i in range(PATH.size() - 1):
+		best = minf(best, _dist_point_segment(p, PATH[i], PATH[i + 1]))
+	return best
+
+func _dist_point_segment(p: Vector2, a: Vector2, b: Vector2) -> float:
+	var ab := b - a
+	var len_sq := ab.length_squared()
+	if len_sq < 0.001:
+		return p.distance_to(a)
+	var t := clampf((p - a).dot(ab) / len_sq, 0.0, 1.0)
+	return p.distance_to(a + ab * t)
 
 func reset() -> void:
 	gold = START_GOLD

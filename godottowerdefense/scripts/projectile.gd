@@ -6,7 +6,7 @@ class_name Projectile
 
 const FrostRing := preload("res://scripts/frost_ring.gd")  ## Ice's area-slow impact visual.
 
-var speed: float = 420.0
+var speed: float = 630.0  ## px/s. Scales with tower range so flight *time* stays constant.
 var damage: float = 10.0
 var color: Color = Color.WHITE
 var element: String = ""  ## Damage element for the enemy-armour matchup.
@@ -89,14 +89,14 @@ func _apply(enemy: Enemy, mult: float, show_number: bool) -> void:
 ## Nature" is a promise the player never sees kept.
 func _show_damage(pos: Vector2, dealt: float, matchup: float) -> void:
 	var col := Color(1, 1, 1, 0.95)
-	var font_size := 13
+	var font_size := 19
 	if matchup > 1.0:
 		col = Color(1.0, 0.85, 0.25)   # strong: big and gold
-		font_size = 18
+		font_size = 26
 	elif matchup < 1.0:
 		col = Color(0.62, 0.66, 0.74)  # resisted: small and grey
-		font_size = 11
-	FloatingText.spawn(self, pos + Vector2(0, -14.0), "%d" % int(round(dealt)),
+		font_size = 16
+	FloatingText.spawn(self, pos + Vector2(0, -20.0), "%d" % int(round(dealt)),
 			col, font_size)
 
 func _apply_splash(main_target: Enemy, center: Vector2) -> void:
@@ -130,9 +130,9 @@ func _draw() -> void:
 	# The node rotates toward its target, so local -x is "behind": draw a tapered
 	# trail there, a soft glow, then the bright coloured core.
 	draw_colored_polygon(PackedVector2Array([
-		Vector2(0, -4), Vector2(0, 4), Vector2(-16, 0),
+		Vector2(0, -6), Vector2(0, 6), Vector2(-24, 0),
 	]), Color(color.r, color.g, color.b, 0.30))
-	draw_circle(Vector2.ZERO, 8.0, Color(color.r, color.g, color.b, 0.25))  # glow
-	draw_circle(Vector2.ZERO, 5.0, color)
-	draw_circle(Vector2(-1.5, -1.5), 2.0, Color(1, 1, 1, 0.6))              # highlight
-	draw_arc(Vector2.ZERO, 5.0, 0.0, TAU, 12, Color(0, 0, 0, 0.4), 1.0, true)
+	draw_circle(Vector2.ZERO, 12.0, Color(color.r, color.g, color.b, 0.25))  # glow
+	draw_circle(Vector2.ZERO, 7.5, color)
+	draw_circle(Vector2(-2.2, -2.2), 3.0, Color(1, 1, 1, 0.6))               # highlight
+	draw_arc(Vector2.ZERO, 7.5, 0.0, TAU, 12, Color(0, 0, 0, 0.4), 1.5, true)
