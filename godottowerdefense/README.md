@@ -43,8 +43,9 @@ code with primitive shapes and colors.
   cover** — so you can judge placement before spending the gold.
 - **Hover a placed tower** to light up its range ring. Ranges stay faint otherwise, so a
   full board doesn't turn into a tangle of overlapping circles.
-- Cells are the faint squares on the grass — 40 of them, one 96px row flush against
-  each side of every road. Towers can't be built on the road or on an occupied cell.
+- Cells are the faint squares on the grass — 40 of them, in two rows filling each gap
+  between the horizontal roads, so the narrow outer side of every bend is a 2×2 block.
+  Towers can't be built on the road or on an occupied cell.
   A drop that lands slightly off still snaps to the nearest cell (see
   `grid.gd` `SNAP_TOLERANCE`); the ghost shows you which one before you let go.
 - **Click / tap a tower to upgrade it** (up to level 3) — each level boosts damage, range,
@@ -313,8 +314,8 @@ costs, and the mutable `gold` / `lives` with signals. Two more autoloads sit bes
 | Bosses | `game.gd` `WAVES` (`"boss": true` per entry) | HP ×6, speed ×0.6, reward ×10, costs 10 lives |
 | Economy: interest | `wave_manager.gd` `INTEREST_RATE`/`INTEREST_CAP` | 8% of banked gold per wave cleared, capped at 40 |
 | Economy: leak-free bonus | `wave_manager.gd` `LEAK_FREE_BONUS` | +6 gold if no enemy reached the end that wave |
-| Road path | `game.gd` `PATH` | 6 waypoints (S-shape), 80px wide (`ROAD_HALF` 40), ~3168px long |
-| Build grid | `game.gd` `GRID_ROWS` / `CELL_WIDTH` | 96px square cells, 40 of them (11 / 9 / 9 / 11 per row) |
+| Road path | `game.gd` `PATH` | 6 waypoints (S-shape), 80px wide (`ROAD_HALF` 40), ~3296px long |
+| Build grid | `game.gd` `GRID_ROWS` / `CELL_WIDTH` | 96×88 cells, 40 of them (10 per row, 4 rows in 2 pairs) |
 | Tower ranges | `game.gd` `TOWER_DEFS` | 225–278px ≈ 2.3–2.9 cells |
 | Drop forgiveness | `grid.gd` `SNAP_TOLERANCE` | 24px outside a cell still counts (placement only) |
 | Enemy size | `wave_manager.gd` | radius 24 × the archetype multiplier; boss 38 (must stay under the 80px road width) |
@@ -322,16 +323,22 @@ costs, and the mutable `gold` / `lives` with signals. Two more autoloads sit bes
 
 The road (`PATH`) and the grid rows (`GRID_ROWS`) are defined as plain arrays in
 `game.gd`. The road drawing, enemy walking, grid and map decoration all follow
-from `PATH`; the grid rows are hand-placed for the fixed S-map so one row of
-towers sits flush against each side of every horizontal road.
+from `PATH`; the grid rows are hand-placed for the fixed S-map, in pairs filling
+each gap between horizontal roads. The pairing is deliberate: a bend's vertical
+leg runs from one horizontal road to the next, so the number of rows it passes is
+how many cells you get down the narrow outer side of that turn — two rows make it
+a 2×2 block instead of a lone column.
 
 **The whole board is sized for a phone, and the sizes are coupled.** The game is
 authored in a fixed 1280×720 world that `canvas_items` stretch fits to the screen,
-so on a landscape phone everything arrives at roughly half scale — a 96px cell
-lands at ~48 CSS px, right at the minimum comfortable tap target, which is why the
-cells are as large as they are and why only 40 fit. The vertical budget is exact:
-the HUD bar ends at y 40 and the bottom-corner buttons start at y 664, and
-4 rows × 96 + 3 roads × 80 = 624 fills that gap with nothing to spare.
+so on a landscape phone everything arrives at roughly half scale — a 96×88 cell
+lands at ~48×44 CSS px, right at the minimum comfortable tap target, which is why
+the cells are as large as they are and why only 40 fit. The vertical budget is
+exact: the HUD bar ends at y 40, the bottom-corner buttons start at y 664, and
+4 rows × 88 + 3 roads × 80 = 592 uses all but 32px of that gap. Those last 32px
+are the grass strip above the top road, and they are load-bearing — without them a
+boss walking the top road draws its health bar up behind the HUD. That is also why
+rows are 88 tall rather than a square 96.
 
 If you ever change `CELL_WIDTH`, these have to move with it or the game quietly
 rebalances itself: `TOWER_DEFS` ranges and splash radii, `tower.gd`

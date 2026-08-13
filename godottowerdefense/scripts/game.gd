@@ -16,27 +16,37 @@ const SCREEN_SIZE := Vector2(1280, 720)
 
 # Waypoints that define the S-shaped road. Enemies walk these in order.
 # First point is off-screen left (spawn), last is off-screen right (exit).
+#
+# The two bend x's (840, 232) are not round numbers, and the exact values matter:
+# each one is placed so that TWO columns of cells fit on the narrow outer side of
+# the turn instead of one. Cells tile outward from a bend at ROAD_HALF +
+# CELL_WIDTH*0.5 = 88 and then step by 96, and grid.gd drops any that would fall
+# off the board, so the second column lands exactly on the boundary — 840 puts it
+# at 1024, whose right edge is PLAY_RIGHT; 232 puts it at 48, whose left edge is 0.
+# Move either bend 8px the wrong way and that outer column silently disappears.
 const PATH: Array = [
-	Vector2(-144, 176),
-	Vector2(848, 176),
-	Vector2(848, 352),
-	Vector2(224, 352),
-	Vector2(224, 528),
-	Vector2(1424, 528),
+	Vector2(-144, 112),
+	Vector2(840, 112),
+	Vector2(840, 368),
+	Vector2(232, 368),
+	Vector2(232, 624),
+	Vector2(1424, 624),
 ]
 
-# Grid placement: towers snap to square cells drawn faintly on the grass, flush
-# against the road. The whole board is sized for touch: on a landscape phone the
-# 1280x720 design viewport stretches by ~0.5, so a 96px cell lands at ~48 CSS px
-# — right at the minimum comfortable tap target. Everything else in the game is
+# Grid placement: towers snap to cells drawn faintly on the grass, flush against
+# the road. The whole board is sized for touch: on a landscape phone the 1280x720
+# design viewport stretches by ~0.5, so a 96x88 cell lands at ~48x44 CSS px —
+# right at the minimum comfortable tap target. Everything else in the game is
 # drawn to match that scale.
-const CELL_WIDTH := 96.0         ## Cell size (px), square; columns step by this.
+const CELL_WIDTH := 96.0         ## Column width (px); columns step by this.
 const ROAD_HALF := 40.0          ## Road stone half-width; cell edges tile flush to this.
-## Min distance from a cell centre to the road centre-line. Every cell the layout
-## produces sits at exactly ROAD_HALF + CELL_WIDTH * 0.5 = 88, so this is that value
-## with a little slack — the check is `>=` and leaning on float equality would be
-## fragile. Nothing is generated between 86 and 88, so the slack costs nothing.
-const ROAD_CLEARANCE := 86.0
+## Min distance from a cell centre to the road centre-line. A cell flush BESIDE a
+## vertical road sits at ROAD_HALF + CELL_WIDTH*0.5 = 88; one flush ABOVE or BELOW a
+## horizontal road sits at ROAD_HALF + cell_height*0.5 = 84. This has to clear the
+## smaller of the two, with a little slack — the check is `>=` and leaning on float
+## equality would be fragile. Nothing is generated between 82 and 84, so the slack
+## costs nothing.
+const ROAD_CLEARANCE := 82.0
 ## Right edge of the buildable area. The tower palette is anchored to the right of
 ## the screen, so the grid stops short of it — otherwise cells sit under the panel
 ## where they cannot be seen and (because the panel eats the click) the towers on
@@ -44,16 +54,25 @@ const ROAD_CLEARANCE := 86.0
 const PLAY_RIGHT := 1072.0
 
 # Build-grid rows as Vector2(centre_y, cell_height). The three horizontal roads sit
-# at y = 176 / 352 / 528. The vertical budget between the HUD bar (ends at 40) and
-# the bottom-corner buttons (start at 664) is 624px, which four 96-tall rows and
-# three 80-wide roads fill exactly. Every row is a flush 88px from its nearest road,
-# and the two middle rows are 88px from *two* roads, so they cover both.
+# at y = 112 / 368 / 624, and the rows come in PAIRS filling the gap between them.
+#
+# The pairing is the whole point: a bend's vertical leg runs from one horizontal road
+# to the next, so the number of rows it passes is the number of cells you get down the
+# narrow outer side of that turn. One row per gap gave a 2x1 corner; two gives 2x2.
+#
+# The vertical budget is exact and leaves no room to be generous. Between the HUD bar
+# (ends at 40) and the bottom-corner buttons (start at 664) there are 624px, and
+# 4 rows x 88 + 3 roads x 80 = 592 uses all but 32 of it. That last 32 is grass above
+# the top road, and it is load-bearing: without it a boss on the top road would draw
+# its health bar up behind the HUD. Rows are 88 rather than 96 tall to pay for it —
+# still ~44 CSS px on a phone, so the tap target survives.
 const GRID_ROWS: Array = [
-	Vector2(88.0, 96.0),   # above the top road (flush under the HUD bar)
-	Vector2(264.0, 96.0),  # between top & middle roads
-	Vector2(440.0, 96.0),  # between middle & bottom roads
-	Vector2(616.0, 96.0),  # below the bottom road
+	Vector2(196.0, 88.0), Vector2(284.0, 88.0),  # between the top & middle roads
+	Vector2(452.0, 88.0), Vector2(540.0, 88.0),  # between the middle & bottom roads
 ]
+## Column bounds for a row NO vertical road crosses. Every row in the current layout is
+## crossed by a bend and so tiles outward from it instead; these stay for a row placed
+## clear of both bends.
 const GRID_COL_START := 64.0     ## First column centre.
 const GRID_COL_END := 1024.0     ## Last column centre (= PLAY_RIGHT - CELL_WIDTH * 0.5).
 
