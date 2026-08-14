@@ -97,9 +97,9 @@ const GRID_COL_END := 1024.0     ## Last column centre (= PLAY_RIGHT - CELL_WIDT
 #
 # DEPARTURE FROM THE MAP: in the original the six base elements are plain attackers,
 # and slow / poison / splash arrive only with the dual towers (Ice, Poison, Lava...).
-# We have not built the combination mechanic yet, so stripping the effects off Water,
-# Nature and Earth would leave the game with no crowd control at all. They keep their
-# effects until duals land; the numbers are faithful, the effect payloads are ours.
+# Eight duals now exist, but they arrive mid-run behind two element cards — stripping
+# the effects off Water, Nature and Earth would leave the opening waves with no crowd
+# control at all. They keep their effects; the numbers are faithful, the payloads ours.
 #
 # `damage_tiers` lists the damage at each of the five tiers EXPLICITLY rather than
 # deriving them from a growth multiplier. Tiers 1-4 are exact x5 steps and Pure is x10,
@@ -152,36 +152,65 @@ const TOWER_DEFS := {
 		"damage_tiers": [165, 825, 4125, 20625, 206241],
 		"range": 2000.0, "interval": 2.75,
 	},
-	# --- Locked: duals + Lightning -----------------------------------------------
-	# NOT BUILDABLE. Everything below is deliberately absent from TOWER_ORDER, so the
-	# palette shows only the six elements and none of these can be built, previewed or
-	# paid for. The tuned numbers are kept because these return as in-run roguelite
-	# unlocks — a run will grant an id and the palette gains a slot, with no data to
-	# re-derive. Nothing reads them today; deleting the block would only cost the tuning.
+	# --- Dual towers ---------------------------------------------------------------
+	# Not in TOWER_ORDER: a dual becomes buildable when the player owns both of its
+	# elements deeply enough (see DUAL_RECIPES and Run.buildable_towers). Costs and
+	# damage are the map's tier-1 dual numbers.
 	#
-	# These are NOT yet ported to the map's numbers — their stats are still ours, only
-	# converted into WC3 range units so the field means the same thing everywhere.
-	# The map's own names for these recipes differ from ours in two places: its Ice is
-	# Water + LIGHT, and what we call Ice (Water + Nature) it calls Well. See
-	# docs/element-td-data.md before porting this block.
-	"steam": {  # Fire + Water; map calls this recipe Steam too
-		"name": "Steam", "cost": 110, "color": Color(0.70, 0.82, 0.95),
-		"damage": 16.0, "range": 771.0, "interval": 0.5,
-		"slow_factor": 0.6, "slow_time": 1.2,
-	},
-	"lava": {  # Fire + Earth; map agrees on the name
-		"name": "Lava", "cost": 150, "color": Color(0.92, 0.35, 0.20),
-		"damage": 40.0, "range": 686.0, "interval": 1.3, "can_hit_flying": false,
-		"splash_radius": 132.0, "splash_factor": 0.6,
-		"poison_dps": 8.0, "poison_time": 2.5,  # burn
-	},
-	"ice": {  # Water + Nature — the map calls this recipe Well; its Ice is Water + Light
-		"name": "Ice", "cost": 120, "color": Color(0.60, 0.90, 0.98),
-		"damage": 10.0, "range": 749.0, "interval": 0.7,
+	# Range and interval are OURS, not the map's. Most duals inherit those two fields
+	# from their Warcraft III base unit instead of overriding them, so the object data
+	# simply does not contain them — resolving them would mean reading war3.mpq's own
+	# unit table. Damage, cost and recipe are ported; reach and cadence are set to sit
+	# between the two parent elements, which is what they read as in play.
+	"ice": {  # Water + Light
+		"name": "Ice", "cost": 275, "color": Color(0.60, 0.90, 0.98),
+		"damage": 150.0, "range": 900.0, "interval": 0.75,
 		"slow_factor": 0.4, "slow_time": 2.0,
-		"slow_splash": 135.0,  # from Lv2 the chill spreads to enemies within this radius of the target
-		"poison_dps": 6.0, "poison_time": 3.0,
+		"splash_radius": 96.0, "splash_factor": 0.5,
+		"slow_splash": 135.0,  # from Lv2 the chill spreads to enemies within this radius
 	},
+	"steam": {  # Fire + Water
+		"name": "Steam", "cost": 275, "color": Color(0.70, 0.82, 0.95),
+		"damage": 150.0, "range": 625.0, "interval": 0.4,
+		"splash_radius": 120.0, "splash_factor": 0.6,
+		"poison_dps": 40.0, "poison_time": 2.5,  # "gradually reduces health"
+	},
+	"lava": {  # Fire + Earth
+		"name": "Lava", "cost": 275, "color": Color(0.92, 0.35, 0.20),
+		"damage": 751.0, "range": 625.0, "interval": 1.4, "can_hit_flying": false,
+		"splash_radius": 132.0, "splash_factor": 0.6,
+		"poison_dps": 90.0, "poison_time": 2.5,  # incinerate
+	},
+	"poison": {  # Water + Darkness
+		"name": "Poison", "cost": 275, "color": Color(0.55, 0.75, 0.30),
+		"damage": 500.0, "range": 1375.0, "interval": 1.2,
+		"slow_factor": 0.6, "slow_time": 1.6,
+		"poison_dps": 160.0, "poison_time": 3.0,
+	},
+	"clay": {  # Water + Earth — the map gives this one an explicit 1.05s cooldown
+		"name": "Clay", "cost": 275, "color": Color(0.80, 0.62, 0.45),
+		"damage": 600.0, "range": 750.0, "interval": 1.05,
+		"slow_factor": 0.7, "slow_time": 1.2,
+	},
+	"tech": {  # Earth + Darkness — explicit 0.50s cooldown in the map; "rapidfire"
+		"name": "Tech", "cost": 275, "color": Color(0.62, 0.66, 0.72),
+		"damage": 350.0, "range": 1375.0, "interval": 0.5,
+	},
+	"roots": {  # Earth + Nature — explicit 8.10s cooldown; entangles, ground only
+		"name": "Roots", "cost": 275, "color": Color(0.45, 0.60, 0.28),
+		"damage": 100.0, "range": 750.0, "interval": 2.2, "can_hit_flying": false,
+		"slow_factor": 0.25, "slow_time": 2.6,
+	},
+	"electricity": {  # Light + Fire — the map's only dual with an explicit range (1200)
+		"name": "Electricity", "cost": 275, "color": Color(1.0, 0.9, 0.25),
+		"damage": 570.0, "range": 1200.0, "interval": 0.8,
+		"stun_chance": 0.2, "stun_time": 0.8,
+	},
+
+	# --- Locked: Lightning -----------------------------------------------------
+	# NOT BUILDABLE and not a map tower: the map has no neutral stunner, it has Lightning
+	# as tier 2 of Light + Fire (our `electricity`). This entry is ours, kept because the
+	# roguelite pool can still grant it. Range is in WC3 units like everything else.
 	"lightning": {  # chance to stun; the map has Lightning as tier 2 of Light + Fire
 		"name": "Lightning", "cost": 70, "color": Color(1.0, 0.9, 0.25),
 		"damage": 14.0, "range": 794.0, "interval": 0.7,
@@ -194,6 +223,49 @@ const TOWER_DEFS := {
 ## Ordered around the damage circle (see ELEMENT_BEATS) rather than alphabetically, so the
 ## palette itself teaches which element answers which.
 const TOWER_ORDER: Array = ["light", "darkness", "water", "fire", "nature", "earth"]
+
+# --- Dual recipes ---------------------------------------------------------------
+# All fifteen pairs of the six elements, with the map's own names. The towers state
+# their recipe in their own tooltips ("( Water + Light )"), so this is read data, not
+# a guess — `python tools/extract_w3x.py <map> recipes` prints it.
+#
+# The map gates towers by ELEMENT OWNERSHIP, not by combining two placed towers: each
+# element is a research track you level up (war3map.j's `Element_Upgrade[0..5]`, raised
+# by killing bosses), and owning the elements is what makes a recipe buildable. Run
+# mirrors that — see Run.elements and Run.buildable_towers().
+#
+# Only the ids that also have a TOWER_DEFS entry can actually be built. The other seven
+# are listed because the recipe is real and the table should be complete; each needs a
+# TowerBehavior that does not exist yet:
+#   moon / sun   (Light+Darkness, Fire+Nature) — buff an adjacent tower
+#   well         (Water+Nature)                — attack-speed aura
+#   money        (Light+Earth)                 — bounty on kill
+#   life         (Light+Nature)                — kills restore lives
+#   death        (Nature+Darkness)             — chance to instantly kill
+#   magic        (Fire+Darkness)               — banks mana into burst damage
+const DUAL_RECIPES := {
+	"moon": ["light", "darkness"],
+	"electricity": ["light", "fire"],
+	"ice": ["light", "water"],
+	"money": ["light", "earth"],
+	"life": ["light", "nature"],
+	"steam": ["fire", "water"],
+	"lava": ["fire", "earth"],
+	"sun": ["fire", "nature"],
+	"magic": ["fire", "darkness"],
+	"clay": ["water", "earth"],
+	"well": ["water", "nature"],
+	"poison": ["water", "darkness"],
+	"roots": ["earth", "nature"],
+	"tech": ["earth", "darkness"],
+	"death": ["nature", "darkness"],
+}
+## Element level at which an element counts toward a recipe. Every element starts the run
+## at 1 so all six towers are buildable from the first wave; a dual therefore needs BOTH of
+## its elements raised once past the start, which is what the choice screen's element cards
+## are for. The map starts you at zero elements and hands them out for boss kills — we keep
+## the opening playable instead, the same class of departure as Balance.START_GOLD.
+const DUAL_ELEMENT_LEVEL := 2
 
 # --- Wave definitions ----------------------------------------------------------
 # Each wave picks an archetype from WAVE_TYPES; its stats = the base scaling
@@ -315,10 +387,32 @@ const UPGRADE_POOL: Array = [
 		"effects": [{"stat": "damage", "op": "mult", "value": 1.15}]},
 
 	# --- Epic: the first tower unlocks, and real global power -------------------
-	{"id": "unlock_ice", "name": "Ice", "rarity": "epic", "unlock": "ice", "min_wave": 6,
-		"desc": "Unlocks the Ice tower — heavy slow plus poison, and from level 2 the chill spreads"},
-	{"id": "unlock_steam", "name": "Steam", "rarity": "epic", "unlock": "steam", "min_wave": 6,
-		"desc": "Unlocks the Steam tower — solid damage with a slow attached"},
+	# --- Element cards ----------------------------------------------------------
+	# These grant no stats. They raise an element track, and every dual recipe the new
+	# level completes becomes buildable (Game.DUAL_RECIPES, Run.dual_available). Two
+	# cards therefore open between one and four towers depending on which pair is hit,
+	# which is the decision the map's element research is built around.
+	#
+	# max_stacks 1: a second level in the same element unlocks nothing further, so
+	# offering it again would be a dead card.
+	{"id": "elem_light", "name": "Light Elemental", "rarity": "epic",
+		"raise_element": "light", "min_wave": 3, "max_stacks": 1,
+		"desc": "Raise Light. Unlocks its duals once the partner element is raised too"},
+	{"id": "elem_darkness", "name": "Darkness Elemental", "rarity": "epic",
+		"raise_element": "darkness", "min_wave": 3, "max_stacks": 1,
+		"desc": "Raise Darkness. Unlocks its duals once the partner element is raised too"},
+	{"id": "elem_water", "name": "Water Elemental", "rarity": "epic",
+		"raise_element": "water", "min_wave": 3, "max_stacks": 1,
+		"desc": "Raise Water. Unlocks its duals once the partner element is raised too"},
+	{"id": "elem_fire", "name": "Fire Elemental", "rarity": "epic",
+		"raise_element": "fire", "min_wave": 3, "max_stacks": 1,
+		"desc": "Raise Fire. Unlocks its duals once the partner element is raised too"},
+	{"id": "elem_nature", "name": "Nature Elemental", "rarity": "epic",
+		"raise_element": "nature", "min_wave": 3, "max_stacks": 1,
+		"desc": "Raise Nature. Unlocks its duals once the partner element is raised too"},
+	{"id": "elem_earth", "name": "Earth Elemental", "rarity": "epic",
+		"raise_element": "earth", "min_wave": 3, "max_stacks": 1,
+		"desc": "Raise Earth. Unlocks its duals once the partner element is raised too"},
 	{"id": "all_speed", "name": "Quickening", "rarity": "epic", "max_stacks": 2,
 		"desc": "All towers attack 20% faster",
 		"effects": [{"stat": "attack_speed", "op": "mult", "value": 1.2}]},
@@ -327,8 +421,6 @@ const UPGRADE_POOL: Array = [
 		"effects": [{"stat": "damage", "op": "mult", "value": 1.35}]},
 
 	# --- Legendary: run-defining ------------------------------------------------
-	{"id": "unlock_lava", "name": "Lava", "rarity": "legendary", "unlock": "lava", "min_wave": 12,
-		"desc": "Unlocks the Lava tower — huge splash and a burn, but cannot hit flyers"},
 	{"id": "unlock_lightning", "name": "Lightning", "rarity": "legendary",
 		"unlock": "lightning", "min_wave": 12,
 		"desc": "Unlocks the Lightning tower — 25% chance to freeze an enemy in place"},

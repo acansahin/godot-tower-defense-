@@ -3,10 +3,16 @@ extends Control
 ## cost. Pressing a slot emits `drag_started`; Main then drags a ghost to a grid
 ## cell to place it.
 ##
-## Laid out as 2 columns x 4 rows rather than one tall column. Eight slots stacked
-## in a single column cannot each be tall enough to hit with a thumb — the board is
-## drawn at roughly half scale on a phone, so the old 38px-tall slot arrived as ~19
-## CSS px. Two columns buy the height back.
+## Laid out as 2 columns rather than one tall column. Slots stacked in a single column
+## cannot each be tall enough to hit with a thumb — the board is drawn at roughly half
+## scale on a phone, so the old 38px-tall slot arrived as ~19 CSS px. Two columns buy
+## the height back.
+##
+## The roster is no longer fixed: six elements at the start, plus up to eight duals as
+## element cards complete their recipes, plus Lightning — fifteen slots against a panel
+## sized for four. Rather than clip the tail (a tower you own but cannot see is a bug the
+## player cannot diagnose), the layout SHRINKS to fit, and only once it has to. Up to
+## twelve slots keep the full-size box; past that everything scales down together.
 
 signal drag_started(id: String)
 
@@ -14,6 +20,11 @@ const SLOT_SIZE := Vector2(87, 80)
 const SLOT_STEP := Vector2(93, 86)  ## Slot pitch (size + gutter).
 const SLOT_ORIGIN := Vector2(6, 36) ## Top-left of the first slot, below the header.
 const COLUMNS := 2
+## Never shrink past this: below roughly half size the text stops being legible and the
+## box stops being a thumb target, and a palette that cannot be used is no better than
+## one that is clipped. If a roster ever needs more than this can show, the panel needs
+## to scroll rather than shrink further.
+const MIN_SCALE := 0.62
 
 var _gold: int = 0
 
@@ -26,18 +37,34 @@ func set_gold(value: int) -> void:
 	_gold = value
 	queue_redraw()
 
-func _slot_rect(index: int) -> Rect2:
+## Vertical scale that fits `count` slots in the panel: 1.0 whenever they already fit.
+func _scale_for(count: int) -> float:
+	var rows := int(ceil(float(count) / float(COLUMNS)))
+	if rows <= 0:
+		return 1.0
+	var needed := SLOT_ORIGIN.y + float(rows - 1) * SLOT_STEP.y + SLOT_SIZE.y
+	if needed <= size.y:
+		return 1.0
+	# Only the part below the header can shrink; the header keeps its height.
+	var room := size.y - SLOT_ORIGIN.y
+	var content := needed - SLOT_ORIGIN.y
+	return maxf(MIN_SCALE, room / content)
+
+func _slot_rect(index: int, scale_y: float) -> Rect2:
 	var col := index % COLUMNS
 	@warning_ignore("integer_division")  # deliberate: this is a row index
 	var row := index / COLUMNS
-	return Rect2(SLOT_ORIGIN + Vector2(col * SLOT_STEP.x, row * SLOT_STEP.y), SLOT_SIZE)
+	var pos := Vector2(SLOT_ORIGIN.x + col * SLOT_STEP.x,
+			SLOT_ORIGIN.y + row * SLOT_STEP.y * scale_y)
+	return Rect2(pos, Vector2(SLOT_SIZE.x, SLOT_SIZE.y * scale_y))
 
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed \
 			and event.button_index == MOUSE_BUTTON_LEFT:
 		var ids: Array = Run.buildable_towers()
+		var scale_y := _scale_for(ids.size())
 		for i in ids.size():
-			if _slot_rect(i).has_point(event.position):
+			if _slot_rect(i, scale_y).has_point(event.position):
 				drag_started.emit(ids[i])
 				return
 
@@ -47,27 +74,33 @@ func _draw() -> void:
 	var font := get_theme_default_font()
 	draw_string(font, Vector2(10, 26), "Towers", HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(1, 1, 1, 0.9))
 	var ids: Array = Run.buildable_towers()
+	var scale_y := _scale_for(ids.size())
 	for i in ids.size():
-		_draw_slot(_slot_rect(i), ids[i], font)
+		_draw_slot(_slot_rect(i, scale_y), ids[i], font)
 
 ## One slot: colour swatch on top, name and cost stacked underneath. Both strings are
-## centred across the slot's full width and clipped to it, so a long name ("Lightning")
+## centred across the slot's full width and clipped to it, so a long name ("Electricity")
 ## stays inside its box instead of bleeding into the neighbouring column.
+##
+## Every vertical offset is a fraction of the slot's height rather than a pixel constant,
+## so a shrunk slot stays composed instead of having its text drop out of the bottom.
 func _draw_slot(r: Rect2, id: String, font: Font) -> void:
 	var d: Dictionary = Game.TOWER_DEFS[id]
 	var cost: int = int(d["cost"])
 	var affordable := _gold >= cost
+	var k := r.size.y / SLOT_SIZE.y  # 1.0 at full size
 	draw_rect(r, Color(0.20, 0.20, 0.24, 0.85) if affordable else Color(0.22, 0.12, 0.12, 0.7))
 	draw_rect(r, Color(1, 1, 1, 0.22), false, 2.0)
 	# Element colour swatch, centred near the top.
-	var c := r.position + Vector2(r.size.x * 0.5, 26.0)
-	draw_circle(c, 16.0, d["color"])
-	draw_arc(c, 16.0, 0.0, TAU, 20, Color(0, 0, 0, 0.4), 2.0, true)
+	var c := r.position + Vector2(r.size.x * 0.5, 26.0 * k)
+	draw_circle(c, 16.0 * k, d["color"])
+	draw_arc(c, 16.0 * k, 0.0, TAU, 20, Color(0, 0, 0, 0.4), 2.0, true)
 	# Name + cost, centred under the swatch.
 	var text_w := r.size.x - 6.0
 	var text_x := r.position.x + 3.0
-	draw_string(font, Vector2(text_x, r.position.y + 58.0), str(d["name"]),
-			HORIZONTAL_ALIGNMENT_CENTER, text_w, 14, Color.WHITE)
+	var font_size := int(roundf(14.0 * k))
+	draw_string(font, Vector2(text_x, r.position.y + 58.0 * k), str(d["name"]),
+			HORIZONTAL_ALIGNMENT_CENTER, text_w, font_size, Color.WHITE)
 	var cost_col := Color(1, 0.9, 0.4) if affordable else Color(0.9, 0.45, 0.45)
-	draw_string(font, Vector2(text_x, r.position.y + 74.0), "%d g" % cost,
-			HORIZONTAL_ALIGNMENT_CENTER, text_w, 14, cost_col)
+	draw_string(font, Vector2(text_x, r.position.y + 74.0 * k), "%d g" % cost,
+			HORIZONTAL_ALIGNMENT_CENTER, text_w, font_size, cost_col)

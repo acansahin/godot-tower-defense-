@@ -55,7 +55,7 @@ anchor_right = 1.0
 offset_left = -200.0
 offset_top = 44.0
 offset_right = -8.0
-offset_bottom = 432.0
+offset_bottom = 656.0
 script = ExtResource("9")
 
 [node name="UpgradeChoice" parent="UI" instance=ExtResource("14")]
