@@ -180,6 +180,37 @@ Each of these cost real time; don't rediscover them.
   sounds right after load may be silent until the player clicks. Don't rely on a startup
   jingle.
 
+## The Element TD source maps
+
+The tower roster, the five-tier ladder, the element recipes and the wave curve are all
+**ported from the original Warcraft III maps**, not invented and not taken from a wiki.
+The maps live outside the repo (the user's `Desktop/Warcraft III/Maps/Downloads/`), and
+`tools/extract_w3x.py` reads them with no third-party dependency:
+
+```
+python tools/extract_w3x.py "<map>.w3x" towers    # roster grouped by cost tier
+python tools/extract_w3x.py "<map>.w3x" recipes   # the "( X + Y )" combination table
+python tools/extract_w3x.py "<map>.w3x" waves     # the 60-level HP curve + creep classes
+```
+
+The extracted result is written up in
+[docs/element-td-data.md](godottowerdefense/docs/element-td-data.md). **Change a ported
+number only against that file or a fresh tool run** — three separate mistakes came from
+reasoning about these numbers instead of reading them:
+
+- **WC3 damage is `base + dice`, not `base`.** Every Element TD tower rolls `1d1`, so the
+  real damage is the object editor's `ua1b` **plus one**. Reading `ua1b` alone makes the
+  exact ×5 tier ladder look ragged and off-by-four.
+- **An absent object-data field means "inherit", not "zero".** Tiers 3-5 omit `ua1d`
+  entirely; treating that as no dice loses the +1.
+- **`udg_HP_exponent_base = 1.23` in `war3map.j` is a decoy** — declared, never read. The
+  real wave curve is `75 × 1.16^(n-1)`, baked into a separate unit type per level.
+
+Two deliberate departures from the map are marked in the code and must stay marked:
+`Balance.START_GOLD` (the map's 30 assumes towers are researched, not bought) and the
+slow/poison/splash payloads still riding on Water/Nature/Earth (the map puts those on
+dual towers, which we have not built).
+
 ## Further reading
 
 - [godottowerdefense/README.md](godottowerdefense/README.md) — full architecture,
@@ -187,4 +218,6 @@ Each of these cost real time; don't rediscover them.
   it has gone stale before.
 - [godottowerdefense/docs/element-td-towers.md](godottowerdefense/docs/element-td-towers.md)
   — the design target (6 elements, 15 duals, 20 triples) versus what's actually built
-  (4 elements, 3 duals + Lightning).
+  (6 elements; the duals exist as data but the combination mechanic does not).
+- [godottowerdefense/docs/element-td-data.md](godottowerdefense/docs/element-td-data.md)
+  — every number extracted from the source maps, and how to re-derive it.

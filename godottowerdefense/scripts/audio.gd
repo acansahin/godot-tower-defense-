@@ -83,7 +83,7 @@ func play_capped(sfx_name: String, pitch_var: float = 0.0, volume_db: float = 0.
 	_cap_counts[sfx_name] = used + 1
 	play(sfx_name, pitch_var, volume_db)
 
-## Picks the shot sound for a tower. The four base elements key off `element`;
+## Picks the shot sound for a tower. The six base elements key off `element`;
 ## lightning and the neutral dual towers (element == "") key off `id`.
 func play_tower_fire(id: String, element: String) -> void:
 	var key := element
@@ -145,6 +145,19 @@ func _build_all() -> void:
 	_tri(earth, 0.0, 0.14, 150.0, 80.0, 0.8, 22.0)             # triangle bass thud
 	_noise8(earth, 0.0, 0.05, 0.22, 40.0, 14)
 	_sfx["earth"] = _encode(earth, 0.8)
+
+	# Light fires every ~1s from across the board: a bright, clean rising blip with no
+	# noise layer, so it stays audible under everything else without adding grit.
+	var light := _buf(0.11)
+	_pulse(light, 0.0, 0.11, 780.0, 1180.0, 0.25, 0.5, 30.0)
+	_sfx["light"] = _encode(light, 0.55)
+
+	# Darkness fires once every 2.75s, so it can afford to be the longest and lowest
+	# sound in the set — a falling triangle swell that reads as weight rather than speed.
+	var darkness := _buf(0.20)
+	_tri(darkness, 0.0, 0.20, 190.0, 70.0, 0.85, 12.0)
+	_noise8(darkness, 0.0, 0.09, 0.14, 22.0, 18)
+	_sfx["darkness"] = _encode(darkness, 0.75)
 
 	var lightning := _buf(0.12)
 	_arp(lightning, 0.0, 0.12, 440.0, [0, 12, 7], 0.018, 0.25, 0.45, 20.0)   # zap arpeggio

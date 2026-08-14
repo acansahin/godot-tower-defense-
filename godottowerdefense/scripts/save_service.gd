@@ -16,7 +16,11 @@ extends Node
 ##  * **Never fatal.** A missing, truncated, or garbage file loads as defaults rather than
 ##    throwing. Losing progress is bad; refusing to start the game is worse.
 
-const SAVE_VERSION := 1
+## 2: the Element TD port moved every number onto the original map's scale — gold costs
+## went 40/45/70 -> a flat 50 with a 24444-gold top tier, and the wave hit-point curve
+## went quadratic -> 75 * 1.16^n. A `best_wave` earned under the old curve does not mean
+## the same thing, and Essence banked against it buys far more than it should.
+const SAVE_VERSION := 2
 const PATH := "user://save.json"
 const PATH_TMP := "user://save.json.tmp"
 const PATH_BAK := "user://save.bak.json"
@@ -111,6 +115,17 @@ func _migrate(doc: Dictionary) -> Dictionary:
 		push_warning("Save: document version %d is newer than %d; leaving it alone"
 				% [v, SAVE_VERSION])
 		return doc
-	# if v < 1: ...  (future migrations chain from here)
+	if v < 2:
+		# The port rescaled the whole game (see SAVE_VERSION). Rather than guess at a
+		# conversion factor between two unrelated curves, retire the progression numbers
+		# and keep what still means something: the player's settings, and the fact that
+		# they are not a new player. Workshop levels go with the Essence that bought them,
+		# so nobody is left holding upgrades they could not now afford.
+		# Key names must match Meta._persist(): section "meta", levels under "levels".
+		var meta: Dictionary = doc.get("meta", {})
+		meta["essence"] = 0
+		meta["best_wave"] = 0
+		meta["levels"] = {}
+		doc["meta"] = meta
 	doc["version"] = SAVE_VERSION
 	return doc

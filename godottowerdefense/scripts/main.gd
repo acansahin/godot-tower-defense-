@@ -100,7 +100,7 @@ func _ready() -> void:
 func _dump_mods() -> void:
 	var probe := func(label: String) -> void:
 		var line := label.rpad(22)
-		for tid in ["fire", "water", "nature", "earth"]:
+		for tid in Game.TOWER_ORDER:
 			var t := TOWER.instantiate() as Tower
 			towers_root.add_child(t)
 			t.setup_def(String(tid))
@@ -284,7 +284,7 @@ func _dump_tower_stats() -> void:
 		var t := TOWER.instantiate() as Tower
 		towers_root.add_child(t)
 		t.setup_def(String(tid))
-		for _lv in 3:
+		for _lv in Balance.MAX_LEVEL:
 			print("%s L%d dmg=%.6f rng=%.4f rsq=%.4f int=%.6f pdps=%.6f ptime=%.4f " \
 					% [tid, t.level, t.damage, t.tower_range, t._range_sq,
 						t.fire_interval, t.poison_dps, t.poison_time] \
@@ -362,8 +362,10 @@ func _update_ghost(world_pos: Vector2) -> void:
 		return
 	var center := cell.get_center()
 	var d: Dictionary = Game.TOWER_DEFS[_drag_kind]
+	# TOWER_DEFS stores range in Warcraft III units — scale to pixels, exactly as
+	# tower.gd's _recompute does, or the ghost circle lies about the tower's reach.
 	preview.show_at(cell, _cell_is_free(center) and Game.gold >= _cost(_drag_kind),
-			d.get("range", 160.0), d.get("color", Color.WHITE))
+			d.get("range", 160.0) * Balance.WC3_RANGE_SCALE, d.get("color", Color.WHITE))
 
 func _drop(world_pos: Vector2) -> void:
 	var kind := _drag_kind

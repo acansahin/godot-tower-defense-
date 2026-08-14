@@ -16,28 +16,55 @@ extends Node
 
 # --- Run start -----------------------------------------------------------------
 
+## The original map starts a player on 30 gold, but its towers are not bought from a
+## palette — you research elements and are given elementals, so 30 gold against a
+## 50-gold tower is a bootstrap the player reaches by another route. We have no such
+## route, so this is one of the two deliberate departures from the map (the other is
+## noted on TOWER_DEFS): enough for three tier-1 towers.
 const START_GOLD := 150
 const START_LIVES := 20
 
-# --- Tower upgrade curve (was tower.gd:39-44) ----------------------------------
+# --- Tower upgrade curve (ported from Element TD v2.0) -------------------------
+#
+# See docs/element-td-data.md. The map's ladder is five tiers deep and, critically,
+# **an upgrade multiplies damage and nothing else** — Fire is 500 range / 0.33s at
+# tier 1 and still 500 / 0.33 as Pure Fire. Range and fire interval are fixed per
+# element for the whole run, which is what makes the elements read as distinct
+# shapes rather than as the same tower at different sizes.
 
-const MAX_LEVEL := 3
-const DAMAGE_GROWTH := 1.6        ## damage multiplier per level
-const RANGE_GROWTH := 30.0        ## flat range added per level (px; scales with Game.CELL_WIDTH)
-const FIRE_SPEEDUP := 0.82        ## fire_interval multiplier per level (lower = faster)
+const MAX_LEVEL := 5
+## Gold to BUILD a tower at tier 1, then to reach each tier above it. Straight from the
+## map: 50 / 175 / 788 / 3544 / 24444.
+const TIER_COSTS: Array = [50, 175, 788, 3544, 24444]
+## Damage multiplier applied on each upgrade. Tiers 2-4 are x5; Pure is x10, which is
+## the one place the map breaks its own pattern and the reason Pure is a decision
+## rather than a formality.
+const TIER_DAMAGE_MULT: Array = [5.0, 5.0, 5.0, 10.0]
 const SELL_REFUND := 0.5          ## fraction of total_spent returned when sold
 ## slow_splash radius gains this fraction of its base per level past 2 (Lv3 = x1.3).
 const SLOW_SPLASH_GROWTH := 0.3
-## Hard floor on a tower's seconds-per-shot. No tower comes near it today (the fastest is
-## Fire at Lv3, 0.3026) — it exists so that stacked attack-speed modifiers can never reach
-## zero, which would make the cooldown branch in _process fire on every frame.
+## Hard floor on a tower's seconds-per-shot. Water is the fastest element at 0.17s and
+## nothing else comes near — this exists so that stacked attack-speed modifiers can
+## never reach zero, which would make the cooldown branch in _process fire every frame.
 const MIN_FIRE_INTERVAL := 0.05
 
+## Warcraft III distance -> our pixels. The map's ranges are 500 (Fire), 750 (Water,
+## Nature, Earth) and 2000 (Light, Darkness); one scale keeps those ratios exact.
+##
+## 0.35 puts Water/Nature/Earth at 262px, which is where our four towers already sat,
+## so the familiar elements do not move. It also puts Light and Darkness at 700px —
+## more than half the board. That is faithful (they are the long-range elements and
+## pay for it in cadence) but it is the single biggest playability unknown in the
+## port; measure it with --fill-board before tuning anything else.
+const WC3_RANGE_SCALE := 0.35
+
 ## Gold cost of upgrading a tower from `level` to `level + 1`.
-## Kept as a function rather than a constant because the shape (linear in level) is
-## itself a balance decision — a designer swapping it for a curve edits only this.
-func upgrade_cost(build_cost: int, level: int) -> int:
-	return build_cost * level
+## `build_cost` is ignored: in the map every element shares one cost ladder regardless
+## of which element it is. The parameter stays so callers need not change.
+func upgrade_cost(_build_cost: int, level: int) -> int:
+	if level < 1 or level >= TIER_COSTS.size():
+		return 0
+	return int(TIER_COSTS[level])
 
 # --- Wave pacing + economy (was wave_manager.gd:12-22) -------------------------
 
@@ -46,8 +73,12 @@ const PREP_TIME := 4.0            ## Delay between waves.
 ## palette, understand that towers are dragged, and pick a cell — 4 seconds is not enough
 ## to do that, and starting the tutorial wave before a single tower exists teaches nothing.
 const FIRST_PREP_TIME := 12.0
-const INTEREST_RATE := 0.08       ## Banked gold earns this each wave (capped).
-const INTEREST_CAP := 40
+## Banked gold earns this each wave. The map pays 2.5% every 15 seconds and lets you
+## research the rate upward; a wave is roughly one interest tick there, so the rate
+## carries over directly. The cap is ours — the map has none, and without one the
+## right play late in an endless run is to stop building and hold gold.
+const INTEREST_RATE := 0.025
+const INTEREST_CAP := 400
 const LEAK_FREE_BONUS := 6        ## Bonus if no enemy reached the end this wave.
 
 ## A few enemies still randomly fly on non-Air waves.
@@ -63,15 +94,29 @@ func early_call_bonus(wave: int) -> int:
 
 # --- Wave scaling formula (was wave_manager.gd:91-101) -------------------------
 
-const BASE_HP_FLAT := 20.0
-const BASE_HP_LINEAR := 10.0
-## Quadratic term, deliberately gentle: archetype multipliers stack on top of it, so a
-## steeper curve makes the late waves spike past what the gold economy can answer.
-const BASE_HP_QUAD := 2.55
+## Wave 1 hit points, and the ratio between consecutive waves. Both read out of the
+## map: level 1 is 75 hp and every level after is exactly 1.16x the one before, from
+## wave 1 through wave 60 (75 -> 476522) with no breakpoints and no boss spike baked
+## into the curve itself.
+##
+## Note the map's own `udg_HP_exponent_base = 1.23` is a decoy — it is declared and
+## never read. 1.16 is what the per-level unit types actually contain.
+const BASE_HP_FLAT := 75.0
+const HP_GROWTH := 1.16
+## Creeps spawn at a fraction of their baked hit points, chosen by the map's difficulty
+## selector: 50% on the easiest setting, +12.5 points per step. We have no difficulty
+## screen, so this is the dial that stands in for one.
+const CREEP_HP_PERCENT := 1.0
 const BASE_SPEED_FLAT := 60.0
 const BASE_SPEED_LINEAR := 6.0
-const BASE_COUNT_FLAT := 5
-const BASE_COUNT_LINEAR := 2.5
+## Enemies per wave. The map spawns `16 + difficulty * 3` and does NOT grow the count
+## with the level — every wave from 1 to 60 is the same size, and all the difficulty
+## lives in the hit-point curve. Ours was `5 + 2.5 * wave`, which is why late waves
+## used to be long rather than hard.
+const BASE_COUNT_FLAT := 28
+## Gold per kill: `max(wave / 3, 1.10^(wave-1))`. The exponential overtakes the linear
+## floor at wave 5 and is the whole economy after that.
+const BOUNTY_GROWTH := 1.10
 const REWARD_FLAT := 3
 const SPAWN_INTERVAL_START := 0.9
 const SPAWN_INTERVAL_DECAY := 0.04
@@ -90,16 +135,16 @@ const ENEMY_BASE_RADIUS := 24.0
 const MAX_SPAWN_COUNT := 160
 
 func wave_hp(wave: int) -> float:
-	return BASE_HP_FLAT + wave * BASE_HP_LINEAR + wave * wave * BASE_HP_QUAD
+	return BASE_HP_FLAT * pow(HP_GROWTH, wave - 1) * CREEP_HP_PERCENT
 
 func wave_speed(wave: int) -> float:
 	return BASE_SPEED_FLAT + wave * BASE_SPEED_LINEAR
 
-func wave_count(wave: int) -> int:
-	return BASE_COUNT_FLAT + int(wave * BASE_COUNT_LINEAR)
+func wave_count(_wave: int) -> int:
+	return BASE_COUNT_FLAT
 
 func wave_reward(wave: int) -> int:
-	return REWARD_FLAT + wave
+	return int(maxf(float(wave) / 3.0, pow(BOUNTY_GROWTH, wave - 1)))
 
 func spawn_interval(wave: int) -> float:
 	return maxf(SPAWN_INTERVAL_MIN, SPAWN_INTERVAL_START - wave * SPAWN_INTERVAL_DECAY)

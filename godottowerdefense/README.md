@@ -7,8 +7,10 @@ readable rather than production-architected.
 When you press **Play** you get: a grassy map, an S-shaped cobblestone road, a
 faint build grid beside the road, and an **endless** run of enemies drawn from a data table
 of **creep archetypes** (including flyers, tanks, swarms, splitters, regenerators, periodic
-**bosses** and **elite** waves). The buildable roster is the four elements —
-**Fire / Water / Nature / Earth** — plus an **element-matchup** system (each is strong and
+**bosses** and **elite** waves). The buildable roster is the six elements —
+**Light / Darkness / Water / Fire / Nature / Earth**, with the stats of the original
+Warcraft III map (see [docs/element-td-data.md](docs/element-td-data.md)) — plus an
+**element-matchup** system (each is strong and
 weak against another, so tower choice vs. an enemy's armor element matters),
 **tap-to-upgrade** towers each with a small **sell button**, **time controls** (pause and
 1x/2x/3x), a gold economy with interest and streak bonuses, lives, a **tutorial** opening,
@@ -73,7 +75,10 @@ code with primitive shapes and colors.
   to cost you a life. There is no per-tower target picker.
 - **Time controls** sit in the bottom-left corner: **Pause** (or **Space**) freezes
   everything, and the speed button (or **F**) cycles **1x → 2x → 3x**.
-- **Ground-only towers** (Earth) can't hit flyers; Fire, Water and Nature can.
+- **Ground-only towers** (Earth) can't hit flyers; the other five can.
+- **Upgrading raises damage only.** Range and fire rate are fixed per element for the
+  whole run, so a Pure Fire still has Fire's short reach and quick cadence. The five
+  tiers cost 50 / 175 / 788 / 3544 / 24444 gold.
 - The HUD shows a **next-wave preview** (archetype, count, boss flag, and armor
   element colour) before it spawns — a **Send Next ▶** button lets you call it
   early for a small gold bonus instead of waiting out the prep timer.
@@ -277,7 +282,7 @@ editing three files and hunting for un-named literals; it is now one file.
   splitting are all multipliers/flags on the archetype), optionally flags a
   **boss** (HP ×6, reward ×10, costs 10 lives) and an **armor element** that
   tints the wave and feeds the element matchup. It also runs the economy layer:
-  interest on banked gold each wave clear (8%, capped at 40), a leak-free bonus
+  interest on banked gold each wave clear (2.5%, capped at 400), a leak-free bonus
   (+6 gold) if nothing got through, and the early-call bonus from the HUD's
   **Send Next** button. `wave_preview` emits the next wave's description/colour
   ahead of time for the HUD.
@@ -340,28 +345,28 @@ editing three files and hunting for un-named literals; it is now one file.
 
 | Thing | Where | Value |
 |---|---|---|
-| Starting gold | `game.gd` `START_GOLD` | 150 |
+| Starting gold | `balance.gd` `START_GOLD` | 150 (the map gives 30, but its towers are researched rather than bought — see the note on the constant) |
 | Starting lives | `game.gd` `START_LIVES` | 20 |
 | Tower stats (all towers) | `game.gd` `TOWER_DEFS` | per-tower cost / dmg / range / interval / effects |
-| Base towers | `TOWER_DEFS` | Fire (dmg), Water (slow), Nature (poison), Earth (splash, ground) |
+| Base towers | `TOWER_DEFS` | six elements at the map's numbers. They sit at near-equal DPS and differ in reach and cadence: Fire 500/0.33s, Water 750/0.17s, Nature 750/0.99s, Earth 750/1.00s, Light 2000/0.99s, Darkness 2000/2.75s (range in **WC3 units**, scaled by `Balance.WC3_RANGE_SCALE`). Water/Nature/Earth also keep our slow/poison/splash payloads, which the map puts on dual towers we have not built |
 | Locked towers | `TOWER_DEFS` | Steam / Lava / Ice / Lightning are still defined but are **absent from `TOWER_ORDER`**, so they cannot be built, previewed or bought. Their tuning is kept so they can return as in-run roguelite unlocks |
-| Upgrade: max level / growth | `tower.gd` | L3, dmg ×1.6, range +30, interval ×0.82, DoT ×1.6 |
-| Upgrade cost | `tower.gd` `upgrade_cost()` | `build_cost × level` (e.g. Fire 40, 80) |
+| Upgrade: max level / growth | `balance.gd` `MAX_LEVEL`, `TOWER_DEFS.damage_tiers` | 5 tiers; damage only, listed explicitly per element (×5 a tier, ×10 into Pure — with the map's own Pure-row typos preserved). Range and interval never change |
+| Upgrade cost | `balance.gd` `TIER_COSTS` | 175 / 788 / 3544 / 24444, the same ladder for every element |
 | Sell refund | `tower.gd` `SELL_REFUND` | 50% of total gold spent (tap the corner × to sell) |
 | Targeting | `tower.gd` `_find_target()` | Fixed to "First" — the enemy furthest along the path (closest to the exit); no per-tower picker |
 | Game speed | `hud.gd` `SPEEDS` | 1x / 2x / 3x via `Engine.time_scale`; pause via `get_tree().paused` |
 | Screen shake | `main.gd` `SHAKE_DECAY`, `enemy.gd` | 7px on a boss death, 4px on a leak, bled off at 26 px/s |
 | Impact SFX cap | `audio.gd` `MAX_PER_FRAME` | 3 per effect per frame — a full board at 3x otherwise floods the 12-voice pool |
-| Element matchup | `game.gd` `ELEMENT_BEATS` | cycle fire→nature→earth→water→fire; ×1.75 dmg if you beat the target's armor element, ×0.7 if it beats you, ×1 if either side is neutral (applies to direct, splash and poison damage) |
+| Element matchup | `game.gd` `ELEMENT_BEATS` | cycle light→darkness→water→fire→nature→earth→light; ×1.75 dmg if you beat the target's armor element, ×0.7 if it beats you, ×1 if either side is neutral (applies to direct, splash and poison damage) |
 | Waves | `game.gd` `WAVES` | 20 fixed entries (archetype + optional `boss`/`element`, plus an optional per-wave `hp`/`count` multiplier to smooth a single wave without touching the shared archetype) |
 | Creep archetypes | `game.gd` `WAVE_TYPES` | normal, fast, swarm, tank, immune, regen, air (flyer), split (splits on death) — each is a set of HP/speed/count/radius multipliers and flags on top of the base scaling |
 | Immune archetype | `game.gd` `WAVE_TYPES` + `enemy.gd` `cc_immune` | ignores **slow and stun**, but **not poison** — poison is damage rather than crowd control, so Nature stays the answer to these waves instead of the whole roster going dead |
 | Regen archetype | `game.gd` `WAVE_TYPES` + `enemy.gd` `REGEN_DELAY` | heals 3.5% of max HP/s, but **paused for 2s after taking any damage** — so it only heals through gaps in your coverage instead of setting a hard DPS threshold. Its "+" marker dims while suppressed. Poison ticks count as damage, so a single Nature tower shuts the healing off entirely |
 | Prep time between waves | `wave_manager.gd` `PREP_TIME` | 4s (skippable via the HUD's Send Next button, for a small gold bonus) |
-| Wave scaling (`n` = wave) | `wave_manager.gd` `_start_wave()` | count `5 + int(2.5·n)`, HP `20 + 10·n + 2.55·n²`, speed `60 + 6·n`, reward `3 + n`, each × the archetype's multipliers |
+| Wave scaling (`n` = wave) | `balance.gd` | HP `75 × 1.16^(n-1)` and a **flat** count of 28 — both from the map, where difficulty lives entirely in the HP curve and never in wave size. Reward `max(n/3, 1.10^(n-1))`, speed `60 + 6·n`, each × the archetype's multipliers |
 | Flyers (non-Air waves) | `wave_manager.gd` | from wave 3, 15% chance per enemy (halved on top of Air waves existing); `make_flying()` gives HP ×0.65, speed ×1.25 |
 | Bosses | `game.gd` `WAVES` (`"boss": true` per entry) | HP ×6, speed ×0.6, reward ×10, costs 10 lives |
-| Economy: interest | `wave_manager.gd` `INTEREST_RATE`/`INTEREST_CAP` | 8% of banked gold per wave cleared, capped at 40 |
+| Economy: interest | `balance.gd` `INTEREST_RATE`/`INTEREST_CAP` | 2.5% of banked gold per wave cleared, capped at 400. The map pays 2.5% every 15s and has no cap; the cap is ours, so that hoarding gold never beats building |
 | Economy: leak-free bonus | `wave_manager.gd` `LEAK_FREE_BONUS` | +6 gold if no enemy reached the end that wave |
 | Road path | `game.gd` `PATH` | 6 waypoints (S-shape), 80px wide (`ROAD_HALF` 40), ~3296px long |
 | Build grid | `game.gd` `GRID_ROWS` / `CELL_WIDTH` | 96×88 cells, 40 of them (10 per row, 4 rows in 2 pairs) |

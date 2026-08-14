@@ -138,7 +138,8 @@ func can_upgrade() -> bool:
 func _upgrade_ready() -> bool:
 	return can_upgrade() and Game.gold >= upgrade_cost()
 
-## Gold cost of the NEXT upgrade (build_cost x current level: e.g. 40, 80).
+## Gold cost of the NEXT upgrade. One shared ladder for every element, straight from the
+## map: 175, 788, 3544, 24444 (Balance.TIER_COSTS).
 func upgrade_cost() -> int:
 	return Balance.upgrade_cost(build_cost, level)
 
@@ -155,13 +156,15 @@ func upgrade() -> void:
 ## AND removed later without the tower drifting. Runs on build and on upgrade, never per
 ## frame.
 ##
-## The level growth is a repeated multiply rather than pow(): it reproduces the exact
-## floating-point result of the old destructive upgrade() chain, so this refactor is
-## provably number-for-number identical. It runs at most twice.
+## The level growth is a repeated multiply rather than pow(): the map's tiers are exact
+## x5 steps (x10 into Pure) and multiplying step by step keeps the result byte-identical
+## to the table in docs/element-td-data.md. It runs at most four times.
 func _recompute() -> void:
 	# --- base: straight from the definition ------------------------------------
 	damage = _def.get("damage", 8.0)
-	tower_range = _def.get("range", 160.0)
+	# TOWER_DEFS stores range in Warcraft III units; this is the one place (with main.gd's
+	# build preview) that turns them into board pixels.
+	tower_range = _def.get("range", 160.0) * Balance.WC3_RANGE_SCALE
 	fire_interval = _def.get("interval", 0.5)
 	poison_dps = _def.get("poison_dps", 0.0)
 	poison_time = _def.get("poison_time", 0.0)
@@ -172,11 +175,24 @@ func _recompute() -> void:
 	stun_chance = _def.get("stun_chance", 0.0)
 	stun_time = _def.get("stun_time", 0.0)
 	# --- level growth ----------------------------------------------------------
-	for _i in level - 1:
-		damage *= Balance.DAMAGE_GROWTH
-		tower_range += Balance.RANGE_GROWTH
-		fire_interval *= Balance.FIRE_SPEEDUP
-		poison_dps *= Balance.DAMAGE_GROWTH  # DoT scales with the tower's damage growth
+	# An upgrade multiplies damage and NOTHING else — range and fire interval are fixed
+	# per element for the whole run. That is the map's rule, and it is what keeps a Pure
+	# Fire recognisably Fire instead of converging on every other element.
+	#
+	# A def with a `damage_tiers` table is read straight out of it; the growth constants
+	# are only the fallback for the locked duals, which have no ported table yet. Either
+	# way `growth` ends up as "how much stronger than tier 1 this is", which is what the
+	# damage-over-time payload rides.
+	var growth := 1.0
+	var tiers: Array = _def.get("damage_tiers", [])
+	if not tiers.is_empty():
+		damage = float(tiers[mini(level, tiers.size()) - 1])
+		growth = damage / float(tiers[0])
+	else:
+		for i in level - 1:
+			growth *= float(Balance.TIER_DAMAGE_MULT[i])
+		damage *= growth
+	poison_dps *= growth  # DoT scales with the tower's damage growth
 	# Ice's area-slow: single-target below Lv2, then widening (was _update_slow_splash).
 	slow_splash_radius = 0.0
 	if level >= 2:
@@ -386,7 +402,10 @@ func _draw_chevron(o: Vector2, alpha: float) -> void:
 ## Small dots under the tower base, one per level, so the player can read the
 ## current upgrade tier at a glance.
 func _draw_level_pips(col: Color) -> void:
-	var spacing := 12.0
+	# 10px, not 12: the ladder is five tiers deep now, and at 12 the outer pips of a Pure
+	# tower reach +/-28 against a base of radius 30 — visually touching the rim. At 10 they
+	# stop at +/-24 and the row still reads as five distinct dots.
+	var spacing := 10.0
 	var start_x := -(level - 1) * spacing * 0.5
 	for i in level:
 		var c := Vector2(start_x + i * spacing, 9.0)
