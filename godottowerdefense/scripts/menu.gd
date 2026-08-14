@@ -13,6 +13,9 @@ const GAME_SCENE := "res://scenes/Main.tscn"
 @onready var _sound_button: Button = $UI/Root/Center/Panel/VBox/SoundButton
 @onready var _quit_button: Button = $UI/Root/Center/Panel/VBox/QuitButton
 @onready var _back_button: Button = $UI/Root/HowPanel/Panel/VBox/BackButton
+@onready var _workshop_button: Button = $UI/Root/Center/Panel/VBox/WorkshopButton
+@onready var _status_label: Label = $UI/Root/Center/Panel/VBox/StatusLabel
+@onready var _workshop: Workshop = $UI/Root/Workshop
 
 func _ready() -> void:
 	_play_button.pressed.connect(_on_play)
@@ -20,10 +23,43 @@ func _ready() -> void:
 	_sound_button.pressed.connect(_on_sound)
 	_quit_button.pressed.connect(_on_quit)
 	_back_button.pressed.connect(_on_back)
+	_workshop_button.pressed.connect(_on_workshop)
+	_workshop.closed.connect(_on_workshop_closed)
+	Meta.essence_changed.connect(func(_v: int) -> void: _refresh_status())
 	if OS.has_feature("web"):
 		_quit_button.hide()   # there is nothing to quit to in a browser tab
 	_how_panel.hide()
+	_workshop.hide()
 	_refresh_sound_label()
+	_refresh_status()
+	_play_button.grab_focus()
+	# TEMPORARY harness: opens the Workshop straight away so its _draw runs in a rendered
+	# test. Nothing else in the suite can reach it — it needs a button click, and neither
+	# MCP nor a headless run can produce one (and headless never draws at all).
+	#   Godot.exe --path <project> res://scenes/Menu.tscn --quit-after 300 -- --show-workshop
+	if OS.get_cmdline_user_args().has("--show-workshop"):
+		_on_workshop()
+
+## The wallet, the record, and — once only, on the launch that earned it — what came in
+## while the player was away. The offline line is the reason to reopen the app, so it goes
+## where it is seen before anything is clicked.
+func _refresh_status() -> void:
+	var parts := PackedStringArray()
+	if Meta.pending_offline > 0:
+		parts.append("Welcome back: +%d Essence while away" % Meta.pending_offline)
+	parts.append("Essence: %d" % Meta.essence)
+	if Meta.best_wave > 0:
+		parts.append("Best: wave %d" % Meta.best_wave)
+	_status_label.text = "\n".join(parts)
+
+func _on_workshop() -> void:
+	Audio.play("build")
+	_center.hide()
+	_workshop.open()
+
+func _on_workshop_closed() -> void:
+	_center.show()
+	_refresh_status()
 	_play_button.grab_focus()
 
 func _on_play() -> void:

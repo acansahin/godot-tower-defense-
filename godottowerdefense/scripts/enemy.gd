@@ -47,11 +47,11 @@ var _anim_phase: float = 0.0  ## Drives the idle breathing wobble.
 var _body: Node2D             ## Mid layer: body + eyes; scaled for the breathing wobble.
 var _overlay: Node2D          ## Top layer: rings, markers, crown, health bar.
 
-## Seconds an enemy must go undamaged before regen_dps starts healing it again. This is
-## what stops regen from being a hard DPS threshold: while you keep hitting it, it heals
-## nothing, so falling slightly short of the old break-even rate no longer means the
-## enemy is simply unkillable.
-const REGEN_DELAY := 2.0
+## Seconds an enemy must go undamaged before regen_dps starts healing it again lives in
+## the Balance autoload (Balance.REGEN_DELAY), along with the flyer / splitter modifiers
+## this file applies. This is what stops regen from being a hard DPS threshold: while you
+## keep hitting it, it heals nothing, so falling slightly short of the break-even rate no
+## longer means the enemy is simply unkillable.
 
 # Status effects applied by tower projectiles.
 var _slow_factor: float = 1.0
@@ -137,10 +137,10 @@ func setup(hp: float, spd: float, gold_reward: int, tint: Color) -> void:
 ## tint. Only archer towers (can_hit_flying) can target it.
 func make_flying() -> void:
 	is_flying = true
-	max_health *= 0.65
+	max_health *= Balance.FLYER_HP_MULT
 	health = max_health
-	speed *= 1.25
-	color = Color(0.72, 0.78, 0.96)
+	speed *= Balance.FLYER_SPEED_MULT
+	color = Balance.FLYER_TINT
 	_repaint_all()  # shadow<->wings on the parent, tint on the body
 
 func _ready() -> void:
@@ -225,7 +225,7 @@ func _move(delta: float) -> void:
 func take_damage(amount: float) -> void:
 	if _dead:
 		return
-	_regen_block = REGEN_DELAY  # any hit — including a poison tick — suspends regen
+	_regen_block = Balance.REGEN_DELAY  # any hit — including a poison tick — suspends regen
 	health -= amount
 	_repaint_overlay()  # health bar + regen marker live on the overlay
 	if health <= 0.0:
@@ -239,20 +239,23 @@ func _die() -> void:
 	FloatingText.spawn(self, global_position + Vector2(0, -radius),
 			"+%d" % reward, Color(1, 0.85, 0.35), 13)
 	if is_boss:
-		Game.request_shake(7.0)
-	Game.add_gold(reward)
+		Game.request_shake(Balance.SHAKE_BOSS_DEATH)
+	# The per-kill bonus is added HERE rather than inside Game.add_gold, which also pays the
+	# sell refund, the wave interest and the early-call bonus — none of which is a kill.
+	Game.add_gold(reward + Run.bonus_gold_per_kill())
 	# Splitters break into smaller children that continue from here. Emit BEFORE
 	# `removed` so WaveManager adds them to the alive count first (no early clear).
 	if split_into > 0:
 		split_requested.emit(global_position, _target_index, split_into,
-				max_health * 0.35, speed * 1.15, color, radius * 0.62)
+				max_health * Balance.SPLIT_HP_MULT, speed * Balance.SPLIT_SPEED_MULT,
+				color, radius * Balance.SPLIT_RADIUS_MULT)
 	removed.emit()
 	queue_free()
 
 func _escape() -> void:
 	_dead = true
 	Audio.play("leak")
-	Game.request_shake(4.0)  # a leak should be felt, not just noticed in the HUD
+	Game.request_shake(Balance.SHAKE_LEAK)  # a leak should be felt, not just seen in the HUD
 	Game.lose_life(life_cost)
 	removed.emit()
 	queue_free()

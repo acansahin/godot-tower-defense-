@@ -10,19 +10,26 @@ const SHAKE_DECAY := 26.0  ## Pixels of camera shake bled off per second.
 @onready var enemies_root: Node2D = $Enemies
 @onready var towers_root: Node2D = $Towers
 @onready var wave_manager: WaveManager = $WaveManager
+@onready var tutorial: Tutorial = $Tutorial
 @onready var hud: HUD = $UI/HUD
 @onready var palette = $UI/TowerPalette
 @onready var end_screen: EndScreen = $UI/EndScreen
+@onready var upgrade_choice: UpgradeChoice = $UI/UpgradeChoice
 @onready var camera: Camera2D = $Camera2D
 @onready var preview = $Preview  ## Drag ghost.
 
 var _drag_kind: String = ""  ## Tower type being dragged from the palette ("" = none).
 var _hovered: Tower = null   ## Tower under the mouse, drawn with a clear range ring.
 var _shake: float = 0.0      ## Current camera shake magnitude in px; decays to 0.
+var _auto_pick: bool = false ## Harness only (--fill-board): auto-resolve upgrade choices.
 
 func _ready() -> void:
 	get_tree().paused = false
+	# One seed drives both the waves and the card offers, so a whole run — what it throws at
+	# you and what it lets you answer with — replays from a single number.
+	var run_seed := randi()
 	Game.reset()
+	Run.reset(run_seed)
 
 	hud.set_gold(Game.gold)
 	hud.set_lives(Game.lives)
@@ -32,7 +39,6 @@ func _ready() -> void:
 	Game.gold_changed.connect(palette.set_gold)
 	Game.lives_changed.connect(hud.set_lives)
 	Game.game_over.connect(_on_game_over)
-	Game.victory.connect(_on_victory)
 	wave_manager.wave_started.connect(hud.set_wave)
 	wave_manager.wave_preview.connect(hud.set_next)
 	wave_manager.prep_started.connect(hud.enable_send)
@@ -40,8 +46,257 @@ func _ready() -> void:
 	palette.drag_started.connect(_on_drag_started)
 	Game.shake_requested.connect(_add_shake)
 
+	# Tutorial: it listens to the run and emits a line of text; the HUD just renders it.
+	tutorial.hint_changed.connect(hud.set_hint)
+	wave_manager.wave_started.connect(tutorial.on_wave_started)
+	hud.send_pressed.connect(tutorial.on_sent_early)
+
+	# Roguelite choice. Main owns the pause so there is exactly one place that decides
+	# whether the run is running — the choice screen itself only reports what was picked.
+	wave_manager.choice_due.connect(_on_choice_due)
+	upgrade_choice.chosen.connect(_on_upgrade_chosen)
+
 	wave_manager.enemies_root = enemies_root
-	wave_manager.start()
+	wave_manager.start(run_seed)
+
+	# Must run BEFORE any dump. Meta's Workshop levels feed Run.permanent, which feeds every
+	# tower stat — so a --dump-stats taken against a save with purchases in it is measuring
+	# something different from one taken against a clean save. Wipe first when comparing to
+	# a stored baseline.
+	if OS.get_cmdline_user_args().has("--wipe-save"):
+		Save.clear()
+		Meta._load()
+		Run.reset(0)
+		Game.reset()
+	if OS.get_cmdline_user_args().has("--dump-stats"):
+		_dump_tower_stats()
+	if OS.get_cmdline_user_args().has("--fill-board"):
+		_fill_board()
+	if OS.get_cmdline_user_args().has("--dump-waves"):
+		_dump_waves()
+	if OS.get_cmdline_user_args().has("--dump-mods"):
+		_dump_mods()
+	# TEMPORARY: pops the choice screen immediately, so its _draw can be exercised in a
+	# rendered run without first playing three waves. Headless never calls _draw at all, so
+	# nothing else in the suite would catch a broken card layout.
+	if OS.get_cmdline_user_args().has("--dump-meta"):
+		_dump_meta()
+	# TEMPORARY: rewinds the "last seen" stamp so the NEXT launch collects an offline
+	# reward. The only way to exercise _collect_offline without waiting hours or changing
+	# the system clock — and offline is a feature whose bugs are all in the time arithmetic.
+	if OS.get_cmdline_user_args().has("--go-back"):
+		Meta.last_seen -= 4 * 3600
+		Meta._persist()
+		print("--- clock rewound 4h; relaunch to collect ---")
+	if OS.get_cmdline_user_args().has("--show-choice"):
+		_on_choice_due(30)  # late wave: exercises the higher-rarity cards and NEW TOWER
+
+## TEMPORARY verification harness for the roguelite modifier layer. Proves the three things
+## that would otherwise only show up as a vague "the cards feel like they do nothing":
+##   1. a card actually moves the stat it claims to, by the amount it claims;
+##   2. an element-scoped card touches ONLY that element;
+##   3. removing it returns the tower exactly to baseline — the whole point of rebuilding
+##      stats instead of accumulating them, and the one thing playing can never check.
+func _dump_mods() -> void:
+	var probe := func(label: String) -> void:
+		var line := label.rpad(22)
+		for tid in ["fire", "water", "nature", "earth"]:
+			var t := TOWER.instantiate() as Tower
+			towers_root.add_child(t)
+			t.setup_def(String(tid))
+			line += "%s dmg=%.3f int=%.4f slow=%.3f  " % [tid, t.damage, t.fire_interval, t.slow_factor]
+			t.queue_free()
+		print(line)
+
+	print("--- MOD DUMP BEGIN ---")
+	Run.reset(1)
+	probe.call("baseline")
+	Run.grant(_pool_entry("fire_dmg"))
+	probe.call("+fire_dmg")
+	Run.grant(_pool_entry("all_dmg_small"))
+	probe.call("+all_dmg_small")
+	Run.grant(_pool_entry("water_slow"))
+	probe.call("+water_slow")
+	Run.grant(_pool_entry("fire_speed"))
+	probe.call("+fire_speed")
+	Run.reset(1)
+	probe.call("after reset")
+	print("roster before unlock: %s" % str(Run.buildable_towers()))
+	Run.grant(_pool_entry("unlock_ice"))
+	print("roster after unlock:  %s" % str(Run.buildable_towers()))
+	print("gold/kill before: %d" % Run.bonus_gold_per_kill())
+	Run.grant(_pool_entry("gold_kill"))
+	Run.grant(_pool_entry("gold_kill"))
+	print("gold/kill after 2x Scavenger: %d" % Run.bonus_gold_per_kill())
+	# Offer sanity: no duplicates within one offer, and nothing offered past its stack cap.
+	Run.reset(7)
+	for w in [3, 9, 30]:
+		var opts := Run.roll_choices(w)
+		var names := PackedStringArray()
+		for o in opts:
+			names.append("%s(%s)" % [String((o as Dictionary)["name"]),
+					String((o as Dictionary)["rarity"])])
+		print("offer @w%-3d %s" % [w, ", ".join(names)])
+	print("--- MOD DUMP END ---")
+
+## TEMPORARY verification harness for meta progression. Checks the things that only show up
+## across an app restart or a wall-clock change, neither of which is testable by playing:
+## the essence curve, workshop costs, that a bought level actually reaches a tower via the
+## SAME fold the roguelite cards use, and that start gold/lives move.
+##
+## Pass `--wipe-save` first to start from a clean slate; without it this runs against the
+## real save, which is the point when checking that a purchase survived a relaunch.
+func _dump_meta() -> void:
+	print("--- META DUMP BEGIN ---")
+	print("fresh=%s essence=%d best=%d runs=%d offline_collected=%d levels=%s"
+			% [Save.is_fresh, Meta.essence, Meta.best_wave, Meta.total_runs,
+				Meta.pending_offline, str(Meta.levels)])
+	print("run essence by wave: 5=%d 10=%d 20=%d 40=%d 80=%d" % [
+			Balance.run_essence(5), Balance.run_essence(10), Balance.run_essence(20),
+			Balance.run_essence(40), Balance.run_essence(80)])
+	print("offline (best=20): 1min=%d 1h=%d 4h=%d 8h=%d 48h(capped)=%d" % [
+			Balance.offline_essence(60.0, 20), Balance.offline_essence(3600.0, 20),
+			Balance.offline_essence(4.0 * 3600.0, 20), Balance.offline_essence(8.0 * 3600.0, 20),
+			Balance.offline_essence(48.0 * 3600.0, 20)])
+	print("forge cost by level: %s" % str(_costs("forge")))
+
+	var probe := func(label: String) -> void:
+		Run.reset(1)  # re-seeds `permanent` from Meta
+		Game.reset()
+		var t := TOWER.instantiate() as Tower
+		towers_root.add_child(t)
+		t.setup_def("fire")
+		print("%s fire dmg=%.4f rng=%.2f int=%.5f | start gold=%d lives=%d"
+				% [label.rpad(20), t.damage, t.tower_range, t.fire_interval, Game.gold, Game.lives])
+		t.queue_free()
+
+	probe.call("no workshop")
+	Meta.add_essence(100000)
+	for i in 3:
+		Meta.buy("forge")
+	probe.call("forge x3")
+	Meta.buy("lens")
+	Meta.buy("tempo")
+	probe.call("+lens +tempo")
+	for i in 2:
+		Meta.buy("treasury")
+	Meta.buy("ramparts")
+	probe.call("+treasury x2 +ramp")
+	print("essence left=%d levels=%s" % [Meta.essence, str(Meta.levels)])
+	# Settings round-trip. The mute flag was the one piece of state the game already had a
+	# UI for and still forgot on every launch, so it is worth asserting it now persists.
+	print("muted loaded as=%s -> writing true" % Audio.is_muted())
+	Audio.set_muted(true)
+	print("settings section now=%s" % str(Save.get_section("settings")))
+	print("--- META DUMP END ---")
+
+func _costs(id: String) -> Array:
+	var d := Meta.def_of(id)
+	var out: Array = []
+	for lv in 5:
+		out.append(Balance.workshop_cost(int(d["base_cost"]), float(d["cost_growth"]), lv))
+	return out
+
+func _pool_entry(id: String) -> Dictionary:
+	for u in Game.UPGRADE_POOL:
+		if String((u as Dictionary)["id"]) == id:
+			return u
+	push_error("no such upgrade: " + id)
+	return {}
+
+## TEMPORARY verification harness for the endless wave generator. Prints the definition of
+## each wave, marks where the hand-authored seed table hands over, and — the part that
+## matters — asks for every wave TWICE to prove wave_def(n) is pure. The HUD previews wave
+## n+1 while wave n is spawning, so a generator that drifted between calls would advertise
+## a different wave than the one that arrives, and nothing else would catch it.
+func _dump_waves() -> void:
+	var gen := WaveGenerator.new(12345)
+	var seed_count: int = Game.WAVES.size()
+	var impure := 0
+	print("--- WAVE DUMP BEGIN (seed table = waves 1-%d) ---" % seed_count)
+	for n in range(1, 61):
+		var def: Dictionary
+		var src: String
+		if n <= seed_count:
+			def = Game.WAVES[n - 1]
+			src = "table"
+		else:
+			def = gen.wave_def(n)
+			src = "gen"
+			if str(gen.wave_def(n)) != str(def):
+				impure += 1
+		var flags := ""
+		if def.get("boss", false):
+			flags += " BOSS"
+		if float(def.get("hp", 1.0)) != 1.0:
+			flags += " hp=%.2f" % float(def.get("hp", 1.0))
+		if float(def.get("count", 1.0)) != 1.0:
+			flags += " count=%.2f" % float(def.get("count", 1.0))
+		print("w%02d [%s] %-8s el=%-6s%s" % [n, src, String(def["type"]),
+				String(def.get("element", "-")), flags])
+	print("--- WAVE DUMP END (impure generated waves: %d) ---" % impure)
+
+## TEMPORARY verification harness: covers every buildable cell with towers, cycling the
+## roster, so a headless run actually exercises targeting, firing, the projectile pool and
+## the effect payloads. Without it a headless run has no towers and proves nothing about
+## the combat path. Gold is granted rather than spent so placement never fails.
+##   Godot.exe --headless --path <project> res://scenes/Main.tscn --quit-after 900 -- --fill-board
+## Delete this and its call above once the refactor has landed and been verified.
+func _fill_board() -> void:
+	# Headless runs one frame at a time regardless of wall clock, so the only way to cover
+	# many waves in a bounded frame budget is to make each frame simulate more time.
+	Engine.time_scale = 8.0
+	_auto_pick = true
+	Game.add_gold(999999)
+	# The end screen pauses the tree, so a run that ends looks exactly like a hang from the
+	# outside. Say so explicitly instead.
+	Game.game_over.connect(func() -> void:
+		# Deferred: _on_game_over banks the run, and reading Meta before that has happened
+		# would report the wallet as it was a moment BEFORE the reward landed.
+		await get_tree().process_frame
+		print("--- RUN OVER: wave %d | best %d | essence %d | runs %d ---"
+				% [Game.wave_reached, Meta.best_wave, Meta.essence, Meta.total_runs]))
+	var i := 0
+	for cell in grid.cells:
+		var kind := String(Game.TOWER_ORDER[i % Game.TOWER_ORDER.size()])
+		var t := TOWER.instantiate() as Tower
+		t.setup_def(kind)
+		t.position = (cell as Rect2).get_center()
+		towers_root.add_child(t)
+		# Max them out: Ice's area-slow (and the frost ring it spawns) only exists from
+		# Lv2, so a board of Lv1 towers would never touch that path.
+		while t.can_upgrade():
+			t.upgrade()
+		i += 1
+	print("--- FILL BOARD: placed %d towers over %d cells, all at max level ---"
+			% [i, grid.cells.size()])
+
+## TEMPORARY verification harness for the tower-stats refactor. Prints every tower's
+## resolved stats at each level so a pure refactor can be proved byte-identical against a
+## saved baseline — there are no tests, and playing the game cannot catch a 6th-decimal
+## drift. Gated behind a user arg so it never runs in a normal session; everything after
+## the bare `--` is passed through to OS.get_cmdline_user_args():
+##   Godot.exe --headless --path <project> res://scenes/Main.tscn -- --dump-stats
+## Delete this and its call above once the refactor has landed and been verified.
+func _dump_tower_stats() -> void:
+	print("--- TOWER STATS DUMP BEGIN ---")
+	for tid in Game.TOWER_ORDER:
+		var t := TOWER.instantiate() as Tower
+		towers_root.add_child(t)
+		t.setup_def(String(tid))
+		for _lv in 3:
+			print("%s L%d dmg=%.6f rng=%.4f rsq=%.4f int=%.6f pdps=%.6f ptime=%.4f " \
+					% [tid, t.level, t.damage, t.tower_range, t._range_sq,
+						t.fire_interval, t.poison_dps, t.poison_time] \
+				+ "slowf=%.6f slowt=%.4f sslash=%.6f splr=%.4f splf=%.4f stunc=%.4f stunt=%.4f " \
+					% [t.slow_factor, t.slow_time, t.slow_splash_radius, t.splash_radius,
+						t.splash_factor, t.stun_chance, t.stun_time] \
+				+ "cost=%d upcost=%d spent=%d sell=%d flying=%s" \
+					% [t.build_cost, t.upgrade_cost(), t.total_spent, t.sell_value(),
+						t.can_hit_flying])
+			t.upgrade()
+		t.queue_free()
+	print("--- TOWER STATS DUMP END ---")
 
 # --- Camera shake --------------------------------------------------------------
 
@@ -130,6 +385,7 @@ func _drop(world_pos: Vector2) -> void:
 	tower.position = center
 	towers_root.add_child(tower)
 	Audio.play("build")
+	tutorial.on_tower_built()
 
 func _cost(kind: String) -> int:
 	return int(Game.TOWER_DEFS[kind]["cost"])
@@ -177,6 +433,7 @@ func _upgrade_tower(tower: Tower) -> void:
 		return
 	tower.upgrade()
 	Audio.play("upgrade")
+	tutorial.on_tower_upgraded()
 
 ## Removes the tower and refunds half of the gold sunk into it.
 func _sell_tower(tower: Tower) -> void:
@@ -186,10 +443,33 @@ func _sell_tower(tower: Tower) -> void:
 		_hovered = null  # it is about to be freed; never keep a dangling reference
 	tower.queue_free()
 
+# --- Roguelite choice ----------------------------------------------------------
+
+## A wave interval elapsed: roll three cards and stop the run while the player decides.
+func _on_choice_due(wave: int) -> void:
+	if Game.is_over:
+		return  # the last enemy leaked as the wave cleared; the run summary wins
+	var options := Run.roll_choices(wave)
+	if options.is_empty():
+		return  # pool exhausted — never block the run over a missing reward
+	if _auto_pick:
+		# Harness only: nothing is going to tap a card in a headless run, and a paused tree
+		# is indistinguishable from a hang. Take the first offer and carry on.
+		print("choice @w%d -> %s" % [wave, String(options[0].get("name", "?"))])
+		_on_upgrade_chosen(options[0])
+		return
+	get_tree().paused = true
+	hud.set_input_blocked(true)
+	upgrade_choice.show_choices(options)
+
+func _on_upgrade_chosen(upgrade: Dictionary) -> void:
+	Run.grant(upgrade)
+	hud.set_input_blocked(false)
+	get_tree().paused = false
+
 func _on_game_over() -> void:
 	Audio.play("gameover")
-	end_screen.show_result(false)
-
-func _on_victory() -> void:
-	Audio.play("victory")
-	end_screen.show_result(true)
+	# Bank the run BEFORE the summary draws: finish_run updates the best-wave record and
+	# the wallet, both of which the summary reports.
+	var earned := Meta.finish_run(Game.wave_reached)
+	end_screen.show_summary(earned)

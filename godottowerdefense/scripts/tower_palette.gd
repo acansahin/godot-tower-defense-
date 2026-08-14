@@ -17,6 +17,11 @@ const COLUMNS := 2
 
 var _gold: int = 0
 
+func _ready() -> void:
+	# An unlock adds a slot mid-run, and the palette otherwise repaints only on a gold
+	# change — which might not come for seconds, leaving the reward invisible as it lands.
+	Run.roster_changed.connect(queue_redraw)
+
 func set_gold(value: int) -> void:
 	_gold = value
 	queue_redraw()
@@ -30,7 +35,7 @@ func _slot_rect(index: int) -> Rect2:
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed \
 			and event.button_index == MOUSE_BUTTON_LEFT:
-		var ids: Array = Game.TOWER_ORDER
+		var ids: Array = Run.buildable_towers()
 		for i in ids.size():
 			if _slot_rect(i).has_point(event.position):
 				drag_started.emit(ids[i])
@@ -41,7 +46,7 @@ func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), Color(1, 1, 1, 0.18), false, 2.0)
 	var font := get_theme_default_font()
 	draw_string(font, Vector2(10, 26), "Towers", HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(1, 1, 1, 0.9))
-	var ids: Array = Game.TOWER_ORDER
+	var ids: Array = Run.buildable_towers()
 	for i in ids.size():
 		_draw_slot(_slot_rect(i), ids[i], font)
 

@@ -19,6 +19,7 @@ var _music: AudioStreamPlayer            ## Dedicated looping background-music v
 var _next: int = 0
 var _muted: bool = false
 
+const SETTINGS_SECTION := "settings"  ## Save section the mute flag lives in.
 const MAX_PER_FRAME := 3  ## Per-frame cap used by play_capped().
 var _cap_frame: int = -1                ## Frame the counts below belong to.
 var _cap_counts: Dictionary = {}        ## sfx name -> times played this frame.
@@ -41,11 +42,15 @@ func _ready() -> void:
 	add_child(_music)
 	_music.play()
 
+	# Restore the sound setting. Read AFTER the players and music exist, so _apply_mute has
+	# something to act on — a player who muted last session should not be greeted by music.
+	_muted = bool(Save.get_section(SETTINGS_SECTION).get("muted", false))
+	_apply_mute()
+
 ## Toggle mute (SFX + music) with the M key (no input map entry needed).
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_M:
-		_muted = not _muted
-		_apply_mute()
+		set_muted(not _muted)  # routed through the setter so the change is persisted
 
 # --- Public API ----------------------------------------------------------------
 
@@ -88,9 +93,15 @@ func play_tower_fire(id: String, element: String) -> void:
 			_: key = "shot_generic"   # steam / lava / ice
 	play(key, 0.05, -3.0)
 
+## Sets and PERSISTS the mute state. Every path that changes it goes through here — the
+## menu toggle and the M key both — so there is one place that writes the setting and no
+## way to change it in a manner that fails to survive a relaunch.
 func set_muted(value: bool) -> void:
 	_muted = value
 	_apply_mute()
+	var s := Save.get_section(SETTINGS_SECTION)
+	s["muted"] = _muted
+	Save.flush()
 
 func is_muted() -> bool:
 	return _muted
