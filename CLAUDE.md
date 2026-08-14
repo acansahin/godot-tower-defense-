@@ -43,7 +43,9 @@ Arg-gated harnesses currently in `main.gd`, none of which can fire in a normal s
 `--dump-stats` (every tower's stats at every level), `--dump-waves` (60 wave definitions
 plus a generator-purity check), `--dump-mods` (roguelite modifiers apply / stay in scope /
 unwind on reset), `--dump-meta` (essence curve, workshop costs, purchases reaching towers,
-settings round-trip), `--fill-board` (a tower on every cell at max level, 8x speed,
+settings round-trip), `--dump-duals` (the support duals: an aura applies, deepens with
+its provider's level, stops at its radius and unwinds EXACTLY when the provider is
+removed; plus each dual's payload and Magic's charge cycle), `--fill-board` (a tower on every cell at max level, 8x speed,
 auto-picks upgrades, prints each wave and the run-over line), `--show-choice` (pops the
 choice screen so its `_draw` can be exercised), `--go-back` (rewinds the last-seen stamp 4h
 so the next launch collects an offline reward), `--wipe-save` (clears `user://save.json`).
@@ -133,7 +135,8 @@ To add content, add a **data row**, not a scene or script:
 | Saved field | a key in the relevant `Save` section; bump `SAVE_VERSION` + add a `_migrate` branch if the shape changes |
 | Wave (first 20 only) | `Game.WAVES` — past that, waves are generated |
 | Creep archetype | `Game.WAVE_TYPES` |
-| Tower behavior (beam/aura/…) | a `TowerBehavior` subclass + a case in `Tower._make_behavior` |
+| Tower behavior (beam/charge/…) | a `TowerBehavior` subclass + a case in `Tower._make_behavior` — but only if the CONTROL FLOW differs. An aura is data read by the neighbours; an on-kill payout is data read by the projectile. Of fifteen duals exactly one (Magic) needed a subclass |
+| Dual tower | a row in `Game.DUAL_RECIPES` + a `TOWER_DEFS` entry; it becomes buildable when `Run.element_level` reaches `DUAL_ELEMENT_LEVEL` in both its elements |
 | Sound effect | a block in `audio.gd`'s `_build_all()` |
 
 ## Conventions

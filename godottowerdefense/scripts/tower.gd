@@ -36,6 +36,9 @@ var poison_dps: float = 0.0
 var poison_time: float = 0.0
 var stun_chance: float = 0.0    ## chance (0..1) to freeze enemies on hit.
 var stun_time: float = 0.0
+var execute_chance: float = 0.0      ## chance (0..1) to kill outright on hit; never bosses (Death).
+var gold_on_kill: int = 0            ## extra gold when THIS tower lands the killing blow (Money).
+var life_on_kill_chance: float = 0.0 ## chance (0..1) that a kill returns one life (Life).
 
 ## The Game.TOWER_DEFS entry this tower was built from. Read-only (TOWER_DEFS is a const
 ## Dictionary, so Godot rejects writes to it) and re-read on every _recompute() — it is
@@ -84,6 +87,9 @@ func _ready() -> void:
 	# safe at any moment because _recompute() rebuilds from the definition rather than
 	# editing the current values.
 	Run.modifiers_changed.connect(_on_modifiers_changed)
+	# An aura tower appearing or vanishing next door changes this tower's stats, and the
+	# only way to notice is to be told the set changed. Same handler: it just re-pulls.
+	Game.towers_changed.connect(_on_modifiers_changed)
 
 func _on_modifiers_changed() -> void:
 	# Guard against firing before setup_def(): Run.reset() emits during its own _ready, and
@@ -126,9 +132,10 @@ func setup_def(def_id: String) -> void:
 ## Builds the behavior named by a def's optional "behavior" key. This match is the only
 ## place a behavior name is spelled out, and it selects a strategy at CONSTRUCTION time —
 ## it is not a per-frame branch on tower type, which is what the rest of the code avoids.
-## Every def today omits the key and so gets a bolt turret.
+## Almost every def omits the key and so gets a bolt turret; Magic asks for "charge".
 static func _make_behavior(kind: String) -> TowerBehavior:
 	match kind:
+		"charge": return ChargeBehavior.new()
 		_: return BoltBehavior.new()
 
 func can_upgrade() -> bool:
@@ -174,6 +181,9 @@ func _recompute() -> void:
 	slow_time = _def.get("slow_time", 0.0)
 	stun_chance = _def.get("stun_chance", 0.0)
 	stun_time = _def.get("stun_time", 0.0)
+	execute_chance = _def.get("execute_chance", 0.0)
+	gold_on_kill = int(_def.get("gold_on_kill", 0))
+	life_on_kill_chance = _def.get("life_on_kill_chance", 0.0)
 	# --- level growth ----------------------------------------------------------
 	# An upgrade multiplies damage and NOTHING else — range and fire interval are fixed
 	# per element for the whole run. That is the map's rule, and it is what keeps a Pure
@@ -198,6 +208,40 @@ func _recompute() -> void:
 	if level >= 2:
 		slow_splash_radius = float(_def.get("slow_splash", 0.0)) \
 				* (1.0 + Balance.SLOW_SPLASH_GROWTH * float(level - 2))
+	# --- aura from neighbouring towers -----------------------------------------
+	# PULLED, not pushed, for the same reason Run's modifiers are: an aura tower built or
+	# sold next door changes this tower's stats, and a tower that accumulated the buff when
+	# the neighbour appeared would have no way to give it back when it went away. Main
+	# emits Game.towers_changed on build/sell/upgrade and every tower re-pulls from scratch.
+	#
+	# O(towers) per recompute and recompute is not per-frame, so a full 40-cell board costs
+	# 1600 distance checks on a build — once, not every tick.
+	var aura_damage := 1.0
+	var aura_speed := 1.0
+	var parent := get_parent()
+	if parent != null:
+		for node in parent.get_children():
+			var other := node as Tower
+			if other == null or other == self or not is_instance_valid(other):
+				continue
+			var stat := String(other._def.get("aura_stat", ""))
+			if stat == "":
+				continue
+			var radius: float = float(other._def.get("aura_radius", 0.0)) * Balance.WC3_RANGE_SCALE
+			if global_position.distance_squared_to(other.global_position) > radius * radius:
+				continue
+			# The provider's own level deepens the buff: one step per level past the first,
+			# so upgrading a Well is a real alternative to building a second one.
+			var step: float = float(other._def.get("aura_mult", 1.0)) - 1.0
+			var boost := 1.0 + step * float(other.level)
+			if stat == "damage":
+				aura_damage *= boost
+			elif stat == "attack_speed":
+				aura_speed *= boost
+	damage *= aura_damage
+	poison_dps *= aura_damage
+	fire_interval /= aura_speed
+
 	# --- run modifiers ---------------------------------------------------------
 	# The payoff for rebuilding rather than accumulating: these are applied fresh every
 	# time, so a modifier can be added — or, later, removed — without the tower drifting.
@@ -283,7 +327,9 @@ func _is_targetable(enemy: Enemy) -> bool:
 ## Launches one homing bolt at `target` with this tower's full effect payload. Public
 ## because BoltBehavior drives it; any future behavior that wants a projectile reuses it
 ## rather than duplicating the payload stamping below.
-func fire_bolt(target: Enemy) -> void:
+## `damage_mult` lets a behavior vary one shot without touching the tower's stats — Magic's
+## charged shot is the only caller that passes anything but 1.0.
+func fire_bolt(target: Enemy, damage_mult: float = 1.0) -> void:
 	_recoil = 1.0
 	Audio.play_tower_fire(id, element)
 	# Pull a bolt from the shared $Projectiles pool instead of instantiating one per shot;
@@ -291,7 +337,7 @@ func fire_bolt(target: Enemy) -> void:
 	if not is_instance_valid(_proj_pool):
 		_proj_pool = get_tree().current_scene.get_node("Projectiles")
 	var p := _proj_pool.acquire() as Projectile
-	p.setup(global_position, target, damage)
+	p.setup(global_position, target, damage * damage_mult)
 	p.color = element_color
 	p.element = element
 	p.hits_flying = can_hit_flying
@@ -304,6 +350,9 @@ func fire_bolt(target: Enemy) -> void:
 	p.poison_time = poison_time
 	p.stun_chance = stun_chance
 	p.stun_time = stun_time
+	p.execute_chance = execute_chance
+	p.gold_on_kill = gold_on_kill
+	p.life_on_kill_chance = life_on_kill_chance
 
 func _draw() -> void:
 	# Range indicator in the element's colour: quiet by default so a full board stays

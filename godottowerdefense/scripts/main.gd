@@ -76,6 +76,8 @@ func _ready() -> void:
 		_dump_waves()
 	if OS.get_cmdline_user_args().has("--dump-mods"):
 		_dump_mods()
+	if OS.get_cmdline_user_args().has("--dump-duals"):
+		_dump_duals()
 	# TEMPORARY: pops the choice screen immediately, so its _draw can be exercised in a
 	# rendered run without first playing three waves. Headless never calls _draw at all, so
 	# nothing else in the suite would catch a broken card layout.
@@ -281,6 +283,85 @@ func _fill_board() -> void:
 	print("--- FILL BOARD: placed %d towers over %d cells, all at max level ---"
 			% [i, grid.cells.size()])
 
+## Verification harness for the seven support duals. The risky one is the aura: it is the
+## first stat that depends on a tower OTHER than the one being computed, so the thing worth
+## proving is that it unwinds — a Fire tower next to a sold Well must return to exactly its
+## baseline, not to "baseline plus whatever rounding survived".
+##
+##   Godot.exe --headless --path <project> res://scenes/Main.tscn --quit-after 5 -- --dump-duals
+func _dump_duals() -> void:
+	print("--- DUAL DUMP BEGIN ---")
+	var subject := TOWER.instantiate() as Tower
+	towers_root.add_child(subject)
+	subject.setup_def("fire")
+	subject.position = Vector2(200, 200)
+	var report := func(label: String) -> void:
+		print("  %-26s fire dmg=%.4f int=%.5f" % [label, subject.damage, subject.fire_interval])
+	report.call("alone")
+
+	# In range: a Well is attack speed, a Moon is damage. Both at once must stack.
+	var well := TOWER.instantiate() as Tower
+	towers_root.add_child(well)
+	well.setup_def("well")
+	well.position = Vector2(300, 200)   # 100px away; Well's aura is 700 WC3 = 245px
+	Game.towers_changed.emit()
+	report.call("+well (in range)")
+	well.upgrade()
+	Game.towers_changed.emit()
+	report.call("+well at Lv2")
+	var moon := TOWER.instantiate() as Tower
+	towers_root.add_child(moon)
+	moon.setup_def("moon")
+	moon.position = Vector2(200, 300)
+	Game.towers_changed.emit()
+	report.call("+moon (damage aura)")
+	# Out of range must contribute nothing at all.
+	moon.position = Vector2(1200, 200)
+	Game.towers_changed.emit()
+	report.call("moon moved out of range")
+	towers_root.remove_child(well)
+	towers_root.remove_child(moon)
+	Game.towers_changed.emit()
+	report.call("both removed (= alone?)")
+	towers_root.remove_child(subject)
+	well.queue_free()
+	moon.queue_free()
+	subject.queue_free()
+
+	# Each probe is measured ALONE: queue_free() only takes effect at end of frame, so a
+	# tower merely freed is still a child and still projecting its aura. Two aura providers
+	# left in the tree would quietly inflate every row below. Remove, then free.
+	print("  --- payload of each support dual (measured in isolation) ---")
+	for id in ["moon", "sun", "well", "money", "life", "death", "magic"]:
+		var t := TOWER.instantiate() as Tower
+		towers_root.add_child(t)
+		t.setup_def(String(id))
+		print("    %-9s dmg=%-8.1f rng=%-7.1f int=%.2f exec=%.2f gold=%d life=%.3f aura=%s"
+				% [id, t.damage, t.tower_range, t.fire_interval, t.execute_chance,
+					t.gold_on_kill, t.life_on_kill_chance,
+					str(t._def.get("aura_stat", "-"))])
+		towers_root.remove_child(t)
+		t.queue_free()
+
+	# Magic's charge cycle: three ordinary shots, then one at charge_mult.
+	var magic := TOWER.instantiate() as Tower
+	towers_root.add_child(magic)
+	magic.setup_def("magic")
+	towers_root.remove_child(magic)
+	var charge := magic._behavior as ChargeBehavior
+	var cycle := ""
+	for _i in 9:
+		charge._charged_shots += 1
+		var every: int = int(magic._def.get("charge_shots", 4))
+		if charge._charged_shots >= every:
+			charge._charged_shots = 0
+			cycle += "X"      # charged
+		else:
+			cycle += "."
+	print("  magic shot cycle (X = charged): %s" % cycle)
+	magic.queue_free()
+	print("--- DUAL DUMP END ---")
+
 ## TEMPORARY verification harness for the tower-stats refactor. Prints every tower's
 ## resolved stats at each level so a pure refactor can be proved byte-identical against a
 ## saved baseline — there are no tests, and playing the game cannot catch a 6th-decimal
@@ -396,6 +477,9 @@ func _drop(world_pos: Vector2) -> void:
 	tower.setup_def(kind)
 	tower.position = center
 	towers_root.add_child(tower)
+	# Aura towers buff their neighbours, so every standing tower re-pulls its surroundings
+	# whenever the set changes. Emitted after the add_child so the new tower is included.
+	Game.towers_changed.emit()
 	Audio.play("build")
 	tutorial.on_tower_built()
 
@@ -444,6 +528,9 @@ func _upgrade_tower(tower: Tower) -> void:
 		Audio.play("denied")
 		return
 	tower.upgrade()
+	# An aura deepens with its provider's level, so upgrading one has to reach the towers
+	# around it — not just the tower that was tapped.
+	Game.towers_changed.emit()
 	Audio.play("upgrade")
 	tutorial.on_tower_upgraded()
 
@@ -454,6 +541,11 @@ func _sell_tower(tower: Tower) -> void:
 	if _hovered == tower:
 		_hovered = null  # it is about to be freed; never keep a dangling reference
 	tower.queue_free()
+	# queue_free() only takes effect at the end of the frame, so the sold tower is still a
+	# child right now — drop it from the tree first or the neighbours would re-pull an aura
+	# from a tower that no longer exists.
+	towers_root.remove_child(tower)
+	Game.towers_changed.emit()
 
 # --- Roguelite choice ----------------------------------------------------------
 
