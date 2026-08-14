@@ -32,7 +32,9 @@ const BOSS_EVERY := 10
 ## three waves running, which reads as the game being stuck rather than as variety — and a
 ## player who built to counter it gets a free ride. Cycling guarantees the counter-building
 ## decision comes up evenly.
-const ELEMENT_CYCLE: Array = ["fire", "water", "nature", "earth"]
+## Ordered around Game.ELEMENT_BEATS, so consecutive waves ask for adjacent answers on the
+## damage circle rather than jumping across it.
+const ELEMENT_CYCLE: Array = ["light", "darkness", "water", "fire", "nature", "earth"]
 
 ## An elite wave trades count for individual strength. Deliberately rare: it is a spike, and
 ## a spike stops reading as one if it happens often.

@@ -82,69 +82,118 @@ const GRID_COL_END := 1024.0     ## Last column centre (= PLAY_RIGHT - CELL_WIDT
 
 # --- Element tower definitions -------------------------------------------------
 # Every tower (base element or dual combination) is just a data entry.
-# All radii here are in pixels and scale with CELL_WIDTH: a range covers roughly
-# 2.5 cells, which is what keeps the number of towers able to hit any given point
-# of road (~10 when fully built) independent of how big the cells are. Change the
-# cell size and these have to move with it or the difficulty shifts. Fields:
-#   name, cost, color, damage, range, interval, can_hit_flying,
+#
+# The six base elements carry the ORIGINAL Element TD v2.0 numbers — see
+# docs/element-td-data.md, re-derivable with tools/extract_w3x.py. Two things about
+# that data drive everything else:
+#
+#   * `range` is in WARCRAFT III units, not pixels. Read sites multiply by
+#     Balance.WC3_RANGE_SCALE (tower.gd `_recompute`, main.gd's range preview), so
+#     retuning the board scale is one constant rather than six literals.
+#   * The six sit at nearly equal DPS and differ only in range and cadence. Fire is
+#     short and quick, Water is a stream of tiny hits, Light and Darkness reach four
+#     times as far as Fire, and Darkness buys the biggest single hit with a 2.75s
+#     wind-up. Do not "fix" one of these to match the others — the spread IS the design.
+#
+# DEPARTURE FROM THE MAP: in the original the six base elements are plain attackers,
+# and slow / poison / splash arrive only with the dual towers (Ice, Poison, Lava...).
+# We have not built the combination mechanic yet, so stripping the effects off Water,
+# Nature and Earth would leave the game with no crowd control at all. They keep their
+# effects until duals land; the numbers are faithful, the effect payloads are ours.
+#
+# `damage_tiers` lists the damage at each of the five tiers EXPLICITLY rather than
+# deriving them from a growth multiplier. Tiers 1-4 are exact x5 steps and Pure is x10,
+# but the map's Pure row was clearly hand-typed and lands a few points short of its own
+# rule (Pure Water is 12491 where x10 would give 12500). A multiplier cannot reproduce
+# that, and a faithful port reproduces the map including its typos. A def without this
+# key falls back to Balance.TIER_DAMAGE_MULT.
+#
+# Fields: name, cost, color, damage / damage_tiers, range, interval, can_hit_flying,
 #   splash_radius/splash_factor (AoE), slow_factor/slow_time (0..1 = slower),
 #   slow_splash (Lv2+ radius the slow ALSO spreads to — slow only, no damage),
 #   poison_dps/poison_time (damage over time),
 #   stun_chance/stun_time (chance to freeze the enemy in place). Missing = "off".
 const TOWER_DEFS := {
 	"fire": {
-		"name": "Fire", "cost": 40, "color": Color(0.95, 0.45, 0.18), "element": "fire",
-		"damage": 12.0, "range": 262.0, "interval": 0.45,
+		"name": "Fire", "cost": 50, "color": Color(0.95, 0.45, 0.18), "element": "fire",
+		"damage_tiers": [23, 115, 575, 2875, 28750],
+		"range": 500.0, "interval": 0.33,
 	},
 	"water": {
-		"name": "Water", "cost": 45, "color": Color(0.30, 0.60, 0.95), "element": "water",
-		"damage": 6.0, "range": 248.0, "interval": 0.6,
+		"name": "Water", "cost": 50, "color": Color(0.30, 0.60, 0.95), "element": "water",
+		"damage_tiers": [10, 50, 250, 1250, 12491],
+		"range": 750.0, "interval": 0.17,
 		"slow_factor": 0.55, "slow_time": 1.4,
 	},
 	"nature": {
-		"name": "Nature", "cost": 40, "color": Color(0.35, 0.80, 0.35), "element": "nature",
-		"damage": 4.0, "range": 248.0, "interval": 0.65,
+		"name": "Nature", "cost": 50, "color": Color(0.35, 0.80, 0.35), "element": "nature",
+		"damage_tiers": [66, 330, 1650, 8250, 82490],
+		"range": 750.0, "interval": 0.99,
 		"poison_dps": 10.0, "poison_time": 3.0,
 	},
 	"earth": {
-		"name": "Earth", "cost": 70, "color": Color(0.72, 0.55, 0.34), "element": "earth",
-		"damage": 30.0, "range": 225.0, "interval": 1.5, "can_hit_flying": false,
+		"name": "Earth", "cost": 50, "color": Color(0.72, 0.55, 0.34), "element": "earth",
+		"damage_tiers": [55, 275, 1375, 6875, 68741],
+		"range": 750.0, "interval": 1.0, "can_hit_flying": false,
 		"splash_radius": 108.0, "splash_factor": 0.5,
+	},
+	## Reaches four times as far as Fire for the same DPS. On our board that is over
+	## half the width — the map's boards are much larger, so this is the number whose
+	## meaning changes most in the port. Measure before tuning.
+	"light": {
+		"name": "Light", "cost": 50, "color": Color(1.0, 0.96, 0.72), "element": "light",
+		"damage_tiers": [50, 250, 1250, 6250, 62491],
+		"range": 2000.0, "interval": 0.99,
+	},
+	## Same reach as Light, and the largest single hit in the game — but it lands once
+	## every 2.75s, so a leaker that walks out of range between shots costs a full cycle.
+	"darkness": {
+		"name": "Darkness", "cost": 50, "color": Color(0.45, 0.28, 0.62), "element": "darkness",
+		"damage_tiers": [165, 825, 4125, 20625, 206241],
+		"range": 2000.0, "interval": 2.75,
 	},
 	# --- Locked: duals + Lightning -----------------------------------------------
 	# NOT BUILDABLE. Everything below is deliberately absent from TOWER_ORDER, so the
-	# palette shows only the four elements and none of these can be built, previewed or
+	# palette shows only the six elements and none of these can be built, previewed or
 	# paid for. The tuned numbers are kept because these return as in-run roguelite
 	# unlocks — a run will grant an id and the palette gains a slot, with no data to
 	# re-derive. Nothing reads them today; deleting the block would only cost the tuning.
-	"steam": {  # Fire + Water
+	#
+	# These are NOT yet ported to the map's numbers — their stats are still ours, only
+	# converted into WC3 range units so the field means the same thing everywhere.
+	# The map's own names for these recipes differ from ours in two places: its Ice is
+	# Water + LIGHT, and what we call Ice (Water + Nature) it calls Well. See
+	# docs/element-td-data.md before porting this block.
+	"steam": {  # Fire + Water; map calls this recipe Steam too
 		"name": "Steam", "cost": 110, "color": Color(0.70, 0.82, 0.95),
-		"damage": 16.0, "range": 270.0, "interval": 0.5,
+		"damage": 16.0, "range": 771.0, "interval": 0.5,
 		"slow_factor": 0.6, "slow_time": 1.2,
 	},
-	"lava": {  # Fire + Earth
+	"lava": {  # Fire + Earth; map agrees on the name
 		"name": "Lava", "cost": 150, "color": Color(0.92, 0.35, 0.20),
-		"damage": 40.0, "range": 240.0, "interval": 1.3, "can_hit_flying": false,
+		"damage": 40.0, "range": 686.0, "interval": 1.3, "can_hit_flying": false,
 		"splash_radius": 132.0, "splash_factor": 0.6,
 		"poison_dps": 8.0, "poison_time": 2.5,  # burn
 	},
-	"ice": {  # Water + Nature
+	"ice": {  # Water + Nature — the map calls this recipe Well; its Ice is Water + Light
 		"name": "Ice", "cost": 120, "color": Color(0.60, 0.90, 0.98),
-		"damage": 10.0, "range": 262.0, "interval": 0.7,
+		"damage": 10.0, "range": 749.0, "interval": 0.7,
 		"slow_factor": 0.4, "slow_time": 2.0,
 		"slow_splash": 135.0,  # from Lv2 the chill spreads to enemies within this radius of the target
 		"poison_dps": 6.0, "poison_time": 3.0,
 	},
-	"lightning": {  # chance to stun (freeze in place)
+	"lightning": {  # chance to stun; the map has Lightning as tier 2 of Light + Fire
 		"name": "Lightning", "cost": 70, "color": Color(1.0, 0.9, 0.25),
-		"damage": 14.0, "range": 278.0, "interval": 0.7,
+		"damage": 14.0, "range": 794.0, "interval": 0.7,
 		"stun_chance": 0.25, "stun_time": 1.2,
 	},
 }
-## The buildable roster, in palette order. The four elements ARE the game's identity, so
+## The buildable roster, in palette order. The six elements ARE the game's identity, so
 ## the palette is exactly them — no duals, no Lightning. Anything not listed here cannot be
 ## built, previewed or paid for, even though TOWER_DEFS still describes it.
-const TOWER_ORDER: Array = ["fire", "water", "nature", "earth"]
+## Ordered around the damage circle (see ELEMENT_BEATS) rather than alphabetically, so the
+## palette itself teaches which element answers which.
+const TOWER_ORDER: Array = ["light", "darkness", "water", "fire", "nature", "earth"]
 
 # --- Wave definitions ----------------------------------------------------------
 # Each wave picks an archetype from WAVE_TYPES; its stats = the base scaling
@@ -235,6 +284,12 @@ const UPGRADE_POOL: Array = [
 	{"id": "earth_dmg", "name": "Bedrock", "rarity": "common", "max_stacks": 4,
 		"element": "earth", "desc": "Earth towers deal +25% damage",
 		"effects": [{"stat": "damage", "op": "mult", "value": 1.25}]},
+	{"id": "light_dmg", "name": "Sunspear", "rarity": "common", "max_stacks": 4,
+		"element": "light", "desc": "Light towers deal +25% damage",
+		"effects": [{"stat": "damage", "op": "mult", "value": 1.25}]},
+	{"id": "darkness_dmg", "name": "Umbral Weight", "rarity": "common", "max_stacks": 4,
+		"element": "darkness", "desc": "Darkness towers deal +25% damage",
+		"effects": [{"stat": "damage", "op": "mult", "value": 1.25}]},
 	{"id": "all_range", "name": "Long Sight", "rarity": "common", "max_stacks": 3,
 		"desc": "All towers gain +18 range",
 		"effects": [{"stat": "range", "op": "add", "value": 18.0}]},
@@ -317,13 +372,22 @@ const WORKSHOP_DEFS: Array = [
 ]
 
 # --- Element matchup -----------------------------------------------------------
-# Simple 4-element cycle: each beats the next. A tower's damage element vs an
-# enemy's armor element gives a multiplier (see element_mult). Neutral ("") on
-# either side = x1, so Lightning / dual towers and early/air waves are unaffected.
-const ELEMENT_BEATS := {"fire": "nature", "nature": "earth", "earth": "water", "water": "fire"}
+# A tower's damage element vs an enemy's armour element gives a multiplier (see
+# element_mult). Neutral ("") on either side = x1, so Lightning / dual towers and
+# early/air waves are unaffected.
+## The damage circle from Element TD: Light -> Darkness -> Water -> Fire -> Nature ->
+## Earth -> Light. Each element beats the next one round; being beaten is the weak side.
+## With six elements every element still has exactly one strength and one weakness, so
+## the shape of the matchup is unchanged from the four-element version — there are just
+## more armour types a wave can wear, and two more answers to carry.
+const ELEMENT_BEATS := {
+	"light": "darkness", "darkness": "water", "water": "fire",
+	"fire": "nature", "nature": "earth", "earth": "light",
+}
 const ELEMENT_COLORS := {
 	"fire": Color(0.95, 0.45, 0.18), "water": Color(0.30, 0.60, 0.95),
 	"nature": Color(0.35, 0.80, 0.35), "earth": Color(0.72, 0.55, 0.34),
+	"light": Color(1.0, 0.96, 0.72), "darkness": Color(0.45, 0.28, 0.62),
 }
 const ELEMENT_STRONG := 1.75
 ## Mismatched element damage. Kept fairly gentle on purpose: at 0.6 a wave whose armour
