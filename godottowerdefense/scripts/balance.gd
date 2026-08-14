@@ -51,12 +51,28 @@ const MIN_FIRE_INTERVAL := 0.05
 ## Warcraft III distance -> our pixels. The map's ranges are 500 (Fire), 750 (Water,
 ## Nature, Earth) and 2000 (Light, Darkness); one scale keeps those ratios exact.
 ##
-## 0.35 puts Water/Nature/Earth at 262px, which is where our four towers already sat,
-## so the familiar elements do not move. It also puts Light and Darkness at 700px —
-## more than half the board. That is faithful (they are the long-range elements and
-## pay for it in cadence) but it is the single biggest playability unknown in the
-## port; measure it with --fill-board before tuning anything else.
+## 0.35 puts Water/Nature/Earth at 262px, which is where our four towers already sat, so
+## the familiar elements do not move. Fire lands at 175px — short, which is its identity.
+## Light and Darkness would land at 700px; MAX_TOWER_RANGE below is what stops them.
 const WC3_RANGE_SCALE := 0.35
+
+## Hard ceiling on a tower's reach, in pixels. THE ONE PLACE THE PORT IS NOT FAITHFUL
+## about a number, and it is here rather than in TOWER_DEFS on purpose: the definitions
+## keep the map's real 2000, and this says what our board can afford to honour.
+##
+## Light and Darkness reach 2000 WC3 units, four times Fire. On the original's very large
+## boards that is a trade; on any board small enough to fit a phone screen it is free
+## power, because the six elements sit at nearly equal DPS. `--dump-board` measured a
+## faithful 700px Light watching 88-93% of the road and covering the whole map with TWO
+## towers on every world size that fits on one screen — 1280x720, 1536x864, 1707x960 alike.
+## Growing the world until it was fair took four screens and broke the game to fix a
+## statistic, so the reach is capped instead.
+##
+## 380 was chosen by measurement, not feel: it puts the longest towers at 41% of the road
+## and four towers to cover it, next to Fire's 12% and sixteen. It also catches the
+## longest duals (Poison, Tech and Moon reach 481px uncapped), which face the same problem
+## for the same reason.
+const MAX_TOWER_RANGE := 380.0
 
 ## Gold cost of upgrading a tower from `level` to `level + 1`.
 ## `build_cost` is ignored: in the map every element shares one cost ladder regardless
@@ -107,24 +123,30 @@ const HP_GROWTH := 1.16
 ## selector: 50% on the easiest setting, +12.5 points per step. We have no difficulty
 ## screen, so this is the dial that stands in for one.
 const CREEP_HP_PERCENT := 1.0
-## Enemy speed is tied to the LENGTH OF THE ROAD, not to anything in the source map.
-## Both numbers went up 4x when the world grew to 2560x1440 and the road went from 3296px
-## to 12304px: at the old 60 + 6n an enemy needed 186 seconds — over three minutes — to
-## walk wave 1 from end to end, and the game crawled. 240 + 24n restores the old ~50s
-## crossing, and because road length and speed rose together each tower still gets about
-## the same number of seconds of fire per enemy, so the balance carries over.
+## Enemy speed is tied to the LENGTH OF THE ROAD, not to anything in the source map, and
+## nothing else in the game reads that length — so if the road changes, these move with it
+## or the pacing breaks silently. The road is 4496px; 90 + 9n gives a wave-1 crossing of
+## about 45 seconds, which is the pace the game was tuned at before the world moved.
+const BASE_SPEED_FLAT := 90.0
+const BASE_SPEED_LINEAR := 9.0
+## Enemies per wave. The map spawns a FLAT `16 + difficulty * 3` and never grows it — all
+## of its difficulty is in the hit-point curve. Faithful, and unplayable as an opening: 28
+## enemies at 0.9s apart means wave 1 spends 25 seconds just spawning before anything can
+## even be killed, and the first five waves took five and a half minutes to deliver almost
+## no progression.
 ##
-## If the road length changes again, these move with it or the pacing breaks silently —
-## nothing else in the game reads the road's total length.
-const BASE_SPEED_FLAT := 240.0
-const BASE_SPEED_LINEAR := 24.0
-## Enemies per wave. The map spawns `16 + difficulty * 3` and does NOT grow the count
-## with the level — every wave from 1 to 60 is the same size, and all the difficulty
-## lives in the hit-point curve. Ours was `5 + 2.5 * wave`, which is why late waves
-## used to be long rather than hard.
-const BASE_COUNT_FLAT := 28
-## Gold per kill: `max(wave / 3, 1.10^(wave-1))`. The exponential overtakes the linear
-## floor at wave 5 and is the whole economy after that.
+## So the count ramps to the map's number instead of starting there. Wave 1 is 9 enemies
+## and wave 17 onwards is the full 28, which keeps the map's late-game shape while giving
+## the opening a pace a phone session can absorb.
+const BASE_COUNT_FLAT := 9
+const BASE_COUNT_LINEAR := 1.2
+const BASE_COUNT_MAX := 28
+## Gold per kill: the map's `max(wave / 3, 1.10^(wave-1))`, plus a flat floor of ours.
+##
+## The exponential is right for the long game but pays ONE gold a kill until wave 5, which
+## against a 50-gold tower meant the first five waves bought about three towers between
+## them — the board sat empty and nothing the player did seemed to matter. REWARD_FLAT
+## lifts the opening without touching the curve that takes over from wave 8 or so.
 const BOUNTY_GROWTH := 1.10
 const REWARD_FLAT := 3
 const SPAWN_INTERVAL_START := 0.9
@@ -149,11 +171,11 @@ func wave_hp(wave: int) -> float:
 func wave_speed(wave: int) -> float:
 	return BASE_SPEED_FLAT + wave * BASE_SPEED_LINEAR
 
-func wave_count(_wave: int) -> int:
-	return BASE_COUNT_FLAT
+func wave_count(wave: int) -> int:
+	return mini(BASE_COUNT_MAX, BASE_COUNT_FLAT + int(float(wave) * BASE_COUNT_LINEAR))
 
 func wave_reward(wave: int) -> int:
-	return int(maxf(float(wave) / 3.0, pow(BOUNTY_GROWTH, wave - 1)))
+	return REWARD_FLAT + int(maxf(float(wave) / 3.0, pow(BOUNTY_GROWTH, wave - 1)))
 
 func spawn_interval(wave: int) -> float:
 	return maxf(SPAWN_INTERVAL_MIN, SPAWN_INTERVAL_START - wave * SPAWN_INTERVAL_DECAY)

@@ -97,27 +97,33 @@ Both workflows run automatically on push to `main`:
 
 ## The board is measured, not eyeballed
 
-`Game.WORLD_SIZE` is 2560x1440 — four screens — and the camera pans across it. That size
-is a **measurement**, not taste. Run `--dump-board` before and after touching `Game.PATH`,
-`GRID_ROWS`, `CELL_WIDTH` or `Balance.WC3_RANGE_SCALE`; it reports how much of the road one
+`Game.WORLD_SIZE` is 1536x864 and the camera frames **all** of it at one zoom — there is no
+panning. Run `--dump-board` before and after touching `Game.PATH`, `GRID_ROWS`, `CELL_WIDTH`,
+`Balance.WC3_RANGE_SCALE` or `Balance.MAX_TOWER_RANGE`; it reports how much of the road one
 tower watches and how many towers it takes to cover 95% of it.
 
-The history is worth keeping because two obvious fixes are both wrong:
+The history matters because three plausible fixes are all wrong, and the last one was
+shipped for a commit before play proved it:
 
-- On the old 1280x720 world, ONE Light tower watched 92% of the road and two covered the
-  map, with the median cell at 87% — half the roster had no placement decision at all.
-- **Folding the path tighter makes it worse.** Five legs instead of three lengthened the
-  road by 53%, but the legs then sat closer together and one 700px circle caught more of
-  them; Light still covered the map with two towers, and the tight folds left room for
-  only four buildable cells.
-- **Shrinking `WC3_RANGE_SCALE` breaks Fire long before it fixes Light.** At the scale
-  where Light becomes reasonable, Fire's range no longer reaches the road from an
-  adjacent cell (a cell centre sits ~84px from the road centre-line).
+- On a one-screen board a faithful 700px Light watches ~90% of the road and covers the map
+  with **two** towers. The six elements sit at near-equal DPS, so on a small board 4x range
+  is simply free power.
+- **Folding the path tighter makes it worse** — the legs end up closer together and one big
+  circle catches more of them, while the tight folds leave almost no buildable cells.
+- **Shrinking `WC3_RANGE_SCALE` breaks Fire long before it fixes Light**, because a cell
+  centre sits ~84px from the road centre-line and Fire has to reach that far to work at all.
+- **Growing the world until the range is fair takes four screens, and that is not a game.**
+  It was tried: 2560x1440 put Light at a healthy 48%, and made the rest unplayable — a
+  quarter of the board visible at a time, leaks happening off-screen where the only feedback
+  is a shake, and 196 cells against an economy that pays for 18 by wave 10.
 
-So the box had to grow. **Enemy speed is tied to the road length** (`Balance.BASE_SPEED_*`)
-and nothing else reads it: at the old speed a wave-1 enemy took 186 seconds to walk the
-12304px road. If the road length changes, that constant moves with it or the pacing breaks
-silently.
+So the reach is capped (`Balance.MAX_TOWER_RANGE`) and the world stays on one screen. That
+cap is the only number in the port that is not the map's; the definitions still carry the
+real 2000 so nothing is lost.
+
+Two constants are tied to the road length and nothing else reads it, so they move together
+or the pacing breaks silently: `Balance.BASE_SPEED_*` (at the wrong value a wave-1 enemy
+took 186 seconds to walk the road) and the count ramp `BASE_COUNT_*`.
 
 ## Architecture, and where to add things
 

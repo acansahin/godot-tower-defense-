@@ -161,7 +161,22 @@ hand-authored rather than generated.
 Two class interactions matter and match rules we already have: **mechanical** is
 immune to Poison, and **undead / mechanical** cannot be instant-killed by Death.
 
-## 5. What could not be extracted
+## 5. Where the port deviates
+
+Everything above is reproduced as written, with one exception worth stating here rather
+than burying in the code: **`Balance.MAX_TOWER_RANGE` caps every tower at 380px.**
+
+Light and Darkness reach 2000 WC3 units, four times Fire. That is a real trade on the
+original's very large boards. On a board that fits a phone screen it is free power,
+because all six elements sit at near-equal DPS — `--dump-board` measured one faithful
+Light tower watching ~90% of the road and two covering the whole map, on every world size
+small enough to play on. The definitions in `Game.TOWER_DEFS` still carry the real 2000;
+only what the board honours is capped.
+
+Damage, cost, the five tiers, the recipes, the hit-point curve and the bounty growth are
+all the map's.
+
+## 6. What could not be extracted
 
 - **The element damage matchup.** The maps use Warcraft III's built-in attack-type
   versus armour-type table rather than a scripted multiplier, so there is no number

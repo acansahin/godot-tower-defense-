@@ -4,8 +4,8 @@ A tiny, fully-playable 2D tower-defense prototype inspired by the Warcraft III
 custom map **Element TD**. Built with typed GDScript, deliberately small and
 readable rather than production-architected.
 
-When you press **Play** you get: a grassy 2560x1440 world you pan around by dragging,
-a five-leg cobblestone road, a faint build grid of 196 cells beside it, and an **endless** run of enemies drawn from a data table
+When you press **Play** you get: a grassy 1536x864 world shown whole on one screen,
+a three-leg cobblestone road, a faint build grid of 56 cells beside it, and an **endless** run of enemies drawn from a data table
 of **creep archetypes** (including flyers, tanks, swarms, splitters, regenerators, periodic
 **bosses** and **elite** waves). The buildable roster is the six elements —
 **Light / Darkness / Water / Fire / Nature / Earth**, with the stats of the original
@@ -75,10 +75,9 @@ code with primitive shapes and colors.
   board stays reachable with a thumb on a phone.
 - Towers always target the enemy **closest to the exit** ("First") — the one most likely
   to cost you a life. There is no per-tower target picker.
-- **The world is four screens.** Drag anywhere on bare ground to pan the camera; it is
-  clamped to the world so you can never scroll off the edge. Dragging from the palette
-  still places a tower, and tapping a tower still upgrades or sells it, so panning never
-  competes with either.
+- **The whole board is on screen at once.** The world is slightly larger than the design
+  viewport and the camera zooms to frame all of it, so there is no scrolling and no leak
+  you cannot see.
 - **Time controls** sit in the bottom-left corner: **Pause** (or **Space**) freezes
   everything, and the speed button (or **F**) cycles **1x → 2x → 3x**.
 - **Ground-only towers** (Earth) can't hit flyers; the other five can.
@@ -371,8 +370,9 @@ editing three files and hunting for un-named literals; it is now one file.
 | Immune archetype | `game.gd` `WAVE_TYPES` + `enemy.gd` `cc_immune` | ignores **slow and stun**, but **not poison** — poison is damage rather than crowd control, so Nature stays the answer to these waves instead of the whole roster going dead |
 | Regen archetype | `game.gd` `WAVE_TYPES` + `enemy.gd` `REGEN_DELAY` | heals 3.5% of max HP/s, but **paused for 2s after taking any damage** — so it only heals through gaps in your coverage instead of setting a hard DPS threshold. Its "+" marker dims while suppressed. Poison ticks count as damage, so a single Nature tower shuts the healing off entirely |
 | Prep time between waves | `wave_manager.gd` `PREP_TIME` | 4s (skippable via the HUD's Send Next button, for a small gold bonus) |
-| Enemy speed | `balance.gd` `BASE_SPEED_*` | `240 + 24·n` px/s. Tied to the ROAD LENGTH, not to the map: at the old `60 + 6n` a wave-1 enemy needed 186s to walk the 12304px road. Move these if the road length ever changes |
-| Wave scaling (`n` = wave) | `balance.gd` | HP `75 × 1.16^(n-1)` and a **flat** count of 28 — both from the map, where difficulty lives entirely in the HP curve and never in wave size. Reward `max(n/3, 1.10^(n-1))`, speed `60 + 6·n`, each × the archetype's multipliers |
+| Enemy speed | `balance.gd` `BASE_SPEED_*` | `90 + 9·n` px/s, giving a ~45s wave-1 crossing. Tied to the ROAD LENGTH and nothing else reads it, so move these if the road changes |
+| Tower range cap | `balance.gd` `MAX_TOWER_RANGE` | 380px. **The only unfaithful number in the port.** Light and Darkness reach 2000 WC3 units (700px), which on a one-screen board covers ~90% of the road with 2 towers; the defs keep the real 2000 and this caps what the board honours |
+| Wave scaling (`n` = wave) | `balance.gd` | HP `75 × 1.16^(n-1)` from the map. Count ramps `9 + 1.2·n` to the map's flat 28 — starting at 28 meant wave 1 spent 25s just spawning. Reward `3 + max(n/3, 1.10^(n-1))`; the flat 3 is ours, because the map's curve pays 1 gold a kill until wave 5, speed `60 + 6·n`, each × the archetype's multipliers |
 | Flyers (non-Air waves) | `wave_manager.gd` | from wave 3, 15% chance per enemy (halved on top of Air waves existing); `make_flying()` gives HP ×0.65, speed ×1.25 |
 | Bosses | `game.gd` `WAVES` (`"boss": true` per entry) | HP ×6, speed ×0.6, reward ×10, costs 10 lives |
 | Economy: interest | `balance.gd` `INTEREST_RATE`/`INTEREST_CAP` | 2.5% of banked gold per wave cleared, capped at 400. The map pays 2.5% every 15s and has no cap; the cap is ours, so that hoarding gold never beats building |

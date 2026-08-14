@@ -22,10 +22,6 @@ var _drag_kind: String = ""  ## Tower type being dragged from the palette ("" = 
 var _hovered: Tower = null   ## Tower under the mouse, drawn with a clear range ring.
 var _shake: float = 0.0      ## Current camera shake magnitude in px; decays to 0.
 var _auto_pick: bool = false ## Harness only (--fill-board): auto-resolve upgrade choices.
-## Camera drag. The world is four screens, so the player has to be able to move around it;
-## a press that lands on a tower acts on that tower, anything else starts a pan, so panning
-## never competes with tap-to-upgrade.
-var _panning: bool = false
 
 func _ready() -> void:
 	get_tree().paused = false
@@ -60,13 +56,13 @@ func _ready() -> void:
 	wave_manager.choice_due.connect(_on_choice_due)
 	upgrade_choice.chosen.connect(_on_upgrade_chosen)
 
-	# Clamp the camera to the world. Godot keeps the VISIBLE RECT inside these, so the
-	# player can never scroll past the edge into empty space — no manual clamping needed,
-	# and nothing to keep in sync if the world changes size.
-	camera.limit_left = 0
-	camera.limit_top = 0
-	camera.limit_right = int(Game.WORLD_SIZE.x)
-	camera.limit_bottom = int(Game.WORLD_SIZE.y)
+	# Frame the WHOLE world, once. There is no panning: a tower defense you have to scroll
+	# is one where the leak that just cost you a life happened somewhere you were not
+	# looking. The world is a 16:9 box like the viewport, so a single zoom fits it exactly
+	# on both axes with nothing cropped and no letterboxing.
+	camera.position = Game.WORLD_SIZE * 0.5
+	camera.zoom = Vector2.ONE * minf(Game.SCREEN_SIZE.x / Game.WORLD_SIZE.x,
+			Game.SCREEN_SIZE.y / Game.WORLD_SIZE.y)
 
 	wave_manager.enemies_root = enemies_root
 	wave_manager.start(run_seed)
@@ -333,7 +329,10 @@ func _dump_board() -> void:
 	print("  %-10s %7s %8s %8s  %s" % ["element", "range", "best 1", "median", "cover 95%"])
 	for tid in Game.TOWER_ORDER:
 		var def: Dictionary = Game.TOWER_DEFS[String(tid)]
-		var r: float = float(def.get("range", 0.0)) * Balance.WC3_RANGE_SCALE
+		# Same formula as Tower._recompute, cap included — a harness that measured the
+		# uncapped range would report a board nobody plays on.
+		var r: float = minf(float(def.get("range", 0.0)) * Balance.WC3_RANGE_SCALE,
+				Balance.MAX_TOWER_RANGE)
 		var r_sq := r * r
 		# Which samples each cell can see. Built once, then reused for both statistics.
 		var seen: Array[PackedInt32Array] = []
@@ -513,19 +512,10 @@ func _on_drag_started(kind: String) -> void:
 ## motion instead highlights whichever tower is under the cursor.
 func _input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion:
-		if _panning:
-			# Screen delta IS world delta: the camera is never zoomed. Dragging pulls the
-			# world under the finger, so the camera moves the opposite way.
-			camera.position -= (event as InputEventMouseMotion).relative
-			return
 		if _drag_kind == "":
 			_update_hover(get_global_mouse_position())
 		else:
 			_update_ghost(get_global_mouse_position())
-		return
-	if _panning and event is InputEventMouseButton \
-			and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
-		_panning = false
 		return
 	if _drag_kind == "":
 		return
@@ -560,7 +550,8 @@ func _update_ghost(world_pos: Vector2) -> void:
 	# TOWER_DEFS stores range in Warcraft III units — scale to pixels, exactly as
 	# tower.gd's _recompute does, or the ghost circle lies about the tower's reach.
 	preview.show_at(cell, _cell_is_free(center) and Game.gold >= _cost(_drag_kind),
-			d.get("range", 160.0) * Balance.WC3_RANGE_SCALE, d.get("color", Color.WHITE))
+			minf(d.get("range", 160.0) * Balance.WC3_RANGE_SCALE, Balance.MAX_TOWER_RANGE),
+			d.get("color", Color.WHITE))
 
 func _drop(world_pos: Vector2) -> void:
 	var kind := _drag_kind
@@ -615,11 +606,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	var world := get_global_mouse_position()
 	var cell: Rect2 = grid.snap(world)
-	var tower: Tower = null if cell.size == Vector2.ZERO \
-			else _tower_on_cell(cell.get_center())
+	if cell.size == Vector2.ZERO:
+		return
+	var tower := _tower_on_cell(cell.get_center())
 	if tower == null:
-		# Bare ground or an empty cell: this press is a camera drag, not an action.
-		_panning = true
 		return
 	if tower.is_sell_hit(world):
 		_sell_tower(tower)
