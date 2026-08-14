@@ -22,6 +22,10 @@ var _drag_kind: String = ""  ## Tower type being dragged from the palette ("" = 
 var _hovered: Tower = null   ## Tower under the mouse, drawn with a clear range ring.
 var _shake: float = 0.0      ## Current camera shake magnitude in px; decays to 0.
 var _auto_pick: bool = false ## Harness only (--fill-board): auto-resolve upgrade choices.
+## Camera drag. The world is four screens, so the player has to be able to move around it;
+## a press that lands on a tower acts on that tower, anything else starts a pan, so panning
+## never competes with tap-to-upgrade.
+var _panning: bool = false
 
 func _ready() -> void:
 	get_tree().paused = false
@@ -55,6 +59,14 @@ func _ready() -> void:
 	# whether the run is running — the choice screen itself only reports what was picked.
 	wave_manager.choice_due.connect(_on_choice_due)
 	upgrade_choice.chosen.connect(_on_upgrade_chosen)
+
+	# Clamp the camera to the world. Godot keeps the VISIBLE RECT inside these, so the
+	# player can never scroll past the edge into empty space — no manual clamping needed,
+	# and nothing to keep in sync if the world changes size.
+	camera.limit_left = 0
+	camera.limit_top = 0
+	camera.limit_right = int(Game.WORLD_SIZE.x)
+	camera.limit_bottom = int(Game.WORLD_SIZE.y)
 
 	wave_manager.enemies_root = enemies_root
 	wave_manager.start(run_seed)
@@ -501,10 +513,19 @@ func _on_drag_started(kind: String) -> void:
 ## motion instead highlights whichever tower is under the cursor.
 func _input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion:
+		if _panning:
+			# Screen delta IS world delta: the camera is never zoomed. Dragging pulls the
+			# world under the finger, so the camera moves the opposite way.
+			camera.position -= (event as InputEventMouseMotion).relative
+			return
 		if _drag_kind == "":
 			_update_hover(get_global_mouse_position())
 		else:
 			_update_ghost(get_global_mouse_position())
+		return
+	if _panning and event is InputEventMouseButton \
+			and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+		_panning = false
 		return
 	if _drag_kind == "":
 		return
@@ -594,10 +615,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	var world := get_global_mouse_position()
 	var cell: Rect2 = grid.snap(world)
-	if cell.size == Vector2.ZERO:
-		return
-	var tower := _tower_on_cell(cell.get_center())
+	var tower: Tower = null if cell.size == Vector2.ZERO \
+			else _tower_on_cell(cell.get_center())
 	if tower == null:
+		# Bare ground or an empty cell: this press is a camera drag, not an action.
+		_panning = true
 		return
 	if tower.is_sell_hit(world):
 		_sell_tower(tower)

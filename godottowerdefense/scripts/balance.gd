@@ -107,8 +107,17 @@ const HP_GROWTH := 1.16
 ## selector: 50% on the easiest setting, +12.5 points per step. We have no difficulty
 ## screen, so this is the dial that stands in for one.
 const CREEP_HP_PERCENT := 1.0
-const BASE_SPEED_FLAT := 60.0
-const BASE_SPEED_LINEAR := 6.0
+## Enemy speed is tied to the LENGTH OF THE ROAD, not to anything in the source map.
+## Both numbers went up 4x when the world grew to 2560x1440 and the road went from 3296px
+## to 12304px: at the old 60 + 6n an enemy needed 186 seconds — over three minutes — to
+## walk wave 1 from end to end, and the game crawled. 240 + 24n restores the old ~50s
+## crossing, and because road length and speed rose together each tower still gets about
+## the same number of seconds of fire per enemy, so the balance carries over.
+##
+## If the road length changes again, these move with it or the pacing breaks silently —
+## nothing else in the game reads the road's total length.
+const BASE_SPEED_FLAT := 240.0
+const BASE_SPEED_LINEAR := 24.0
 ## Enemies per wave. The map spawns `16 + difficulty * 3` and does NOT grow the count
 ## with the level — every wave from 1 to 60 is the same size, and all the difficulty
 ## lives in the hit-point curve. Ours was `5 + 2.5 * wave`, which is why late waves

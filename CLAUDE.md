@@ -95,6 +95,30 @@ Both workflows run automatically on push to `main`:
   rotation on its own: Chrome only honours an orientation lock in fullscreen, and iOS
   Safari not at all.
 
+## The board is measured, not eyeballed
+
+`Game.WORLD_SIZE` is 2560x1440 — four screens — and the camera pans across it. That size
+is a **measurement**, not taste. Run `--dump-board` before and after touching `Game.PATH`,
+`GRID_ROWS`, `CELL_WIDTH` or `Balance.WC3_RANGE_SCALE`; it reports how much of the road one
+tower watches and how many towers it takes to cover 95% of it.
+
+The history is worth keeping because two obvious fixes are both wrong:
+
+- On the old 1280x720 world, ONE Light tower watched 92% of the road and two covered the
+  map, with the median cell at 87% — half the roster had no placement decision at all.
+- **Folding the path tighter makes it worse.** Five legs instead of three lengthened the
+  road by 53%, but the legs then sat closer together and one 700px circle caught more of
+  them; Light still covered the map with two towers, and the tight folds left room for
+  only four buildable cells.
+- **Shrinking `WC3_RANGE_SCALE` breaks Fire long before it fixes Light.** At the scale
+  where Light becomes reasonable, Fire's range no longer reaches the road from an
+  adjacent cell (a cell centre sits ~84px from the road centre-line).
+
+So the box had to grow. **Enemy speed is tied to the road length** (`Balance.BASE_SPEED_*`)
+and nothing else reads it: at the old speed a wave-1 enemy took 186 seconds to walk the
+12304px road. If the road length changes, that constant moves with it or the pacing breaks
+silently.
+
 ## Architecture, and where to add things
 
 Everything is **data-driven**. There is exactly one generic `Tower`, `Enemy` and

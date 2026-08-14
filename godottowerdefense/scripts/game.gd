@@ -17,25 +17,45 @@ signal shake_requested(amount: float)
 ## the set changes. Emitted by Main, which owns those three actions.
 signal towers_changed
 
+## The design viewport — what the player can see at once. UI (the choice screen, the
+## Workshop) is drawn against this; the WORLD is bigger and the camera pans across it.
 const SCREEN_SIZE := Vector2(1280, 720)
+## The playable world. Twice the viewport in each direction, so the camera shows a quarter
+## of it and Main clamps panning to these bounds.
+##
+## Sized by measurement, not taste. Tower ranges are the source map's (Light and Darkness
+## reach 700px) and that map's boards are far larger than a phone screen. On the old
+## 1280x720 world `--dump-board` measured ONE Light tower watching 92% of the road and two
+## covering the whole map, with the median cell at 87% — there was no placement decision
+## left for half the roster. Folding the path tighter made it worse (a big circle catches
+## more folds) and shrinking the range scale broke Fire long before it fixed Light, so the
+## box itself had to grow. At 2560x1440 Light watches 48% and needs 4 towers for the road.
+const WORLD_SIZE := Vector2(2560, 1440)
 
 # Waypoints that define the S-shaped road. Enemies walk these in order.
 # First point is off-screen left (spawn), last is off-screen right (exit).
 #
-# The two bend x's (840, 232) are not round numbers, and the exact values matter:
-# each one is placed so that TWO columns of cells fit on the narrow outer side of
-# the turn instead of one. Cells tile outward from a bend at ROAD_HALF +
-# CELL_WIDTH*0.5 = 88 and then step by 96, and grid.gd drops any that would fall
-# off the board, so the second column lands exactly on the boundary — 840 puts it
-# at 1024, whose right edge is PLAY_RIGHT; 232 puts it at 48, whose left edge is 0.
+# A five-leg serpentine across the 2560x1440 world: legs at y = 176 / 444 / 712 /
+# 980 / 1248, joined by alternating bends at x = 232 and 2328. 12304px of road.
+#
+# The bend x's are exact and matter: each is placed so that TWO columns of cells fit
+# on the narrow outer side of the turn instead of one. Cells tile outward from a bend
+# at ROAD_HALF + CELL_WIDTH*0.5 = 88 and then step by 96, and grid.gd drops any that
+# would fall off the board, so the second column lands exactly on the boundary — 232
+# puts it at 48, whose left edge is 0; 2328 puts it at 2512, whose right edge is 2560.
 # Move either bend 8px the wrong way and that outer column silently disappears.
 const PATH: Array = [
-	Vector2(-144, 112),
-	Vector2(840, 112),
-	Vector2(840, 368),
-	Vector2(232, 368),
-	Vector2(232, 624),
-	Vector2(1424, 624),
+	Vector2(-144, 176),
+	Vector2(2328, 176),
+	Vector2(2328, 444),
+	Vector2(232, 444),
+	Vector2(232, 712),
+	Vector2(2328, 712),
+	Vector2(2328, 980),
+	Vector2(232, 980),
+	Vector2(232, 1248),
+	Vector2(2328, 1248),
+	Vector2(2704, 1248),
 ]
 
 # Grid placement: towers snap to cells drawn faintly on the grass, flush against
@@ -56,30 +76,31 @@ const ROAD_CLEARANCE := 82.0
 ## the screen, so the grid stops short of it — otherwise cells sit under the panel
 ## where they cannot be seen and (because the panel eats the click) the towers on
 ## them could never be upgraded or sold.
-const PLAY_RIGHT := 1072.0
+const PLAY_RIGHT := 2512.0
 
-# Build-grid rows as Vector2(centre_y, cell_height). The three horizontal roads sit
-# at y = 112 / 368 / 624, and the rows come in PAIRS filling the gap between them.
+# Build-grid rows as Vector2(centre_y, cell_height). Two rows fill the gap between
+# each pair of horizontal legs, giving 196 buildable cells.
 #
 # The pairing is the whole point: a bend's vertical leg runs from one horizontal road
 # to the next, so the number of rows it passes is the number of cells you get down the
 # narrow outer side of that turn. One row per gap gave a 2x1 corner; two gives 2x2.
 #
-# The vertical budget is exact and leaves no room to be generous. Between the HUD bar
-# (ends at 40) and the bottom-corner buttons (start at 664) there are 624px, and
-# 4 rows x 88 + 3 roads x 80 = 592 uses all but 32 of it. That last 32 is grass above
-# the top road, and it is load-bearing: without it a boss on the top road would draw
-# its health bar up behind the HUD. Rows are 88 rather than 96 tall to pay for it —
-# still ~44 CSS px on a phone, so the tap target survives.
+# Legs are 268 apart, which leaves 188 of grass between two road edges — two 88px rows
+# and 12px of slack. Rows stay 88 rather than 96 tall because the height buys the slack
+# and the width is what carries the tap target: a 96px-wide cell is still ~48 CSS px on
+# a phone. The HUD no longer constrains this the way it did on the old one-screen board;
+# the camera pans, so nothing is permanently trapped under a bar.
 const GRID_ROWS: Array = [
-	Vector2(196.0, 88.0), Vector2(284.0, 88.0),  # between the top & middle roads
-	Vector2(452.0, 88.0), Vector2(540.0, 88.0),  # between the middle & bottom roads
+	Vector2(260.0, 88.0), Vector2(348.0, 88.0),    # between legs 1 and 2
+	Vector2(528.0, 88.0), Vector2(616.0, 88.0),    # 2 and 3
+	Vector2(796.0, 88.0), Vector2(884.0, 88.0),    # 3 and 4
+	Vector2(1064.0, 88.0), Vector2(1152.0, 88.0),  # 4 and 5
 ]
 ## Column bounds for a row NO vertical road crosses. Every row in the current layout is
 ## crossed by a bend and so tiles outward from it instead; these stay for a row placed
 ## clear of both bends.
 const GRID_COL_START := 64.0     ## First column centre.
-const GRID_COL_END := 1024.0     ## Last column centre (= PLAY_RIGHT - CELL_WIDTH * 0.5).
+const GRID_COL_END := 2464.0     ## Last column centre (= PLAY_RIGHT - CELL_WIDTH * 0.5).
 
 # START_GOLD / START_LIVES moved to the Balance autoload with the rest of the economy —
 # see scripts/balance.gd. This file keeps the map geometry and the data tables.

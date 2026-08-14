@@ -1,7 +1,11 @@
 extends Node2D
 ## Draws the whole static level: layered grass background with scattered flora,
-## and the cobblestone S-road (drop shadow, shaded border, varied stones, and
+## and the cobblestone serpentine road (drop shadow, shaded border, varied stones, and
 ## direction chevrons) built from Game.PATH. Pure _draw(), no nodes needed.
+##
+## Everything here is sized to Game.WORLD_SIZE, not the viewport: the world is four
+## screens and the camera pans across it, so drawing to the screen size would leave
+## three quarters of the board as empty background.
 
 # Grass decoration is scattered procedurally from a fixed seed rather than hand-placed.
 # Same seed = same layout every run, so it is still "art" and not noise — but it costs
@@ -11,11 +15,16 @@ const DECOR_SEED := 20250812
 const DECOR_CLEARANCE := 24.0  ## Extra gap kept between a decoration and the road edge.
 
 # How many of each to scatter, and the minimum gap from the road for each kind.
+# Counts are per screen-sized area and multiplied up by DECOR_DENSITY below, so the
+# world growing does not silently thin the decoration out to nothing.
 const N_PATCHES_DARK := 5
 const N_PATCHES_LIGHT := 5
 const N_BUSHES := 6
 const N_ROCKS := 5
 const N_FLOWERS := 10
+## World area in screens. 2560x1440 against a 1280x720 viewport is 4.
+const DECOR_DENSITY := int((Game.WORLD_SIZE.x * Game.WORLD_SIZE.y)
+		/ (Game.SCREEN_SIZE.x * Game.SCREEN_SIZE.y))
 
 var _patches_dark: PackedVector2Array
 var _patches_light: PackedVector2Array
@@ -27,11 +36,11 @@ func _ready() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = DECOR_SEED
 	# Big blobs need to clear the road by their own radius; small ones only by a hair.
-	_patches_dark = _scatter(rng, N_PATCHES_DARK, 86.0)
-	_patches_light = _scatter(rng, N_PATCHES_LIGHT, 76.0)
-	_bushes = _scatter(rng, N_BUSHES, 20.0)
-	_rocks = _scatter(rng, N_ROCKS, 14.0)
-	_flowers = _scatter(rng, N_FLOWERS, 6.0)
+	_patches_dark = _scatter(rng, N_PATCHES_DARK * DECOR_DENSITY, 86.0)
+	_patches_light = _scatter(rng, N_PATCHES_LIGHT * DECOR_DENSITY, 76.0)
+	_bushes = _scatter(rng, N_BUSHES * DECOR_DENSITY, 20.0)
+	_rocks = _scatter(rng, N_ROCKS * DECOR_DENSITY, 14.0)
+	_flowers = _scatter(rng, N_FLOWERS * DECOR_DENSITY, 6.0)
 	queue_redraw()
 
 ## `count` points on the grass, each at least `clear` px of its own bulk away from the
@@ -43,15 +52,15 @@ func _scatter(rng: RandomNumberGenerator, count: int, clear: float) -> PackedVec
 	var tries := 0
 	while out.size() < count and tries < count * 40:
 		tries += 1
-		var p := Vector2(rng.randf_range(0.0, Game.SCREEN_SIZE.x),
-				rng.randf_range(0.0, Game.SCREEN_SIZE.y))
+		var p := Vector2(rng.randf_range(0.0, Game.WORLD_SIZE.x),
+				rng.randf_range(0.0, Game.WORLD_SIZE.y))
 		if Game.dist_to_road(p) >= min_dist:
 			out.append(p)
 	return out
 
 func _draw() -> void:
-	var w := Game.SCREEN_SIZE.x
-	var h := Game.SCREEN_SIZE.y
+	var w := Game.WORLD_SIZE.x
+	var h := Game.WORLD_SIZE.y
 
 	# Grass with a soft top-light / bottom-shade gradient.
 	draw_rect(Rect2(0, 0, w, h), Color(0.30, 0.55, 0.24))
