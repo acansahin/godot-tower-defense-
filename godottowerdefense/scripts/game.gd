@@ -12,6 +12,10 @@ signal game_over
 ## Camera kick in pixels. Broadcast here so an Enemy can ask for one without knowing
 ## anything about the level's camera; Main owns the actual Camera2D.
 signal shake_requested(amount: float)
+## A tower was built, sold or upgraded. Only the aura towers care: a tower's stats depend
+## on which aura providers stand near it, so every tower re-pulls its neighbourhood when
+## the set changes. Emitted by Main, which owns those three actions.
+signal towers_changed
 
 const SCREEN_SIZE := Vector2(1280, 720)
 
@@ -205,6 +209,56 @@ const TOWER_DEFS := {
 		"name": "Electricity", "cost": 275, "color": Color(1.0, 0.9, 0.25),
 		"damage": 570.0, "range": 1200.0, "interval": 0.8,
 		"stun_chance": 0.2, "stun_time": 0.8,
+	},
+
+	# --- Support and economy duals -------------------------------------------------
+	# These are the seven the generic damage payload could not express. Six of them are
+	# still pure data — an aura is read by its NEIGHBOURS (see Tower._recompute), an
+	# execute and an on-kill payout are read by the projectile — so only Magic, whose
+	# shots differ from one another, needed a TowerBehavior.
+	#
+	# In the map Moon and Sun buff "nearby Tidal Towers" specifically. Tidal is a triple
+	# and we have no triples, so the aura is generalised to every tower in radius; a
+	# single-target buff with no legal target would be a dead tower.
+	"moon": {  # Light + Darkness
+		"name": "Moon", "cost": 275, "color": Color(0.78, 0.80, 0.95),
+		"damage": 500.0, "range": 1375.0, "interval": 1.3,
+		"aura_stat": "damage", "aura_radius": 700.0, "aura_mult": 1.12,
+	},
+	"sun": {  # Fire + Nature
+		"name": "Sun", "cost": 275, "color": Color(1.0, 0.78, 0.30),
+		"damage": 600.0, "range": 625.0, "interval": 1.3,
+		"aura_stat": "damage", "aura_radius": 700.0, "aura_mult": 1.12,
+	},
+	"well": {  # Water + Nature — "Spring Forward", speed for the towers around it
+		"name": "Well", "cost": 275, "color": Color(0.45, 0.85, 0.80),
+		"damage": 350.0, "range": 750.0, "interval": 1.0,
+		"aura_stat": "attack_speed", "aura_radius": 700.0, "aura_mult": 1.10,
+	},
+	"money": {  # Light + Earth — "extra bounty for successful kills"
+		"name": "Money", "cost": 275, "color": Color(0.95, 0.82, 0.25),
+		"damage": 550.0, "range": 1000.0, "interval": 1.2,
+		"gold_on_kill": 3,
+	},
+	"life": {  # Light + Nature — "takes the life from kills and adds it to the player"
+		"name": "Life", "cost": 275, "color": Color(0.60, 0.95, 0.62),
+		"damage": 339.0, "range": 1000.0, "interval": 1.2,
+		# A flat life per kill would pay ~28 lives a wave. A small chance makes it a slow
+		# bleed back rather than an infinite pool, which is what the map's wording implies.
+		"life_on_kill_chance": 0.02,
+	},
+	"death": {  # Nature + Darkness — the map gives it an explicit 1.00s cooldown
+		"name": "Death", "cost": 275, "color": Color(0.35, 0.30, 0.42),
+		"damage": 353.0, "range": 1000.0, "interval": 1.0,
+		# The map spares mechanical and undead creeps. We do not model those classes, so
+		# bosses are the exemption instead — same intent (the set-piece enemies cannot be
+		# deleted by a coin flip), and it keeps a boss wave from ending on one lucky roll.
+		"execute_chance": 0.04,
+	},
+	"magic": {  # Fire + Darkness — "can store its mana to deal extra damage"
+		"name": "Magic", "cost": 275, "color": Color(0.72, 0.45, 0.92),
+		"damage": 500.0, "range": 1000.0, "interval": 1.1,
+		"behavior": "charge", "charge_shots": 4, "charge_mult": 3.5,
 	},
 
 	# --- Locked: Lightning -----------------------------------------------------
@@ -564,6 +618,14 @@ func spend_gold(amount: int) -> bool:
 	gold -= amount
 	gold_changed.emit(gold)
 	return true
+
+## Lives given back by a Life tower's kills. Separate from lose_life so the game-over check
+## lives in one place and can never be reached by a path that only ever adds.
+func add_life(amount: int = 1) -> void:
+	if amount <= 0 or is_over:
+		return
+	lives += amount
+	lives_changed.emit(lives)
 
 func lose_life(amount: int = 1) -> void:
 	lives = max(0, lives - amount)

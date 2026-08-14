@@ -85,17 +85,26 @@ The port takes the original's names, recipes **and numbers**. Progress:
 
 - **Built:** all six elements, buildable from the start, on the map's stats and its
   five-tier upgrade ladder; the six-element damage circle; the wave and bounty curves.
-- **Built:** element ownership and eight of the fifteen duals — Ice, Steam, Lava,
-  Poison, Clay, Tech, Roots, Electricity. Their damage, cost and recipe are the map's;
-  their range and interval are ours, because the map inherits those two fields from
-  each tower's Warcraft III base unit rather than overriding them.
-- **Not started:** the seven duals that need a behaviour our `TowerBehavior` layer does
-  not have yet — Moon and Sun (buff a neighbour), Well (attack-speed aura), Money
-  (bounty on kill), Life (kills restore lives), Death (chance to instantly kill) and
-  Magic (banks mana into burst damage). Their recipes are already in
-  `Game.DUAL_RECIPES`, so each is a behaviour plus a data row.
+- **Built:** element ownership and **all fifteen duals**. Their damage, cost and recipe
+  are the map's; their range and interval are ours, because the map inherits those two
+  fields from each tower's Warcraft III base unit rather than overriding them.
+  - Damage-shaped (Ice, Steam, Lava, Poison, Clay, Tech, Roots, Electricity) are pure
+    data on the generic effect payload.
+  - **Auras** (Moon, Sun, Well) are also pure data: the def carries `aura_stat` /
+    `aura_radius` / `aura_mult` and the *neighbours* read it in `Tower._recompute()`.
+    Nothing is pushed, so selling the provider gives the buff back exactly.
+  - **Economy and execute** (Money, Life, Death) are payload fields the projectile
+    applies, because the payout has to be attributed to the tower that fired.
+  - **Magic** is the only one with a `TowerBehavior`: its shots differ from one another
+    (three ordinary, then a charged one), which is control flow rather than numbers.
 - **Not started:** the twenty triples, and the per-element tier gating (in the map your
   element level also caps how far a tower may be upgraded).
+
+Three roles were adapted rather than ported, and each is marked in `Game.TOWER_DEFS`:
+Moon and Sun buff "nearby Tidal Towers" in the map and we have no triples, so they buff
+every tower in radius; Death spares mechanical and undead creeps, classes we do not
+model, so it spares bosses instead; and Life pays a small *chance* of a life per kill,
+because a flat life per kill would return about 28 lives a wave.
 
 ## Corrections to the earlier guesses
 

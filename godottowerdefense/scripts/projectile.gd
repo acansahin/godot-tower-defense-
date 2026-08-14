@@ -19,6 +19,9 @@ var slow_splash_radius: float = 0.0  ## If > 0, the slow (only) also chills enem
 var poison_dps: float = 0.0
 var poison_time: float = 0.0
 var stun_chance: float = 0.0    ## 0..1 chance to freeze the enemy on hit.
+var execute_chance: float = 0.0      ## 0..1 chance to kill outright (Death). Never bosses.
+var gold_on_kill: int = 0            ## Extra gold when this bolt lands the killing blow (Money).
+var life_on_kill_chance: float = 0.0 ## 0..1 chance a kill by this bolt returns a life (Life).
 var stun_time: float = 0.0
 
 var _target: Enemy = null
@@ -71,6 +74,10 @@ func _hit(target: Enemy) -> void:
 ## `show_number` is only set for the direct hit — a wide splash would otherwise bury
 ## the screen under a dozen simultaneous numbers.
 func _apply(enemy: Enemy, mult: float, show_number: bool) -> void:
+	# Whether it was alive BEFORE this bolt touched it. _apply also runs for every splash
+	# victim, and one of those can already be a corpse from an earlier hit this frame —
+	# without this the on-kill payouts below would pay out for killing something twice.
+	var was_alive := enemy.is_alive()
 	var matchup := Game.element_mult(element, enemy.armor_element)
 	var dealt := damage * mult * matchup
 	enemy.flash()
@@ -83,6 +90,24 @@ func _apply(enemy: Enemy, mult: float, show_number: bool) -> void:
 		enemy.apply_poison(poison_dps * mult * matchup, poison_time)
 	if stun_time > 0.0 and randf() < stun_chance:
 		enemy.apply_stun(stun_time)
+	# Death's execute. Rolled AFTER the normal hit so a creep the damage already killed does
+	# not consume the roll, and never on a boss — the map spares mechanical and undead
+	# creeps, and bosses are the set-piece enemies we have to stand in for those classes.
+	if enemy.is_alive() and not enemy.is_boss and execute_chance > 0.0 \
+			and randf() < execute_chance:
+		FloatingText.spawn(self, enemy.global_position + Vector2(0, -28.0), "EXECUTE",
+				Color(0.75, 0.55, 0.95), 18)
+		enemy.take_damage(enemy.health)
+	# Money and Life pay out only when THIS bolt landed the killing blow, which is why the
+	# check is here and not in Enemy._die(): the enemy has no idea who shot it, and a payout
+	# there would fire for every kill on the board regardless of which tower earned it.
+	if was_alive and not enemy.is_alive():
+		if gold_on_kill > 0:
+			Game.add_gold(gold_on_kill)
+		if life_on_kill_chance > 0.0 and randf() < life_on_kill_chance:
+			Game.add_life(1)
+			FloatingText.spawn(self, enemy.global_position + Vector2(0, -34.0), "+1 life",
+					Color(0.60, 0.95, 0.62), 17)
 
 ## Floating damage number, colour- and size-coded by the element matchup. This is the
 ## only place the matchup is visible during play: without it, the panel's "x1.75 vs
