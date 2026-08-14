@@ -66,16 +66,36 @@ Notable: **Laser/Phasor** has the longest range in the game, **Tidal/Tsunami** i
 the tower that Moon and Sun exist to buff, and **Undead/Lich** spawns minions from
 its kills.
 
+## How combination actually works
+
+Worth stating plainly, because it is easy to assume otherwise: **the map has no
+"merge two towers" mechanic.** Each of the six elements is a research track
+(`war3map.j`'s `Element_Upgrade[0..5]`), levelled by killing bosses, and each level
+also summons an Elemental unit. Which towers you may build is a question of **which
+elements you own** — a dual needs both of its elements, a triple needs all three.
+
+Our implementation mirrors that: `Run.elements` holds a level per element, the choice
+screen offers Elemental cards that raise one, and `Run.buildable_towers()` derives the
+palette from which recipes those levels satisfy. Nothing is stored as an "unlocked"
+list, so the palette can never drift from the elements behind it.
+
 ## What we are building now
 
 The port takes the original's names, recipes **and numbers**. Progress:
 
-- **Built:** Fire, Water, Nature, Earth as directly-buildable towers; Steam, Lava,
-  Ice and a non-canon Lightning exist as data but are unlockable-only.
-- **Next:** Light and Darkness, the 5-tier upgrade ladder, the 6-element damage
-  circle, and the economy rescaled onto the original's curve.
-- **Not started:** the dual/triple combination mechanic itself. Our towers are
-  built directly from a palette; the original builds them by combining elements.
+- **Built:** all six elements, buildable from the start, on the map's stats and its
+  five-tier upgrade ladder; the six-element damage circle; the wave and bounty curves.
+- **Built:** element ownership and eight of the fifteen duals — Ice, Steam, Lava,
+  Poison, Clay, Tech, Roots, Electricity. Their damage, cost and recipe are the map's;
+  their range and interval are ours, because the map inherits those two fields from
+  each tower's Warcraft III base unit rather than overriding them.
+- **Not started:** the seven duals that need a behaviour our `TowerBehavior` layer does
+  not have yet — Moon and Sun (buff a neighbour), Well (attack-speed aura), Money
+  (bounty on kill), Life (kills restore lives), Death (chance to instantly kill) and
+  Magic (banks mana into burst damage). Their recipes are already in
+  `Game.DUAL_RECIPES`, so each is a behaviour plus a data row.
+- **Not started:** the twenty triples, and the per-element tier gating (in the map your
+  element level also caps how far a tower may be upgraded).
 
 ## Corrections to the earlier guesses
 

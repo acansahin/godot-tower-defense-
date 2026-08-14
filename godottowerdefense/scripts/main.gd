@@ -121,9 +121,19 @@ func _dump_mods() -> void:
 	probe.call("+fire_speed")
 	Run.reset(1)
 	probe.call("after reset")
-	print("roster before unlock: %s" % str(Run.buildable_towers()))
-	Run.grant(_pool_entry("unlock_ice"))
-	print("roster after unlock:  %s" % str(Run.buildable_towers()))
+	# Element gating: a dual appears only once BOTH of its elements are raised, and the
+	# roster is derived rather than stored, so this also proves a reset takes them away.
+	# Ice is Water + Light, so raising Water alone must change nothing.
+	print("roster @start:        %s" % str(Run.buildable_towers()))
+	Run.grant(_pool_entry("elem_water"))
+	print("+water elemental:     %s" % str(Run.buildable_towers()))
+	Run.grant(_pool_entry("elem_light"))
+	print("+light elemental:     %s" % str(Run.buildable_towers()))
+	print("element levels:       %s" % str(Run.elements))
+	Run.grant(_pool_entry("elem_fire"))
+	print("+fire elemental:      %s" % str(Run.buildable_towers()))
+	Run.reset(1)
+	print("roster after reset:   %s" % str(Run.buildable_towers()))
 	print("gold/kill before: %d" % Run.bonus_gold_per_kill())
 	Run.grant(_pool_entry("gold_kill"))
 	Run.grant(_pool_entry("gold_kill"))

@@ -21,8 +21,10 @@ mechanic is introduced deliberately; past that, `WaveGenerator` produces waves f
 a boss every 10. The run ends when your lives run out, and the wave you reached is the score.
 
 Every 3 waves the run pauses and offers **three roguelite upgrades** — element damage,
-attack speed, poison, slow strength, economy, or a **tower unlock** (Ice, Steam, Lava,
-Lightning are locked out of the palette and only reachable this way). They last the run and
+attack speed, poison, slow strength, economy, or an **Elemental** that raises one of the
+six element tracks. Elements are what gate the **dual towers**: raise both halves of a
+recipe (Water + Light = Ice, Fire + Water = Steam, ...) and it appears in the palette,
+exactly as the original map gates towers by which elements you own. They last the run and
 reset with it. Adding one is a row in `Game.UPGRADE_POOL`.
 
 Losing banks **Essence**, scaled to the wave you reached, and Essence buys permanent
@@ -349,7 +351,7 @@ editing three files and hunting for un-named literals; it is now one file.
 | Starting lives | `game.gd` `START_LIVES` | 20 |
 | Tower stats (all towers) | `game.gd` `TOWER_DEFS` | per-tower cost / dmg / range / interval / effects |
 | Base towers | `TOWER_DEFS` | six elements at the map's numbers. They sit at near-equal DPS and differ in reach and cadence: Fire 500/0.33s, Water 750/0.17s, Nature 750/0.99s, Earth 750/1.00s, Light 2000/0.99s, Darkness 2000/2.75s (range in **WC3 units**, scaled by `Balance.WC3_RANGE_SCALE`). Water/Nature/Earth also keep our slow/poison/splash payloads, which the map puts on dual towers we have not built |
-| Locked towers | `TOWER_DEFS` | Steam / Lava / Ice / Lightning are still defined but are **absent from `TOWER_ORDER`**, so they cannot be built, previewed or bought. Their tuning is kept so they can return as in-run roguelite unlocks |
+| Dual towers | `TOWER_DEFS` + `DUAL_RECIPES` | eight of the map's fifteen duals (Ice, Steam, Lava, Poison, Clay, Tech, Roots, Electricity) at 275g. Absent from `TOWER_ORDER`: a dual enters the palette when `Run.element_level` reaches `DUAL_ELEMENT_LEVEL` in **both** its elements. The other seven recipes are listed but need behaviours we do not have |
 | Upgrade: max level / growth | `balance.gd` `MAX_LEVEL`, `TOWER_DEFS.damage_tiers` | 5 tiers; damage only, listed explicitly per element (×5 a tier, ×10 into Pure — with the map's own Pure-row typos preserved). Range and interval never change |
 | Upgrade cost | `balance.gd` `TIER_COSTS` | 175 / 788 / 3544 / 24444, the same ladder for every element |
 | Sell refund | `tower.gd` `SELL_REFUND` | 50% of total gold spent (tap the corner × to sell) |
