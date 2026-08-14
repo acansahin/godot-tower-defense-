@@ -5,14 +5,29 @@ custom map **Element TD**. Built with typed GDScript, deliberately small and
 readable rather than production-architected.
 
 When you press **Play** you get: a grassy map, an S-shaped cobblestone road, a
-faint build grid beside the road, 20 waves of enemies drawn from a data table of
-**creep archetypes** (including flyers, tanks, swarms, splitters, regenerators and
-periodic **bosses**), a drag-and-drop **element tower palette** (Fire / Water /
-Nature / Earth, the dual towers Steam / Lava / Ice, and Lightning), an
-**element-matchup** system (each base element is strong/weak against another, so
-tower choice vs. an enemy's armor element matters), **click-to-upgrade** towers each with
-a small **sell button**, **time controls** (pause and
-1x/2x/3x), a gold economy with interest and streak bonuses, lives, and a win/lose flow.
+faint build grid beside the road, and an **endless** run of enemies drawn from a data table
+of **creep archetypes** (including flyers, tanks, swarms, splitters, regenerators, periodic
+**bosses** and **elite** waves). The buildable roster is the four elements —
+**Fire / Water / Nature / Earth** — plus an **element-matchup** system (each is strong and
+weak against another, so tower choice vs. an enemy's armor element matters),
+**tap-to-upgrade** towers each with a small **sell button**, **time controls** (pause and
+1x/2x/3x), a gold economy with interest and streak bonuses, lives, a **tutorial** opening,
+and a **run summary** reporting how deep you got.
+
+A run has **no win condition and no last wave**. Waves 1–20 are hand-authored so each
+mechanic is introduced deliberately; past that, `WaveGenerator` produces waves forever, with
+a boss every 10. The run ends when your lives run out, and the wave you reached is the score.
+
+Every 3 waves the run pauses and offers **three roguelite upgrades** — element damage,
+attack speed, poison, slow strength, economy, or a **tower unlock** (Ice, Steam, Lava,
+Lightning are locked out of the palette and only reachable this way). They last the run and
+reset with it. Adding one is a row in `Game.UPGRADE_POOL`.
+
+Losing banks **Essence**, scaled to the wave you reached, and Essence buys permanent
+**Workshop** levels from the title screen — tower damage, attack speed, range, starting gold
+and starting lives. Those apply to every run afterwards, through the *same* modifier fold
+the roguelite cards use. Progress is saved to `user://save.json` (versioned, atomic, with a
+`.bak` fallback), and time away earns a capped **offline** Essence trickle.
 
 Towers are **data-driven**: every tower is one entry in `Game.TOWER_DEFS` with a
 colour and an effect payload (damage, splash, slow, poison). Adding a new tower
@@ -26,7 +41,7 @@ tower reference this is growing toward.
 
 1. Install **Godot 4.7** (standard build, GDScript — no C# needed).
 2. Open the Godot Project Manager → **Import**.
-3. Select `godot-tower-defense/project.godot` and open it.
+3. Select `godottowerdefense/project.godot` and open it.
 4. Godot imports the assets on first open (creates a local `.godot/` cache).
 5. Press **F5** / the ▶ **Play** button. `scenes/Menu.tscn` is the main scene — the
    title screen; press **Play** there to start a run.
@@ -58,22 +73,23 @@ code with primitive shapes and colors.
   to cost you a life. There is no per-tower target picker.
 - **Time controls** sit in the bottom-left corner: **Pause** (or **Space**) freezes
   everything, and the speed button (or **F**) cycles **1x → 2x → 3x**.
-- **Ground-only towers** (Earth, Lava) can't hit flyers; the others can.
+- **Ground-only towers** (Earth) can't hit flyers; Fire, Water and Nature can.
 - The HUD shows a **next-wave preview** (archetype, count, boss flag, and armor
   element colour) before it spawns — a **Send Next ▶** button lets you call it
   early for a small gold bonus instead of waiting out the prep timer.
 - Each enemy's armor element tints its body; matching it against the right tower
   element deals bonus damage (and less if it's the wrong one) — see the element
   matchup below.
-- Survive all 20 waves to win; lose all your lives and it's game over. Both
-  screens offer **Restart** and **Main Menu**.
+- **The waves never stop.** There is no win screen — a run ends when your lives run
+  out, and the run summary reports the wave you reached plus your best this session.
+  It offers **Restart** and **Main Menu**.
 
 ---
 
 ## 2. Folder structure
 
 ```
-godot-tower-defense/
+godottowerdefense/
 ├── project.godot            # Project config, autoload, window size, main scene
 ├── icon.svg                 # Placeholder app icon
 ├── README.md
@@ -90,9 +106,18 @@ godot-tower-defense/
 │   ├── Tower.tscn           # Generic tower (configured from Game.TOWER_DEFS)
 │   ├── Projectile.tscn      # Generic homing projectile (damage + effects)
 │   ├── HUD.tscn             # Gold / Lives / Wave bar
-│   └── EndScreen.tscn       # Victory / Game Over overlay
+│   └── EndScreen.tscn       # Run summary overlay (wave reached)
 └── scripts/
+    ├── balance.gd           # "Balance" autoload: every tunable curve + economy number
+    ├── save_service.gd      # "Save" autoload: versioned, atomic user:// persistence
     ├── game.gd              # "Game" autoload: shared state, grid + TOWER_DEFS
+    ├── meta.gd              # "Meta" autoload: Essence, Workshop levels, offline reward
+    ├── workshop.gd          # Between-runs screen: spend Essence on permanent upgrades
+    ├── run.gd               # "Run" autoload: this run's upgrades, unlocks, folded mods
+    ├── tower_mods.gd        # Folded modifier totals for one (tower id, element) pair
+    ├── upgrade_choice.gd    # The 3-card between-waves reward screen
+    ├── wave_generator.gd    # Endless wave definitions past the seed table
+    ├── tutorial.gd          # Opening hints; drives the HUD's hint line
     ├── audio.gd             # "Audio" autoload: synthesized chiptune SFX + music
     ├── enemy_index.gd       # "EnemyIndex" autoload: per-frame spatial hash for targeting
     ├── menu.gd              # Title screen: play / how-to-play / sound / quit
@@ -101,10 +126,13 @@ godot-tower-defense/
     ├── grid.gd            # Builds + draws the faint placement grid, snapping
     ├── enemy.gd            # Path walking, health, flyer visuals, slow/poison
     ├── enemy_layer.gd      # Draw-only child layer for enemy.gd (body / overlay split)
-    ├── tower.gd            # Generic tower: targeting, firing, click-upgrade + sell ×
+    ├── tower.gd            # Generic tower: targeting, stats, click-upgrade + sell ×
+    ├── tower_behavior.gd   # Base strategy: what a tower does with its frame
+    ├── bolt_behavior.gd    # The default behavior: cooldown -> one homing bolt
     ├── projectile.gd       # Homing projectile: damage, splash, slow, poison
     ├── projectiles.gd      # Object pool on the $Projectiles node (reused bolts)
     ├── effects.gd          # Object pool on the $Effects node (floating text + bursts)
+    ├── frost_ring.gd       # Expanding chill ring drawn by Ice's Lv2+ area slow
     ├── wave_manager.gd     # Spawns the 20-wave table (archetypes, bosses, economy)
     ├── tower_palette.gd    # Top-right drag-source, lists Game.TOWER_ORDER
     ├── placement_preview.gd # Green/red ghost cell shown while dragging
@@ -206,16 +234,31 @@ The `Game` autoload (`scripts/game.gd`) is registered in `project.godot` and is
 globally accessible as `Game`. It holds the shared map layout (`PATH`), the build
 grid definition (`GRID_ROWS`, `CELL_WIDTH`, `ROAD_HALF`, `ROAD_CLEARANCE`,
 `PLAY_RIGHT`, `GRID_COL_*`) plus the shared `dist_to_road()` helper, the
-costs, and the mutable `gold` / `lives` with signals. Two more autoloads sit beside it:
+costs, and the mutable `gold` / `lives` with signals. Four more autoloads sit beside it:
+`Balance` (`scripts/balance.gd`, every tunable curve and economy number),
+`Run` (`scripts/run.gd`, the current run's roguelite upgrades and unlocks),
 `Audio` (`scripts/audio.gd`, synthesized SFX/music) and `EnemyIndex`
 (`scripts/enemy_index.gd`, the per-frame enemy spatial hash used for targeting).
+
+**Towers pull modifiers from `Run`; nothing is pushed into them.** A tower re-derives its
+stats when `Run.modifiers_changed` fires, and a tower built *after* a card was picked reads
+the same source on its first `_recompute()` — so there is no back-fill step to forget. Per-
+frame cost is zero: `Run` folds the modifier list into one `TowerMods` per
+(tower id, element) pair and caches it until the set changes.
+
+The split between `Game` and `Balance` is deliberate and worth keeping: **`Game` owns
+*what a thing is*** (the `TOWER_DEFS` / `WAVE_TYPES` / `WAVES` tables and the map
+geometry), **`Balance` owns *how the numbers grow*** (upgrade curve, wave scaling, boss
+multipliers, interest and bonuses, archetype modifiers). A balance pass used to mean
+editing three files and hunting for un-named literals; it is now one file.
 
 ---
 
 ## 4. How the pieces talk
 
 - **`Game` (autoload)** owns gold & lives and broadcasts `gold_changed`,
-  `lives_changed`, `game_over`, `victory`. It also stores the road `PATH` and
+  `lives_changed` and `game_over` — there is no `victory`, because waves are
+  endless. It also stores the road `PATH` and
   the grid constants so every script reads one source of truth.
 - **`Grid`** precomputes the buildable cells (flush against the road, one row on
   each side of every horizontal road, tiled flush to the vertical bends), draws
@@ -247,7 +290,14 @@ costs, and the mutable `gold` / `lives` with signals. Two more autoloads sit bes
   side of the element matchup (`Game.element_mult`) applied to incoming damage,
   including poison ticks.
 - **`Tower`** is one generic script. `setup_def(id)` loads a `Game.TOWER_DEFS`
-  entry (stats + effect payload + colour). It always shoots the enemy **closest to the
+  entry (stats + effect payload + colour). Stats are **never accumulated in place**:
+  `_recompute()` rebuilds them from the definition plus the current level whenever either
+  changes, so the level-1 baseline is never destroyed. What a tower *does* with its frame
+  lives behind **`TowerBehavior`** — every tower today gets **`BoltBehavior`** (cooldown →
+  one homing bolt), and an element needing a structurally different attack (a beam, an
+  aura, an economy building) becomes a new behavior rather than a branch inside `Tower`.
+  A def selects one with an optional `"behavior"` key; omitting it means a bolt turret.
+  It always shoots the enemy **closest to the
   exit** (fixed "First" targeting — the one most likely to leak) and fires a `Projectile`
   carrying that payload; `can_hit_flying` gates flyers. Targeting is **sticky**: while
   the current target is alive, in range and legal the tower keeps it, which stops the
@@ -294,8 +344,7 @@ costs, and the mutable `gold` / `lives` with signals. Two more autoloads sit bes
 | Starting lives | `game.gd` `START_LIVES` | 20 |
 | Tower stats (all towers) | `game.gd` `TOWER_DEFS` | per-tower cost / dmg / range / interval / effects |
 | Base towers | `TOWER_DEFS` | Fire (dmg), Water (slow), Nature (poison), Earth (splash, ground) |
-| Dual towers | `TOWER_DEFS` | Steam (dmg+slow), Lava (splash+burn, ground), Ice (slow+poison; from **Lv2 the slow becomes an area effect** — `slow_splash`, chill only, no extra damage — and the radius **widens again at Lv3** (`SLOW_SPLASH_GROWTH`), with a `frost_ring.gd` impact burst) |
-| Neutral tower | `TOWER_DEFS` | Lightning (25% chance to stun 1.2s) |
+| Locked towers | `TOWER_DEFS` | Steam / Lava / Ice / Lightning are still defined but are **absent from `TOWER_ORDER`**, so they cannot be built, previewed or bought. Their tuning is kept so they can return as in-run roguelite unlocks |
 | Upgrade: max level / growth | `tower.gd` | L3, dmg ×1.6, range +30, interval ×0.82, DoT ×1.6 |
 | Upgrade cost | `tower.gd` `upgrade_cost()` | `build_cost × level` (e.g. Fire 40, 80) |
 | Sell refund | `tower.gd` `SELL_REFUND` | 50% of total gold spent (tap the corner × to sell) |
@@ -306,8 +355,8 @@ costs, and the mutable `gold` / `lives` with signals. Two more autoloads sit bes
 | Element matchup | `game.gd` `ELEMENT_BEATS` | cycle fire→nature→earth→water→fire; ×1.75 dmg if you beat the target's armor element, ×0.7 if it beats you, ×1 if either side is neutral (applies to direct, splash and poison damage) |
 | Waves | `game.gd` `WAVES` | 20 fixed entries (archetype + optional `boss`/`element`, plus an optional per-wave `hp`/`count` multiplier to smooth a single wave without touching the shared archetype) |
 | Creep archetypes | `game.gd` `WAVE_TYPES` | normal, fast, swarm, tank, immune, regen, air (flyer), split (splits on death) — each is a set of HP/speed/count/radius multipliers and flags on top of the base scaling |
-| Immune archetype | `game.gd` `WAVE_TYPES` + `enemy.gd` `cc_immune` | ignores **slow and stun**, but **not poison** — poison is damage rather than crowd control, so Nature/Ice/Lava stay the answer to these waves instead of the whole roster going dead |
-| Regen archetype | `game.gd` `WAVE_TYPES` + `enemy.gd` `REGEN_DELAY` | heals 3.5% of max HP/s, but **paused for 2s after taking any damage** — so it only heals through gaps in your coverage instead of setting a hard DPS threshold. Its "+" marker dims while suppressed. Poison ticks count as damage, so a single Nature/Ice/Lava tower shuts the healing off entirely |
+| Immune archetype | `game.gd` `WAVE_TYPES` + `enemy.gd` `cc_immune` | ignores **slow and stun**, but **not poison** — poison is damage rather than crowd control, so Nature stays the answer to these waves instead of the whole roster going dead |
+| Regen archetype | `game.gd` `WAVE_TYPES` + `enemy.gd` `REGEN_DELAY` | heals 3.5% of max HP/s, but **paused for 2s after taking any damage** — so it only heals through gaps in your coverage instead of setting a hard DPS threshold. Its "+" marker dims while suppressed. Poison ticks count as damage, so a single Nature tower shuts the healing off entirely |
 | Prep time between waves | `wave_manager.gd` `PREP_TIME` | 4s (skippable via the HUD's Send Next button, for a small gold bonus) |
 | Wave scaling (`n` = wave) | `wave_manager.gd` `_start_wave()` | count `5 + int(2.5·n)`, HP `20 + 10·n + 2.55·n²`, speed `60 + 6·n`, reward `3 + n`, each × the archetype's multipliers |
 | Flyers (non-Air waves) | `wave_manager.gd` | from wave 3, 15% chance per enemy (halved on top of Air waves existing); `make_flying()` gives HP ×0.65, speed ×1.25 |
@@ -365,7 +414,7 @@ sound effect is synthesized in code:
   element matchup is visible while you play.
 - **Sound** (`audio.gd`, the `Audio` autoload): every SFX — per-element tower shots,
   enemy hit/death, boss explosion, build/upgrade/sell/denied UI blips, wave start/clear,
-  and the victory/game-over jingles — is baked once at startup into an `AudioStreamWAV`
+  and the run-end jingles — is baked once at startup into an `AudioStreamWAV`
   and replayed through a small pool of `AudioStreamPlayer`s. Voiced as retro **chiptune /
   8-bit**: NES-style pulse (square) leads with duty cycles, fast arpeggios for chords,
   triangle-wave bass, and sample-and-hold noise for percussion/explosions. A quiet

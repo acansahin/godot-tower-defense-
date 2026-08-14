@@ -30,6 +30,39 @@ line may be in a *different* function than the one you just edited.
 There are no tests. Verification = run the project and play it. Audio can't be heard
 through MCP, so ask the user to listen when changing sounds.
 
+**MCP cannot pass command-line arguments**, and the verification harnesses need them. Run
+Godot directly for those (`C:\Program Files\Godot\Godot.exe.exe` — the doubled extension is
+correct). Everything after a bare `--` reaches `OS.get_cmdline_user_args()`:
+
+```
+"C:\Program Files\Godot\Godot.exe.exe" --headless --path <project> \
+    res://scenes/Main.tscn --quit-after 1800 -- --fill-board
+```
+
+Arg-gated harnesses currently in `main.gd`, none of which can fire in a normal session:
+`--dump-stats` (every tower's stats at every level), `--dump-waves` (60 wave definitions
+plus a generator-purity check), `--dump-mods` (roguelite modifiers apply / stay in scope /
+unwind on reset), `--dump-meta` (essence curve, workshop costs, purchases reaching towers,
+settings round-trip), `--fill-board` (a tower on every cell at max level, 8x speed,
+auto-picks upgrades, prints each wave and the run-over line), `--show-choice` (pops the
+choice screen so its `_draw` can be exercised), `--go-back` (rewinds the last-seen stamp 4h
+so the next launch collects an offline reward), `--wipe-save` (clears `user://save.json`).
+
+**`--wipe-save` first when comparing against a stored baseline.** Workshop levels feed
+`Run.permanent`, which feeds every tower stat, so a `--dump-stats` taken against a save
+with purchases in it measures something different from one taken against a clean save.
+Note that `--dump-meta` *buys* things, so it leaves a dirty save behind.
+
+**`--headless` does no rendering, so `_draw()` never runs** — a broken draw passes a
+headless run silently. Drop the flag to test drawing. `--quit-after N` bounds a run to N
+frames, which is what makes all of this scriptable.
+
+**For any refactor claiming "no behaviour change", diff `--dump-stats` before and after.**
+This caught a real regression — a dropped `stun_chance` silently disabled Lightning's stun,
+which no amount of playing would have surfaced. When rebuilding stats that were previously
+accumulated by repeated multiplication, reproduce the repeated multiply rather than using
+`pow()`, or the floating-point results will not match byte-for-byte.
+
 ## How it ships
 
 Both workflows run automatically on push to `main`:
@@ -62,23 +95,45 @@ Both workflows run automatically on push to `main`:
 
 Everything is **data-driven**. There is exactly one generic `Tower`, `Enemy` and
 `Projectile` scene+script; types are differentiated by fields set at runtime, never by
-subclasses or per-type scenes. Two autoloads:
+subclasses or per-type scenes. Seven autoloads. **The registration order in
+`project.godot` is load-bearing** — each depends only on the ones above it:
 
-- `Game` — [scripts/game.gd](godottowerdefense/scripts/game.gd): shared state (gold,
-  lives, signals) and **all** data tables.
-- `Audio` — [scripts/audio.gd](godottowerdefense/scripts/audio.gd): code-synthesized SFX
-  and background music.
+| # | Autoload | Owns |
+|---|---|---|
+| 1 | `Balance` [balance.gd](godottowerdefense/scripts/balance.gd) | every tunable curve, cost and economy number. Depends on nothing |
+| 2 | `Save` [save_service.gd](godottowerdefense/scripts/save_service.gd) | the only code that touches `user://`. Versioned, atomic, never fatal |
+| 3 | `Game` [game.gd](godottowerdefense/scripts/game.gd) | shared run state (gold, lives, signals) and **all** data tables |
+| 4 | `Meta` [meta.gd](godottowerdefense/scripts/meta.gd) | what outlives a run: Essence, Workshop levels, best wave, offline stamp |
+| 5 | `Run` [run.gd](godottowerdefense/scripts/run.gd) | one run: cards taken, towers unlocked, folded modifiers. Reads `Meta` on reset |
+| 6 | `Audio` [audio.gd](godottowerdefense/scripts/audio.gd) | code-synthesized SFX and music. Reads `Save` for the mute setting |
+| 7 | `EnemyIndex` [enemy_index.gd](godottowerdefense/scripts/enemy_index.gd) | per-frame spatial hash used for targeting |
+
+Two boundaries worth keeping straight:
+
+- **`Game` owns *what a thing is*; `Balance` owns *how its numbers grow*.** New tower or
+  wave archetype → `Game`. Growth curve, cost, multiplier, bonus → `Balance`.
+- **`Run` holds what dies when you lose; `Meta` holds what does not.** Both feed the *same*
+  `TowerMods.fold`, so permanent and temporary power stack through one code path.
+  `Run.permanent` is seeded from `Meta.run_start_modifiers()` in `Run.reset()`.
+
+**Towers pull, nothing is pushed.** A tower re-derives its stats when
+`Run.modifiers_changed` fires, and one built *after* a card was picked reads the same
+source on its first `_recompute()` — so there is no back-fill step to forget.
 
 [scripts/main.gd](godottowerdefense/scripts/main.gd) is the level wiring hub — placement,
-upgrade, sell, and all signal connections.
+upgrade, sell, the roguelite choice, and all signal connections.
 
 To add content, add a **data row**, not a scene or script:
 
 | Adding a… | Goes in |
 |---|---|
-| Tower | `Game.TOWER_DEFS` + its id in `Game.TOWER_ORDER` |
-| Wave | `Game.WAVES` |
+| Tower | `Game.TOWER_DEFS` + its id in `Game.TOWER_ORDER` **to make it buildable** |
+| Roguelite upgrade | `Game.UPGRADE_POOL` (stats it may touch: `TowerMods.fold`) |
+| Permanent upgrade | `Game.WORKSHOP_DEFS` — effects must be **per-level steps**, not totals |
+| Saved field | a key in the relevant `Save` section; bump `SAVE_VERSION` + add a `_migrate` branch if the shape changes |
+| Wave (first 20 only) | `Game.WAVES` — past that, waves are generated |
 | Creep archetype | `Game.WAVE_TYPES` |
+| Tower behavior (beam/aura/…) | a `TowerBehavior` subclass + a case in `Tower._make_behavior` |
 | Sound effect | a block in `audio.gd`'s `_build_all()` |
 
 ## Conventions

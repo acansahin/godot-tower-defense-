@@ -22,7 +22,11 @@ config/icon="res://icon.svg"
 
 [autoload]
 
+Balance="*res://scripts/balance.gd"
+Save="*res://scripts/save_service.gd"
 Game="*res://scripts/game.gd"
+Meta="*res://scripts/meta.gd"
+Run="*res://scripts/run.gd"
 Audio="*res://scripts/audio.gd"
 EnemyIndex="*res://scripts/enemy_index.gd"
 

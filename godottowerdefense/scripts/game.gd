@@ -6,8 +6,9 @@ extends Node
 
 signal gold_changed(amount: int)
 signal lives_changed(amount: int)
+## The run ended — lives hit zero. There is no `victory` counterpart: waves are endless, so
+## a run is always ended by the player running out of lives, and `wave_reached` is the score.
 signal game_over
-signal victory
 ## Camera kick in pixels. Broadcast here so an Enemy can ask for one without knowing
 ## anything about the level's camera; Main owns the actual Camera2D.
 signal shake_requested(amount: float)
@@ -76,8 +77,8 @@ const GRID_ROWS: Array = [
 const GRID_COL_START := 64.0     ## First column centre.
 const GRID_COL_END := 1024.0     ## Last column centre (= PLAY_RIGHT - CELL_WIDTH * 0.5).
 
-const START_GOLD := 150
-const START_LIVES := 20
+# START_GOLD / START_LIVES moved to the Balance autoload with the rest of the economy —
+# see scripts/balance.gd. This file keeps the map geometry and the data tables.
 
 # --- Element tower definitions -------------------------------------------------
 # Every tower (base element or dual combination) is just a data entry.
@@ -110,7 +111,12 @@ const TOWER_DEFS := {
 		"damage": 30.0, "range": 225.0, "interval": 1.5, "can_hit_flying": false,
 		"splash_radius": 108.0, "splash_factor": 0.5,
 	},
-	# --- Dual combinations (directly buildable for now) ---
+	# --- Locked: duals + Lightning -----------------------------------------------
+	# NOT BUILDABLE. Everything below is deliberately absent from TOWER_ORDER, so the
+	# palette shows only the four elements and none of these can be built, previewed or
+	# paid for. The tuned numbers are kept because these return as in-run roguelite
+	# unlocks — a run will grant an id and the palette gains a slot, with no data to
+	# re-derive. Nothing reads them today; deleting the block would only cost the tuning.
 	"steam": {  # Fire + Water
 		"name": "Steam", "cost": 110, "color": Color(0.70, 0.82, 0.95),
 		"damage": 16.0, "range": 270.0, "interval": 0.5,
@@ -135,8 +141,10 @@ const TOWER_DEFS := {
 		"stun_chance": 0.25, "stun_time": 1.2,
 	},
 }
-## Order the palette lists towers in.
-const TOWER_ORDER: Array = ["fire", "water", "nature", "earth", "lightning", "steam", "lava", "ice"]
+## The buildable roster, in palette order. The four elements ARE the game's identity, so
+## the palette is exactly them — no duals, no Lightning. Anything not listed here cannot be
+## built, previewed or paid for, even though TOWER_DEFS still describes it.
+const TOWER_ORDER: Array = ["fire", "water", "nature", "earth"]
 
 # --- Wave definitions ----------------------------------------------------------
 # Each wave picks an archetype from WAVE_TYPES; its stats = the base scaling
@@ -145,6 +153,11 @@ const TOWER_ORDER: Array = ["fire", "water", "nature", "earth", "lightning", "st
 #   name, color, hp, spd, count, radius, cc_immune, regen (frac of max hp/s),
 #   split (children on death), air (all flyers).
 const WAVE_TYPES := {
+	## Wave 1 only. Few, slow and soft enough that a single tower clears it comfortably —
+	## its job is to let the player watch a tower acquire, fire and kill without pressure
+	## while the tutorial hints run. Never picked by the generator.
+	"tutorial": {"name": "Scout", "color": Color(0.80, 0.55, 0.45),
+			"hp": 0.45, "spd": 0.7, "count": 0.5},
 	"normal": {"name": "Normal", "color": Color(0.85, 0.30, 0.30)},
 	"fast":   {"name": "Fast",   "color": Color(0.95, 0.85, 0.25), "hp": 0.6, "spd": 1.7, "count": 1.3, "radius": 0.85},
 	"swarm":  {"name": "Swarm",  "color": Color(0.90, 0.50, 0.75), "hp": 0.35, "spd": 1.15, "count": 2.6, "radius": 0.8},
@@ -155,28 +168,152 @@ const WAVE_TYPES := {
 	"split":  {"name": "Splitter","color": Color(0.85, 0.55, 0.25), "hp": 1.0, "count": 0.6, "split": 2, "radius": 1.15},
 }
 
-## 20 waves; boss on every 5th. Kept short — stats come from the scaling formula.
-## "element" (optional) is the wave's armor element (empty/absent = neutral); the
-## first waves and all Air waves stay neutral so element colour doesn't clash.
+## The SEED TABLE: the hand-authored opening of a run. A run does not end here — past the
+## last entry, WaveGenerator takes over and produces waves forever (see wave_generator.gd).
+## These exist so the first minutes are *taught* rather than rolled: each new mechanic
+## arrives on its own wave, in a deliberate order, instead of whenever the dice say.
+##
+## Wave 1 is the tutorial. Then one idea at a time: speed, numbers, the element matchup,
+## flyers, CC immunity, regeneration, splitting — and the first boss on 10, which is the
+## cadence the generator keeps forever after.
+##
+## "element" (optional) is the wave's armor element (empty/absent = neutral); early waves
+## and all Air waves stay neutral so element colour doesn't clash with the archetype tint.
 const WAVES: Array = [
-	{"type": "normal"}, {"type": "fast"}, {"type": "swarm"},
-	{"type": "normal", "element": "fire"},
-	{"type": "tank", "boss": true, "element": "water"},
-	{"type": "air"},
-	{"type": "immune", "element": "nature"},
-	{"type": "fast", "element": "earth"},
-	{"type": "regen", "element": "water"},
-	{"type": "swarm", "boss": true, "element": "fire"},
-	{"type": "split", "element": "nature"},
-	{"type": "tank", "element": "earth"},
-	{"type": "air"},
-	{"type": "immune", "element": "water"},
-	{"type": "fast", "boss": true, "element": "fire"},
-	{"type": "regen", "element": "nature"},
-	{"type": "split", "element": "earth"},
-	{"type": "swarm", "element": "water"},
-	{"type": "tank", "element": "fire", "hp": 0.85},  # per-wave -15% HP (mild trim so it isn't a spike)
-	{"type": "normal", "boss": true, "element": "nature", "hp": 1.3},  # per-wave +30% HP: the finale, the clear peak
+	{"type": "tutorial"},                              # 1  — learn to build
+	{"type": "normal"},                                # 2  — a real wave, still gentle
+	{"type": "fast"},                                  # 3  — speed
+	{"type": "swarm"},                                 # 4  — numbers
+	{"type": "normal", "element": "fire"},             # 5  — first armour element
+	{"type": "air"},                                   # 6  — flyers: ground-only towers miss
+	{"type": "immune", "element": "nature"},           # 7  — slow/stun stop working
+	{"type": "fast", "element": "earth"},              # 8
+	{"type": "regen", "element": "water"},             # 9  — must out-damage the heal
+	{"type": "tank", "boss": true, "element": "water"},# 10 — FIRST BOSS
+	{"type": "split", "element": "nature"},            # 11 — splitters
+	{"type": "tank", "element": "earth"},              # 12
+	{"type": "air"},                                   # 13
+	{"type": "immune", "element": "water"},            # 14
+	{"type": "fast", "element": "fire"},               # 15
+	{"type": "regen", "element": "nature"},            # 16
+	{"type": "split", "element": "earth"},             # 17
+	{"type": "swarm", "element": "water"},             # 18
+	{"type": "tank", "element": "fire", "hp": 0.85},   # 19 — mild trim so 20 reads as the spike
+	{"type": "swarm", "boss": true, "element": "fire"},# 20 — SECOND BOSS, then the generator
+]
+
+# --- Roguelite upgrade pool ----------------------------------------------------
+# Offered three at a time between waves; the player keeps one, and it lasts the run.
+# Adding an upgrade is a row here — Run folds the effects generically and the choice
+# screen renders whatever it is handed, so neither needs to know this one exists.
+#
+# Fields:
+#   id          unique; also the key stacking is counted against
+#   name/desc   what the card shows. `desc` must state the real number — a card whose
+#               text and effect disagree is worse than no card
+#   rarity      common | rare | epic | legendary (weights live in Balance)
+#   effects     list of {stat, op, value}; see TowerMods.fold for the stats
+#   element     optional — restrict to towers of this damage element
+#   tower       optional — restrict to this exact tower id
+#   unlock      optional — grants a tower id instead of applying effects
+#   max_stacks  optional (default 1) — how many times it may be taken in one run
+#   min_wave    optional — not offered before this wave
+#
+# An entry with neither `element` nor `tower` applies to every tower, which is why the
+# global ones cost a higher rarity than their single-element equivalents.
+const UPGRADE_POOL: Array = [
+	# --- Common: one element, one stat -----------------------------------------
+	{"id": "fire_dmg", "name": "Ember Focus", "rarity": "common", "max_stacks": 4,
+		"element": "fire", "desc": "Fire towers deal +25% damage",
+		"effects": [{"stat": "damage", "op": "mult", "value": 1.25}]},
+	{"id": "water_dmg", "name": "Deep Current", "rarity": "common", "max_stacks": 4,
+		"element": "water", "desc": "Water towers deal +25% damage",
+		"effects": [{"stat": "damage", "op": "mult", "value": 1.25}]},
+	{"id": "nature_dmg", "name": "Thornbloom", "rarity": "common", "max_stacks": 4,
+		"element": "nature", "desc": "Nature towers deal +25% damage",
+		"effects": [{"stat": "damage", "op": "mult", "value": 1.25}]},
+	{"id": "earth_dmg", "name": "Bedrock", "rarity": "common", "max_stacks": 4,
+		"element": "earth", "desc": "Earth towers deal +25% damage",
+		"effects": [{"stat": "damage", "op": "mult", "value": 1.25}]},
+	{"id": "all_range", "name": "Long Sight", "rarity": "common", "max_stacks": 3,
+		"desc": "All towers gain +18 range",
+		"effects": [{"stat": "range", "op": "add", "value": 18.0}]},
+	{"id": "gold_kill", "name": "Scavenger", "rarity": "common", "max_stacks": 5,
+		"desc": "+2 gold for every enemy killed",
+		"effects": [{"stat": "gold_per_kill", "op": "add", "value": 2.0}]},
+
+	# --- Rare: a mechanic rather than a flat stat -------------------------------
+	{"id": "fire_speed", "name": "Wildfire", "rarity": "rare", "max_stacks": 3,
+		"element": "fire", "desc": "Fire towers attack 25% faster",
+		"effects": [{"stat": "attack_speed", "op": "mult", "value": 1.25}]},
+	{"id": "nature_poison", "name": "Virulence", "rarity": "rare", "max_stacks": 3,
+		"element": "nature", "desc": "Nature poison deals +50% damage",
+		"effects": [{"stat": "poison", "op": "mult", "value": 1.5}]},
+	{"id": "water_slow", "name": "Undertow", "rarity": "rare", "max_stacks": 2,
+		"element": "water", "desc": "Water slows 30% harder",
+		"effects": [{"stat": "slow_power", "op": "mult", "value": 1.3}]},
+	{"id": "earth_splash", "name": "Shockwave", "rarity": "rare", "max_stacks": 3,
+		"element": "earth", "desc": "Earth splash radius +35%",
+		"effects": [{"stat": "splash", "op": "mult", "value": 1.35}]},
+	{"id": "all_dmg_small", "name": "Attunement", "rarity": "rare", "max_stacks": 3,
+		"desc": "All towers deal +15% damage",
+		"effects": [{"stat": "damage", "op": "mult", "value": 1.15}]},
+
+	# --- Epic: the first tower unlocks, and real global power -------------------
+	{"id": "unlock_ice", "name": "Ice", "rarity": "epic", "unlock": "ice", "min_wave": 6,
+		"desc": "Unlocks the Ice tower — heavy slow plus poison, and from level 2 the chill spreads"},
+	{"id": "unlock_steam", "name": "Steam", "rarity": "epic", "unlock": "steam", "min_wave": 6,
+		"desc": "Unlocks the Steam tower — solid damage with a slow attached"},
+	{"id": "all_speed", "name": "Quickening", "rarity": "epic", "max_stacks": 2,
+		"desc": "All towers attack 20% faster",
+		"effects": [{"stat": "attack_speed", "op": "mult", "value": 1.2}]},
+	{"id": "all_dmg_big", "name": "Convergence", "rarity": "epic", "max_stacks": 2,
+		"desc": "All towers deal +35% damage",
+		"effects": [{"stat": "damage", "op": "mult", "value": 1.35}]},
+
+	# --- Legendary: run-defining ------------------------------------------------
+	{"id": "unlock_lava", "name": "Lava", "rarity": "legendary", "unlock": "lava", "min_wave": 12,
+		"desc": "Unlocks the Lava tower — huge splash and a burn, but cannot hit flyers"},
+	{"id": "unlock_lightning", "name": "Lightning", "rarity": "legendary",
+		"unlock": "lightning", "min_wave": 12,
+		"desc": "Unlocks the Lightning tower — 25% chance to freeze an enemy in place"},
+	{"id": "overcharge", "name": "Overcharge", "rarity": "legendary", "max_stacks": 1,
+		"desc": "All towers: +50% damage, +25 range, 15% faster",
+		"effects": [
+			{"stat": "damage", "op": "mult", "value": 1.5},
+			{"stat": "range", "op": "add", "value": 25.0},
+			{"stat": "attack_speed", "op": "mult", "value": 1.15},
+		]},
+]
+
+# --- Workshop: permanent upgrades ----------------------------------------------
+# Bought with Essence between runs and applied at the start of every run afterwards.
+# Levels are cumulative: owning level 3 folds the entry's `effects` three times, which is
+# why every effect here has to be a per-level step rather than a total.
+#
+# Tower-stat effects go through exactly the same TowerMods.fold as the roguelite cards —
+# permanent and temporary power share one path, so there is one place to reason about how
+# they stack. `start_gold` and `start_lives` are run-start values instead and are read
+# directly by Meta; they are not tower stats and must not be folded.
+#
+# Fields: id, name, desc (%s is replaced by the per-level step), max_level, base_cost,
+#         cost_growth (cost of level n = base_cost * cost_growth^n), effects.
+const WORKSHOP_DEFS: Array = [
+	{"id": "forge", "name": "Forge", "desc": "+6% tower damage per level",
+		"max_level": 10, "base_cost": 20, "cost_growth": 1.55,
+		"effects": [{"stat": "damage", "op": "mult", "value": 1.06}]},
+	{"id": "tempo", "name": "Tempo", "desc": "+4% attack speed per level",
+		"max_level": 8, "base_cost": 30, "cost_growth": 1.65,
+		"effects": [{"stat": "attack_speed", "op": "mult", "value": 1.04}]},
+	{"id": "lens", "name": "Lens", "desc": "+6 tower range per level",
+		"max_level": 8, "base_cost": 25, "cost_growth": 1.5,
+		"effects": [{"stat": "range", "op": "add", "value": 6.0}]},
+	{"id": "treasury", "name": "Treasury", "desc": "+20 starting gold per level",
+		"max_level": 10, "base_cost": 18, "cost_growth": 1.45,
+		"effects": [{"stat": "start_gold", "op": "add", "value": 20.0}]},
+	{"id": "ramparts", "name": "Ramparts", "desc": "+2 starting lives per level",
+		"max_level": 8, "base_cost": 35, "cost_growth": 1.7,
+		"effects": [{"stat": "start_lives", "op": "add", "value": 2.0}]},
 ]
 
 # --- Element matchup -----------------------------------------------------------
@@ -208,6 +345,11 @@ func element_mult(atk: String, def: String) -> float:
 var gold: int = 0
 var lives: int = 0
 var is_over: bool = false
+## Highest wave this run actually started. The run summary's headline number, and the basis
+## for the permanent-currency award once meta progression lands.
+var wave_reached: int = 0
+# The all-time best wave now lives in Meta, where it is persisted along with the rest of
+# the permanent progression — see Meta.best_wave.
 
 ## Cumulative distance from PATH[0] to each waypoint, built once in _ready(). Towers
 ## rank enemies by how far along the road they are (the First / Last targeting modes)
@@ -245,9 +387,12 @@ func _dist_point_segment(p: Vector2, a: Vector2, b: Vector2) -> float:
 	return p.distance_to(a + ab * t)
 
 func reset() -> void:
-	gold = START_GOLD
-	lives = START_LIVES
+	# The Workshop's Treasury / Ramparts levels land here rather than in Balance: they are
+	# permanent progression, not a tuning constant, and this is the one place a run begins.
+	gold = Balance.START_GOLD + Meta.bonus_start_gold()
+	lives = Balance.START_LIVES + Meta.bonus_start_lives()
 	is_over = false
+	wave_reached = 0
 
 ## Asks the level for a short camera kick (boss deaths, leaks).
 func request_shake(amount: float) -> void:
@@ -270,8 +415,3 @@ func lose_life(amount: int = 1) -> void:
 	if lives == 0 and not is_over:
 		is_over = true
 		game_over.emit()
-
-func trigger_victory() -> void:
-	if not is_over:
-		is_over = true
-		victory.emit()

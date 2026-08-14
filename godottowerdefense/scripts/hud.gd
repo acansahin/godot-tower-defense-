@@ -18,12 +18,20 @@ const SPEEDS: Array[float] = [1.0, 2.0, 3.0]
 @onready var lives_label: Label = $LivesLabel
 @onready var wave_label: Label = $WaveLabel
 @onready var next_label: Label = $NextLabel
+@onready var hint_label: Label = $HintLabel
 @onready var send_button: Button = $SendButton
 @onready var pause_button: Button = $PauseButton
 @onready var speed_button: Button = $SpeedButton
 
 var _speed_index: int = 0
 var _paused: bool = false
+## Set while an overlay owns the run. This node is process_mode = ALWAYS so that the pause
+## button can un-pause — which also means Space still reaches it while the upgrade screen
+## is up, and would cheerfully resume the game behind a modal that is still open.
+var _blocked: bool = false
+
+func set_input_blocked(value: bool) -> void:
+	_blocked = value
 
 func _ready() -> void:
 	send_button.pressed.connect(func() -> void: send_pressed.emit())
@@ -40,9 +48,15 @@ func set_gold(value: int) -> void:
 func set_lives(value: int) -> void:
 	lives_label.text = "Lives: %d" % value
 
-func set_wave(number: int, total: int) -> void:
-	wave_label.text = "Wave: %d / %d" % [number, total]
+## No "/ total" — waves are endless, so the number counts up with nothing to count toward.
+func set_wave(number: int) -> void:
+	wave_label.text = "Wave: %d" % number
 	send_button.disabled = true  # a wave is active now
+
+## Shows a tutorial hint along the bottom, or clears it when handed "". The HUD only
+## renders this — which hint is current, and when it expires, is Tutorial's business.
+func set_hint(text: String) -> void:
+	hint_label.text = text
 
 func set_next(text: String, color: Color) -> void:
 	next_label.text = text
@@ -71,13 +85,13 @@ func _unhandled_key_input(event: InputEvent) -> void:
 ## No-op once the game is over: the end screen owns the pause flag at that point,
 ## and un-pausing would let the level keep running behind the overlay.
 func toggle_pause() -> void:
-	if Game.is_over:
+	if Game.is_over or _blocked:
 		return
 	_paused = not _paused
 	_apply_pause()
 
 func cycle_speed() -> void:
-	if Game.is_over:
+	if Game.is_over or _blocked:
 		return
 	_speed_index = (_speed_index + 1) % SPEEDS.size()
 	_apply_speed()

@@ -48,7 +48,7 @@ offset_bottom = 36.0
 mouse_filter = 2
 theme_override_colors/font_color = Color(0.8, 0.9, 1, 1)
 theme_override_font_sizes/font_size = 22
-text = "Wave: 0 / 20"
+text = "Wave: 0"
 
 [node name="NextLabel" type="Label" parent="."]
 layout_mode = 0
@@ -81,6 +81,24 @@ offset_bottom = -8.0
 focus_mode = 0
 theme_override_font_sizes/font_size = 18
 text = "Pause"
+
+[node name="HintLabel" type="Label" parent="."]
+layout_mode = 1
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 196.0
+offset_top = -52.0
+offset_right = -12.0
+offset_bottom = -12.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(1, 0.95, 0.75, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.75)
+theme_override_constants/outline_size = 6
+theme_override_font_sizes/font_size = 20
+horizontal_alignment = 1
+vertical_alignment = 1
+text = ""
 
 [node name="SpeedButton" type="Button" parent="."]
 layout_mode = 1

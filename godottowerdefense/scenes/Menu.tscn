@@ -1,7 +1,8 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://scripts/menu.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/map.gd" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/Workshop.tscn" id="3"]
 
 [node name="Menu" type="Node2D"]
 script = ExtResource("1")
@@ -47,10 +48,22 @@ theme_override_font_sizes/font_size = 18
 text = "Element-matching tower defense"
 horizontal_alignment = 1
 
+[node name="StatusLabel" type="Label" parent="UI/Root/Center/Panel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.62, 0.9, 1, 1)
+theme_override_font_sizes/font_size = 17
+text = ""
+horizontal_alignment = 1
+
 [node name="PlayButton" type="Button" parent="UI/Root/Center/Panel/VBox"]
 custom_minimum_size = Vector2(220, 52)
 layout_mode = 2
 text = "Play"
+
+[node name="WorkshopButton" type="Button" parent="UI/Root/Center/Panel/VBox"]
+custom_minimum_size = Vector2(220, 46)
+layout_mode = 2
+text = "Workshop"
 
 [node name="HowButton" type="Button" parent="UI/Root/Center/Panel/VBox"]
 custom_minimum_size = Vector2(220, 46)
@@ -90,20 +103,24 @@ horizontal_alignment = 1
 layout_mode = 2
 theme_override_font_sizes/font_size = 17
 text = "• Drag a tower from the palette on the right onto a grid cell to build it.
-• Click a tower to select it — the panel shows its stats, and holds Upgrade,
-    Sell and Target. The green ▲ marks towers you can already afford to upgrade.
-• Target sets who a tower shoots: First (nearest the exit), Last, Strong or Close.
+• Tap a tower to upgrade it (up to level 3). Tap the small red × in its corner
+    to sell it back for half of what you spent. The green ▲ marks a tower whose
+    next level you can already afford.
+• Towers always shoot the enemy nearest the exit — the one about to cost a life.
 • Pause / Space freezes the game; the speed button / F cycles 1x, 2x, 3x.
-• Earth and Lava are ground-only — they cannot hit flyers.
+• Earth is ground-only — it cannot hit flyers. Fire, Water and Nature can.
 • Immune enemies shrug off slows and stuns — but poison still hurts them.
 • Elements: fire → nature → earth → water → fire.
     You deal ×1.75 to the element you beat, ×0.7 to the one that beats you.
     Big gold damage numbers mean a bonus; small grey ones mean you are resisted.
 • Send Next ▶ starts the next wave early for bonus gold.
 • Press M to mute all sound.
-• Survive all 20 waves to win."
+• The waves never stop. See how deep you can get before your lives run out."
 
 [node name="BackButton" type="Button" parent="UI/Root/HowPanel/Panel/VBox"]
 custom_minimum_size = Vector2(180, 46)
 layout_mode = 2
 text = "Back"
+
+[node name="Workshop" parent="UI/Root" instance=ExtResource("3")]
+visible = false

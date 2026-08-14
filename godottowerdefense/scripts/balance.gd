@@ -1,0 +1,211 @@
+extends Node
+## "Balance" autoload: every tunable curve and economy number in one place.
+##
+## Game owns *what a tower or wave is* (the TOWER_DEFS / WAVE_TYPES / WAVES tables).
+## This file owns *how the numbers grow* — upgrade curves, wave scaling, boss
+## multipliers, the gold economy, and the archetype modifiers that used to sit as bare
+## literals inside enemy.gd. Before this existed a balance pass meant editing three
+## files and hunting for un-named constants; now it is one file, and gameplay scripts
+## read from it rather than declaring their own.
+##
+## Registered FIRST in project.godot's autoload list: it has no dependencies of its own,
+## so nothing can be caught reading it before it exists.
+##
+## Nothing here changes behaviour — every value is the one that used to live at the site
+## named in its comment.
+
+# --- Run start -----------------------------------------------------------------
+
+const START_GOLD := 150
+const START_LIVES := 20
+
+# --- Tower upgrade curve (was tower.gd:39-44) ----------------------------------
+
+const MAX_LEVEL := 3
+const DAMAGE_GROWTH := 1.6        ## damage multiplier per level
+const RANGE_GROWTH := 30.0        ## flat range added per level (px; scales with Game.CELL_WIDTH)
+const FIRE_SPEEDUP := 0.82        ## fire_interval multiplier per level (lower = faster)
+const SELL_REFUND := 0.5          ## fraction of total_spent returned when sold
+## slow_splash radius gains this fraction of its base per level past 2 (Lv3 = x1.3).
+const SLOW_SPLASH_GROWTH := 0.3
+## Hard floor on a tower's seconds-per-shot. No tower comes near it today (the fastest is
+## Fire at Lv3, 0.3026) — it exists so that stacked attack-speed modifiers can never reach
+## zero, which would make the cooldown branch in _process fire on every frame.
+const MIN_FIRE_INTERVAL := 0.05
+
+## Gold cost of upgrading a tower from `level` to `level + 1`.
+## Kept as a function rather than a constant because the shape (linear in level) is
+## itself a balance decision — a designer swapping it for a curve edits only this.
+func upgrade_cost(build_cost: int, level: int) -> int:
+	return build_cost * level
+
+# --- Wave pacing + economy (was wave_manager.gd:12-22) -------------------------
+
+const PREP_TIME := 4.0            ## Delay between waves.
+## Delay before wave 1 only. Longer than the rest: a first-time player has to read the
+## palette, understand that towers are dragged, and pick a cell — 4 seconds is not enough
+## to do that, and starting the tutorial wave before a single tower exists teaches nothing.
+const FIRST_PREP_TIME := 12.0
+const INTEREST_RATE := 0.08       ## Banked gold earns this each wave (capped).
+const INTEREST_CAP := 40
+const LEAK_FREE_BONUS := 6        ## Bonus if no enemy reached the end this wave.
+
+## A few enemies still randomly fly on non-Air waves.
+const FLYER_START_WAVE := 3
+## Effective per-enemy chance. This used to be written `FLYER_CHANCE * 0.5` with
+## FLYER_CHANCE = 0.3 at the call site, so the named constant read as double the real
+## odds. Folded to the true value here; behaviour is unchanged.
+const FLYER_CHANCE := 0.15
+
+## Gold for calling a wave in early, by the wave number being skipped into.
+func early_call_bonus(wave: int) -> int:
+	return 3 + wave
+
+# --- Wave scaling formula (was wave_manager.gd:91-101) -------------------------
+
+const BASE_HP_FLAT := 20.0
+const BASE_HP_LINEAR := 10.0
+## Quadratic term, deliberately gentle: archetype multipliers stack on top of it, so a
+## steeper curve makes the late waves spike past what the gold economy can answer.
+const BASE_HP_QUAD := 2.55
+const BASE_SPEED_FLAT := 60.0
+const BASE_SPEED_LINEAR := 6.0
+const BASE_COUNT_FLAT := 5
+const BASE_COUNT_LINEAR := 2.5
+const REWARD_FLAT := 3
+const SPAWN_INTERVAL_START := 0.9
+const SPAWN_INTERVAL_DECAY := 0.04
+const SPAWN_INTERVAL_MIN := 0.3
+const ENEMY_BASE_RADIUS := 24.0
+## Hard ceiling on how many enemies one wave may spawn, applied AFTER the archetype and
+## per-wave multipliers.
+##
+## The count curve is linear and the run is now endless, so without this a wave-100 swarm
+## asks for ~660 bodies — which is both a framerate cliff and not actually harder to play,
+## just longer. Difficulty past this point comes from the quadratic HP curve instead, which
+## is the dial that keeps asking the player to build better rather than to wait longer.
+##
+## Set just above the busiest hand-authored wave (wave 20 swarm = 143), so waves 1-20 are
+## completely unaffected and only the generated tail is clamped.
+const MAX_SPAWN_COUNT := 160
+
+func wave_hp(wave: int) -> float:
+	return BASE_HP_FLAT + wave * BASE_HP_LINEAR + wave * wave * BASE_HP_QUAD
+
+func wave_speed(wave: int) -> float:
+	return BASE_SPEED_FLAT + wave * BASE_SPEED_LINEAR
+
+func wave_count(wave: int) -> int:
+	return BASE_COUNT_FLAT + int(wave * BASE_COUNT_LINEAR)
+
+func wave_reward(wave: int) -> int:
+	return REWARD_FLAT + wave
+
+func spawn_interval(wave: int) -> float:
+	return maxf(SPAWN_INTERVAL_MIN, SPAWN_INTERVAL_START - wave * SPAWN_INTERVAL_DECAY)
+
+# --- Roguelite choices ---------------------------------------------------------
+
+## A choice is offered after every Nth wave is cleared. Kept frequent on purpose: a short
+## session is only a few waves long, and a session that contains no choice at all is just
+## a tower defense wave — the choice IS the roguelite loop, so it has to come around inside
+## the length of a bus ride.
+const CHOICE_EVERY := 3
+const CHOICE_COUNT := 3   ## Cards offered per choice.
+
+## Relative odds per rarity before the wave drift below.
+const RARITY_WEIGHTS := {
+	"common": 60.0, "rare": 25.0, "epic": 12.0, "legendary": 3.0,
+}
+## How far each rarity sits above common; multiplies the drift.
+const RARITY_TIER := {
+	"common": 0, "rare": 1, "epic": 2, "legendary": 3,
+}
+## Each wave nudges the better rarities up, so a deep run stops offering the same commons.
+## At wave 30 this is roughly rare x1.5, epic x1.9, legendary x2.4 — a real shift without
+## making legendaries routine.
+const RARITY_WAVE_DRIFT := 0.015
+
+## Display colours per rarity, used by the choice cards.
+const RARITY_COLORS := {
+	"common": Color(0.72, 0.76, 0.82),
+	"rare": Color(0.38, 0.68, 1.00),
+	"epic": Color(0.72, 0.45, 1.00),
+	"legendary": Color(1.00, 0.72, 0.22),
+}
+
+## Weight for `rarity` when choosing at `wave`.
+func rarity_weight(rarity: String, wave: int) -> float:
+	var base: float = float(RARITY_WEIGHTS.get(rarity, 1.0))
+	var tier: float = float(RARITY_TIER.get(rarity, 0))
+	return base * (1.0 + RARITY_WAVE_DRIFT * float(wave) * tier)
+
+# --- Meta progression ----------------------------------------------------------
+
+## Essence earned for reaching wave `n`. Mildly superlinear, so pushing two waves deeper is
+## worth more than replaying two shallow runs — that is what makes "one more run" a real
+## decision rather than a grind. Wave 10 pays ~15, wave 20 ~40, wave 40 ~120.
+func run_essence(wave_reached: int) -> int:
+	if wave_reached <= 0:
+		return 0
+	var w := float(wave_reached)
+	return int(w + w * w / 20.0)
+
+## How long offline earnings keep accruing. Capped so the game never punishes a player for
+## opening it — past this point, waiting longer gains nothing and they may as well play.
+const OFFLINE_CAP_HOURS := 8.0
+## Essence per hour offline, per wave of the player's best run. Scaling on `best_wave` keeps
+## the reward meaningful late instead of decaying into a rounding error, without making it
+## competitive with actually playing.
+const OFFLINE_ESSENCE_PER_HOUR_PER_WAVE := 0.35
+## Offline pays nothing at all below this, so a player who alt-tabs mid-session does not get
+## a "welcome back" popup for 40 seconds away.
+const OFFLINE_MIN_SECONDS := 300.0
+
+## Essence accrued for `seconds` away, given the player's deepest run.
+func offline_essence(seconds: float, best_wave: int) -> int:
+	if seconds < OFFLINE_MIN_SECONDS or best_wave <= 0:
+		return 0
+	var hours := minf(seconds / 3600.0, OFFLINE_CAP_HOURS)
+	return int(hours * OFFLINE_ESSENCE_PER_HOUR_PER_WAVE * float(best_wave))
+
+## Cost of taking a workshop entry from `level` to `level + 1`.
+func workshop_cost(base_cost: int, cost_growth: float, level: int) -> int:
+	return int(round(float(base_cost) * pow(cost_growth, float(level))))
+
+# --- Boss (was wave_manager.gd:24-31) ------------------------------------------
+
+const BOSS_HP_MULT := 6.0
+const BOSS_SPEED_MULT := 0.6
+const BOSS_REWARD_MULT := 10
+## Not a straight scale-up: a boss has to stay narrower than the road it walks
+## (2 * Game.ROAD_HALF = 80), so 38 -> 76 wide is the ceiling here.
+const BOSS_RADIUS := 38.0
+const BOSS_LIFE_COST := 10
+const BOSS_TINT := Color(0.45, 0.1, 0.5)
+
+# --- Enemy archetype modifiers (were bare literals in enemy.gd) ----------------
+
+## Seconds an enemy must go undamaged before regen starts healing it again. This is what
+## stops regen from being a hard DPS threshold (was enemy.gd:54).
+const REGEN_DELAY := 2.0
+
+## Applied by Enemy.make_flying() to every flyer, Air-wave and random alike
+## (was enemy.gd:141-142).
+const FLYER_HP_MULT := 0.65
+const FLYER_SPEED_MULT := 1.25
+## Pale airborne tint, applied by make_flying(). Game.WAVE_TYPES["air"]["color"] carries
+## the same value as a literal and cannot read it from here — WAVE_TYPES is a `const`, and
+## an autoload is a runtime node, not a constant. Keep the two in step by hand.
+const FLYER_TINT := Color(0.72, 0.78, 0.96)
+
+## Stats a splitter's children inherit from the parent (was enemy.gd:247-248).
+const SPLIT_HP_MULT := 0.35
+const SPLIT_SPEED_MULT := 1.15
+const SPLIT_RADIUS_MULT := 0.62
+const SPLIT_CHILD_REWARD := 1
+
+# --- Camera shake (was enemy.gd:242, :255) -------------------------------------
+
+const SHAKE_BOSS_DEATH := 7.0
+const SHAKE_LEAK := 4.0            ## A leak should be felt, not just noticed in the HUD.
