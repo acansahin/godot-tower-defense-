@@ -78,6 +78,8 @@ func _ready() -> void:
 		_dump_mods()
 	if OS.get_cmdline_user_args().has("--dump-duals"):
 		_dump_duals()
+	if OS.get_cmdline_user_args().has("--dump-board"):
+		_dump_board()
 	# TEMPORARY: pops the choice screen immediately, so its _draw can be exercised in a
 	# rendered run without first playing three waves. Headless never calls _draw at all, so
 	# nothing else in the suite would catch a broken card layout.
@@ -282,6 +284,87 @@ func _fill_board() -> void:
 		i += 1
 	print("--- FILL BOARD: placed %d towers over %d cells, all at max level ---"
 			% [i, grid.cells.size()])
+
+## Measures the BOARD rather than the towers: how much of the road one tower can watch,
+## and how many towers it takes to watch all of it.
+##
+## This exists because "Light covers half the board" was an assertion nobody had checked.
+## Tower ranges are now the source map's, and that map's boards are far larger than ours,
+## so the ratio of range to road length is the number that actually moved — not any single
+## stat. Redesigning the path by eye cannot tell you whether it improved; this can.
+##
+## `cover` is the honest headline: the number of towers of that element, placed greedily on
+## the best cells, needed to bring 95% of the road inside somebody's range. A board where
+## two towers cover everything has no placement decisions left in it.
+##
+##   Godot.exe --headless --path <project> res://scenes/Main.tscn --quit-after 5 -- --dump-board
+func _dump_board() -> void:
+	print("--- BOARD DUMP BEGIN ---")
+	# Sample the road evenly. 12px is well under the smallest range (Fire, 175px), so the
+	# sampling grain never decides the answer.
+	const STEP := 12.0
+	var samples: Array[Vector2] = []
+	var path: Array = Game.PATH
+	var total := 0.0
+	for i in range(path.size() - 1):
+		var a: Vector2 = path[i]
+		var b: Vector2 = path[i + 1]
+		var seg := a.distance_to(b)
+		total += seg
+		var n := int(seg / STEP)
+		for k in n:
+			samples.append(a.lerp(b, float(k) / float(n)))
+	var cells: Array[Rect2] = grid.cells
+	print("  road length      : %.0f px over %d waypoints" % [total, path.size()])
+	print("  buildable cells  : %d" % cells.size())
+	print("  road samples     : %d (every %.0f px)" % [samples.size(), STEP])
+	print("  %-10s %7s %8s %8s  %s" % ["element", "range", "best 1", "median", "cover 95%"])
+	for tid in Game.TOWER_ORDER:
+		var def: Dictionary = Game.TOWER_DEFS[String(tid)]
+		var r: float = float(def.get("range", 0.0)) * Balance.WC3_RANGE_SCALE
+		var r_sq := r * r
+		# Which samples each cell can see. Built once, then reused for both statistics.
+		var seen: Array[PackedInt32Array] = []
+		for c in cells:
+			var hit := PackedInt32Array()
+			var centre := c.get_center()
+			for s in samples.size():
+				if centre.distance_squared_to(samples[s]) <= r_sq:
+					hit.append(s)
+			seen.append(hit)
+		var counts: Array[int] = []
+		for h in seen:
+			counts.append(h.size())
+		counts.sort()
+		var best := counts[counts.size() - 1] if not counts.is_empty() else 0
+		var median := counts[counts.size() / 2] if not counts.is_empty() else 0
+		# Greedy set cover to 95%: repeatedly take the cell that adds the most new road.
+		var covered := {}
+		var target := int(float(samples.size()) * 0.95)
+		var used := 0
+		while covered.size() < target and used < cells.size():
+			var best_gain := 0
+			var best_i := -1
+			for i in seen.size():
+				var gain := 0
+				for s in seen[i]:
+					if not covered.has(s):
+						gain += 1
+				if gain > best_gain:
+					best_gain = gain
+					best_i = i
+			if best_i < 0:
+				break  # nothing left can add road; the rest is out of everyone's reach
+			for s in seen[best_i]:
+				covered[s] = true
+			used += 1
+		var cover_txt := "%d towers" % used if covered.size() >= target \
+				else "%d towers (only %.0f%% reachable)" % [used,
+					100.0 * float(covered.size()) / float(samples.size())]
+		print("  %-10s %7.0f %7.0f%% %7.0f%%  %s" % [tid, r,
+				100.0 * float(best) / float(samples.size()),
+				100.0 * float(median) / float(samples.size()), cover_txt])
+	print("--- BOARD DUMP END ---")
 
 ## Verification harness for the seven support duals. The risky one is the aura: it is the
 ## first stat that depends on a tower OTHER than the one being computed, so the thing worth

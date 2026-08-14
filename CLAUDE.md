@@ -45,7 +45,9 @@ plus a generator-purity check), `--dump-mods` (roguelite modifiers apply / stay 
 unwind on reset), `--dump-meta` (essence curve, workshop costs, purchases reaching towers,
 settings round-trip), `--dump-duals` (the support duals: an aura applies, deepens with
 its provider's level, stops at its radius and unwinds EXACTLY when the provider is
-removed; plus each dual's payload and Magic's charge cycle), `--fill-board` (a tower on every cell at max level, 8x speed,
+removed; plus each dual's payload and Magic's charge cycle), `--dump-board` (road length,
+cell count, and per element how much of the road one tower watches and how many towers it
+takes to watch 95% of it), `--fill-board` (a tower on every cell at max level, 8x speed,
 auto-picks upgrades, prints each wave and the run-over line), `--show-choice` (pops the
 choice screen so its `_draw` can be exercised), `--go-back` (rewinds the last-seen stamp 4h
 so the next launch collects an offline reward), `--wipe-save` (clears `user://save.json`).
