@@ -60,16 +60,21 @@ const WC3_RANGE_SCALE := 0.35
 ## about a number, and it is here rather than in TOWER_DEFS on purpose: the definitions
 ## keep the map's real 2000, and this says what our board can afford to honour.
 ##
-## Light and Darkness reach 2000 WC3 units, four times Fire. On the original's very large
-## boards that is a trade; on any board small enough to fit a phone screen it is free
-## power, because the six elements sit at nearly equal DPS. `--dump-board` measured a
-## faithful 700px Light watching 88-93% of the road and covering the whole map with TWO
-## towers on every world size that fits on one screen — 1280x720, 1536x864, 1707x960 alike.
-## Growing the world until it was fair took four screens and broke the game to fix a
-## statistic, so the reach is capped instead.
+## Light and Darkness reach 2000 WC3 units, four times Fire, and the six elements sit at
+## nearly equal DPS — so the reach is close to free power. `--dump-board` measures a
+## faithful 700px Light watching 98% of the road (the `raw` column) and covering the whole
+## board with TWO towers, on every world size that fits on one screen — 1280x720, 1536x864,
+## 1707x960 alike — and on every road shape tried on them. Growing the world until it was
+## fair took four screens and broke the game to fix a statistic, so the reach is capped.
 ##
-## 380 was chosen by measurement, not feel: it puts the longest towers at 41% of the road
-## and four towers to cover it, next to Fire's 12% and sixteen. It also catches the
+## What is NOT true — and was written here for two commits — is that this is the small
+## board's fault. `extract_w3x.py … pathing` measures the original's own arena: a 2000-unit
+## tower there watches 94% of its own lane. Element TD lives with that because Light
+## arrives through an element draw, one of 36 towers, deep into a run. Ours is on the
+## palette at wave 1, so we cap: a tower you can place anywhere is not a placement.
+##
+## 380 was chosen by measurement, not feel: it puts the longest towers at 44% of the road
+## and four towers to cover it, next to Fire's 12% and twelve. It also catches the
 ## longest duals (Poison, Tech and Moon reach 481px uncapped), which face the same problem
 ## for the same reason.
 const MAX_TOWER_RANGE := 380.0
@@ -125,9 +130,10 @@ const HP_GROWTH := 1.16
 const CREEP_HP_PERCENT := 1.0
 ## Enemy speed is tied to the LENGTH OF THE ROAD, not to anything in the source map, and
 ## nothing else in the game reads that length — so if the road changes, these move with it
-## or the pacing breaks silently. The road is 4496px; 90 + 9n gives a wave-1 crossing of
-## about 45 seconds, which is the pace the game was tuned at before the world moved.
-const BASE_SPEED_FLAT := 90.0
+## or the pacing breaks silently. `--dump-board` prints the length: it is 3992px, and
+## 80 + 9n gives a wave-1 crossing of about 45 seconds, which is the pace the game was
+## tuned at over three road lengths now.
+const BASE_SPEED_FLAT := 80.0
 const BASE_SPEED_LINEAR := 9.0
 ## Enemies per wave. The map spawns a FLAT `16 + difficulty * 3` and never grows it — all
 ## of its difficulty is in the hit-point curve. Faithful, and unplayable as an opening: 28

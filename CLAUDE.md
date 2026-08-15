@@ -47,10 +47,14 @@ settings round-trip), `--dump-duals` (the support duals: an aura applies, deepen
 its provider's level, stops at its radius and unwinds EXACTLY when the provider is
 removed; plus each dual's payload and Magic's charge cycle), `--dump-board` (road length,
 cell count, and per element how much of the road one tower watches and how many towers it
-takes to watch 95% of it), `--fill-board` (a tower on every cell at max level, 8x speed,
+takes to watch 95% of it — plus a `raw` column measuring the same with the range cap
+lifted), `--fill-board` (a tower on every cell at max level, 8x speed,
 auto-picks upgrades, prints each wave and the run-over line), `--show-choice` (pops the
-choice screen so its `_draw` can be exercised), `--go-back` (rewinds the last-seen stamp 4h
-so the next launch collects an offline reward), `--wipe-save` (clears `user://save.json`).
+choice screen so its `_draw` can be exercised), `--shot` (saves one drawn frame to
+`user://shot.png` and prints the path — the only harness that shows you the board rather
+than describing it, so **drop `--headless` for this one**), `--go-back` (rewinds the
+last-seen stamp 4h so the next launch collects an offline reward), `--wipe-save` (clears
+`user://save.json`).
 
 **`--wipe-save` first when comparing against a stored baseline.** Workshop levels feed
 `Run.permanent`, which feeds every tower stat, so a `--dump-stats` taken against a save
@@ -98,16 +102,26 @@ Both workflows run automatically on push to `main`:
 ## The board is measured, not eyeballed
 
 `Game.WORLD_SIZE` is 1536x864 and the camera frames **all** of it at one zoom — there is no
-panning. Run `--dump-board` before and after touching `Game.PATH`, `GRID_ROWS`, `CELL_WIDTH`,
-`Balance.WC3_RANGE_SCALE` or `Balance.MAX_TOWER_RANGE`; it reports how much of the road one
-tower watches and how many towers it takes to cover 95% of it.
+panning. Run `--dump-board` before and after touching `Game.PATH`, `CELL_WIDTH`,
+`CELL_HEIGHT`, `Balance.WC3_RANGE_SCALE` or `Balance.MAX_TOWER_RANGE`, and `--shot` to
+actually look at the result; the numbers move in ways eyeballing does not predict, and the
+draw code breaks in ways the numbers do not show.
 
-The history matters because three plausible fixes are all wrong, and the last one was
-shipped for a commit before play proved it:
+The road is **one inward turn of the original's spiral**, dead-ending at the base in the
+middle of the board rather than leaving the far edge. It was ported from the map's own
+pathing data — `python tools/extract_w3x.py "<map>.w3x" pathing` prints the original arena,
+and docs/element-td-data.md §5 writes it up. What the spiral buys over the serpentine it
+replaced is thick buildable blocks: road on two or three sides of a tower, and short-ranged
+towers forced to the edge of a block to reach anything.
 
-- On a one-screen board a faithful 700px Light watches ~90% of the road and covers the map
-  with **two** towers. The six elements sit at near-equal DPS, so on a small board 4x range
-  is simply free power.
+The history matters because four plausible fixes are all wrong, and one of them was shipped
+for a commit before play proved it:
+
+- A faithful 700px Light watches 98% of the road and covers the board with **two** towers.
+  The six elements sit at near-equal DPS, so 4x range is simply free power.
+- **This is not the small board's fault.** The `pathing` dump measures 94% for the same
+  tower on the original's own arena. No board shape fixes it; Element TD gets away with it
+  because Light arrives late through an element draw, and ours is on the palette at wave 1.
 - **Folding the path tighter makes it worse** — the legs end up closer together and one big
   circle catches more of them, while the tight folds leave almost no buildable cells.
 - **Shrinking `WC3_RANGE_SCALE` breaks Fire long before it fixes Light**, because a cell
@@ -120,6 +134,13 @@ shipped for a commit before play proved it:
 So the reach is capped (`Balance.MAX_TOWER_RANGE`) and the world stays on one screen. That
 cap is the only number in the port that is not the map's; the definitions still carry the
 real 2000 so nothing is lost.
+
+**The UI covers part of the world, and the grid has to know.** The HUD and the tower palette
+live in 1280x720 SCREEN space while the board lives in 1536x864 WORLD space, so the palette's
+200px panel hides 240px of board — and it eats clicks, so a tower under it can never be
+upgraded or sold. `Game.PLAY_TOP` / `Game.PLAY_RIGHT` derive those bounds instead of stating
+them; the literal that came before them went stale through a world resize and put two
+columns of cells under the panel. Keep the road out of that strip too.
 
 Two constants are tied to the road length and nothing else reads it, so they move together
 or the pacing breaks silently: `Balance.BASE_SPEED_*` (at the wrong value a wave-1 enemy
@@ -226,6 +247,7 @@ The maps live outside the repo (the user's `Desktop/Warcraft III/Maps/Downloads/
 python tools/extract_w3x.py "<map>.w3x" towers    # roster grouped by cost tier
 python tools/extract_w3x.py "<map>.w3x" recipes   # the "( X + Y )" combination table
 python tools/extract_w3x.py "<map>.w3x" waves     # the 60-level HP curve + creep classes
+python tools/extract_w3x.py "<map>.w3x" pathing  # the arena: spiral shape, size, coverage
 ```
 
 The extracted result is written up in

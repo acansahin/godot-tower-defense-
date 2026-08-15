@@ -18,6 +18,7 @@ Usage::
     python tools/extract_w3x.py <map.w3x> towers
     python tools/extract_w3x.py <map.w3x> recipes
     python tools/extract_w3x.py <map.w3x> creeps
+    python tools/extract_w3x.py <map.w3x> pathing
 
 ``towers`` groups every custom unit by gold cost, which is what separates the
 tiers: in Element TD v2.0 the six base elements sit at 50 / 175 / 788 / 3544 /
@@ -389,9 +390,107 @@ def cmd_creeps(data: MapData, _args) -> None:
               f"{record.get('speed', '-'):>7}{total:>8}")
 
 
+def cmd_pathing(data: MapData, _args) -> None:
+    """Print the shape of ONE arena, read out of ``war3map.wpm``.
+
+    The port's board is a scaled-down copy of this shape, so it has to be
+    measured rather than remembered. ``war3map.wpm`` is the pathing map: a
+    ``MP3W`` header (version, width, height) followed by one flag byte per
+    32x32-unit cell. Only two bits matter here -- ``0x02`` unwalkable and
+    ``0x08`` unbuildable. Walkable-and-unbuildable is the creep lane;
+    walkable-and-buildable is the ground the player fills with towers.
+
+    Element TD stores eight identical player arenas side by side in one map, so
+    the walkable cells fall into eight equal connected components and any one of
+    them is the board. The coverage table repeats what the game's own
+    ``--dump-board`` harness prints for our board (see ``scripts/main.gd``): the
+    share of the lane one tower watches from the best spot on the ground, at the
+    ranges the ported towers actually carry.
+    """
+    CELL = 32  # world units per pathing cell
+    UNWALKABLE, UNBUILDABLE = 0x02, 0x08
+    buf = data.archive.read("war3map.wpm")
+    magic, version, width, height = struct.unpack_from("<4siii", buf, 0)
+    if magic != b"MP3W":
+        print(f"error: war3map.wpm has magic {magic!r}, not MP3W", file=sys.stderr)
+        return
+    flags = buf[16:16 + width * height]
+    print(f"  pathing map      : {magic.decode()} v{version}, {width}x{height} cells "
+          f"of {CELL} units = {width * CELL}x{height * CELL} units")
+
+    walkable = [[not flags[y * width + x] & UNWALKABLE for x in range(width)]
+                for y in range(height)]
+    buildable = [[not flags[y * width + x] & UNBUILDABLE for x in range(width)]
+                 for y in range(height)]
+
+    # Flood fill: one component per arena.
+    seen = [[False] * width for _ in range(height)]
+    components: list[list[tuple[int, int]]] = []
+    for sy in range(height):
+        for sx in range(width):
+            if not walkable[sy][sx] or seen[sy][sx]:
+                continue
+            queue = [(sx, sy)]
+            seen[sy][sx] = True
+            cells = []
+            while queue:
+                x, y = queue.pop()
+                cells.append((x, y))
+                for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                    if (0 <= nx < width and 0 <= ny < height
+                            and walkable[ny][nx] and not seen[ny][nx]):
+                        seen[ny][nx] = True
+                        queue.append((nx, ny))
+            components.append(cells)
+    components.sort(key=len, reverse=True)
+    biggest = len(components[0])
+    arenas = sum(1 for c in components if len(c) == biggest)
+    print(f"  walkable regions : {len(components)}, "
+          f"{arenas} of them the full {biggest} cells (the player arenas)")
+
+    arena = components[0]
+    x0 = min(x for x, _ in arena)
+    x1 = max(x for x, _ in arena)
+    y0 = min(y for _, y in arena)
+    y1 = max(y for _, y in arena)
+    lane = [(x, y) for x, y in arena if not buildable[y][x]]
+    ground = [(x, y) for x, y in arena if buildable[y][x]]
+    print(f"  one arena        : {x1 - x0 + 1}x{y1 - y0 + 1} cells = "
+          f"{(x1 - x0 + 1) * CELL}x{(y1 - y0 + 1) * CELL} units")
+    print(f"  of it            : {len(lane)} cells of lane, {len(ground)} buildable "
+          f"({100.0 * len(lane) / len(arena):.0f}% lane)")
+
+    # '#' lane, '+' buildable ground, ' ' wall. Two cells per character across, four
+    # down, which keeps a 3776-unit-tall arena inside a terminal without losing the shape.
+    print("  shape (# lane, + buildable ground):")
+    for y in range(y0, y1 + 1, 4):
+        row = []
+        for x in range(x0, x1 + 1, 2):
+            block = [(xx, yy) for yy in range(y, min(y + 4, y1 + 1))
+                     for xx in range(x, min(x + 2, x1 + 1))]
+            hashes = sum(1 for xx, yy in block if walkable[yy][xx] and not buildable[yy][xx])
+            plus = sum(1 for xx, yy in block if walkable[yy][xx] and buildable[yy][xx])
+            row.append("#" if hashes >= plus and hashes else ("+" if plus else " "))
+        print("    " + "".join(row))
+
+    # Sample both sets every other cell: 64 units of grain against ranges of 500 up.
+    samples = [(x, y) for x, y in lane if x % 2 == 0 and y % 2 == 0]
+    spots = [(x, y) for x, y in ground if x % 2 == 0 and y % 2 == 0]
+    print(f"  coverage from one tower ({len(spots)} spots against {len(samples)} lane samples):")
+    print(f"    {'range':>7}  {'best 1':>7}{'median':>8}   towers with it")
+    for reach, who in ((500, "Fire"), (750, "Water / Nature / Earth"), (2000, "Light / Darkness")):
+        radius_sq = (reach / CELL) ** 2
+        counts = sorted(
+            sum(1 for sx, sy in samples if (sx - bx) ** 2 + (sy - by) ** 2 <= radius_sq)
+            for bx, by in spots)
+        print(f"    {reach:>7}  {100.0 * counts[-1] / len(samples):>6.0f}%"
+              f"{100.0 * counts[len(counts) // 2] / len(samples):>7.0f}%   {who}")
+
+
 COMMANDS = {
     "files": cmd_files,
     "cat": cmd_cat,
+    "pathing": cmd_pathing,
     "towers": cmd_towers,
     "recipes": cmd_recipes,
     "creeps": cmd_creeps,

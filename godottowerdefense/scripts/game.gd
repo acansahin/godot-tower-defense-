@@ -18,7 +18,9 @@ signal shake_requested(amount: float)
 signal towers_changed
 
 ## The design viewport — what the player can see at once. UI (the choice screen, the
-## Workshop) is drawn against this; the WORLD is bigger and the camera pans across it.
+## Workshop, the HUD and the tower palette) is drawn against this, in SCREEN space; the
+## world below is bigger and the camera scales it down to fit. Converting between the two
+## is what PLAY_RIGHT and PLAY_TOP are for.
 const SCREEN_SIZE := Vector2(1280, 720)
 ## The playable world. Sized so the WHOLE board fits on screen at one zoom — the camera
 ## never pans, because a tower defense you have to scroll is a tower defense where you
@@ -33,26 +35,49 @@ const SCREEN_SIZE := Vector2(1280, 720)
 ## Balance.MAX_TOWER_RANGE. Geometry could not solve both; this is the half worth keeping.
 const WORLD_SIZE := Vector2(1536, 864)
 
-# Waypoints that define the S-shaped road. Enemies walk these in order.
-# First point is off-screen left (spawn), last is off-screen right (exit).
+# Waypoints that define the road. Enemies walk these in order: the first point is
+# off-screen left, where they spawn, and the last is the base they leak into.
 #
-# A three-leg serpentine across the 1536x864 world: legs at y = 168 / 432 / 696,
-# joined by alternating bends at x = 232 and 1304. 4496px of road, 56 buildable cells.
+# An inward SPIRAL, not a serpentine: in from the left, once around the outside, then
+# back along a middle lane that dead-ends at the heart of the board. There is no exit —
+# an enemy that walks to the end of the lane has reached the base, and leaks there.
 #
-# The bend x's are exact and matter: each is placed so that TWO columns of cells fit
-# on the narrow outer side of the turn instead of one. Cells tile outward from a bend
-# at ROAD_HALF + CELL_WIDTH*0.5 = 88 and then step by 96, and grid.gd drops any that
-# would fall off the board, so the second column lands exactly on the boundary — 232
-# puts it at 48, whose left edge is 0; 1304 puts it at 1488, whose right edge is 1536.
-# Move either bend 8px the wrong way and that outer column silently disappears.
+# This is the shape the original uses, read out of its own pathing map with
+# `python tools/extract_w3x.py "<map>.w3x" pathing` — see docs/element-td-data.md.
+# Element TD's arena is a rectangular spiral wound inward four times, with the buildable
+# ground in THICK blocks between the arms rather than in thin strips beside a lane. A
+# tower there sits with road on two or three sides of it, which is what makes range worth
+# paying for, and the run ends at the centre rather than off the far edge.
+#
+# We only get one turn of that spiral, because the original's arena is TALL: 2560x3776
+# units, which at WC3_RANGE_SCALE is 896x1321px against our 1536x864 world. We have the
+# width and two thirds of the height, and each further turn costs a lane plus the two
+# rows of grass beside it (80 + 176 = 256px of it).
+#
+# One turn still reproduces the original's coverage profile — `--dump-board` prints a
+# `raw` column measuring the uncapped ported ranges, which is the like-for-like against
+# the `pathing` dump: ours 12% / 28% / 98%, the original's 14% / 25% / 94% of the road
+# watched from the best single cell by Fire / the 750-unit elements / Light. Note what
+# that does NOT say: a spiral does not make a 700px tower reasonable, on our board or on
+# the original's. Balance.MAX_TOWER_RANGE is what does that, and it still has to.
+#
+# Geometry is bounded on the right by PLAY_RIGHT, not by WORLD_SIZE.x: the tower palette
+# is drawn over the last 240px of the world, so the road stays out of it too — a leg
+# behind the panel is a leg you watch enemies walk down through a menu.
+#
+# Every coordinate here is placed against the CELL TILING, which is anchored at the world
+# origin and steps by 96 — so a leg only earns cells on its outer side if a column centre
+# lands at least ROAD_CLEARANCE from it. The right leg is at 1112 rather than 1160 for
+# exactly that reason: at 1160 the column at 1200 sat 40px from the stone, was dropped, and
+# the strip between the road and the palette was 96px of grass nobody could build on. Eight
+# cells, invisible in a screenshot and obvious in --dump-board.
 const PATH: Array = [
-	Vector2(-144, 168),
-	Vector2(1304, 168),
-	Vector2(1304, 432),
-	Vector2(232, 432),
-	Vector2(232, 696),
-	Vector2(1304, 696),
-	Vector2(1680, 696),
+	Vector2(-144, 120),
+	Vector2(1112, 120),
+	Vector2(1112, 744),
+	Vector2(136, 744),
+	Vector2(136, 392),
+	Vector2(920, 392),
 ]
 
 # Grid placement: towers snap to cells drawn faintly on the grass, flush against
@@ -69,33 +94,30 @@ const ROAD_HALF := 40.0          ## Road stone half-width; cell edges tile flush
 ## equality would be fragile. Nothing is generated between 82 and 84, so the slack
 ## costs nothing.
 const ROAD_CLEARANCE := 82.0
-## Right edge of the buildable area. The tower palette is anchored to the right of
-## the screen, so the grid stops short of it — otherwise cells sit under the panel
-## where they cannot be seen and (because the panel eats the click) the towers on
-## them could never be upgraded or sold.
-const PLAY_RIGHT := 1488.0
+## Screen px the tower palette occupies down the right-hand side. It is a Control in
+## Main.tscn anchored to the right at offset_left = -200, and (unlike every node in the
+## HUD, which is mouse_filter = IGNORE) it swallows clicks across that whole rect.
+const PALETTE_WIDTH := 200.0
+## Right edge of the buildable area, in WORLD px. The palette lives in SCREEN space while
+## the board lives in world space, and the camera fits the world to the screen, so the
+## panel covers a wider strip of world than its own width: 200 screen px over a 1536px
+## world shown on a 1280px viewport is 240px of board. Anything past here is under the
+## panel, where it cannot be seen and — because the panel eats the click — a tower could
+## never be upgraded or sold. Derived rather than written down because it was wrong for a
+## commit: it stayed at 1488 through a world resize and put two columns under the palette.
+const PLAY_RIGHT := WORLD_SIZE.x * (1.0 - PALETTE_WIDTH / SCREEN_SIZE.x)  # 1296
+## Screen px of the HUD's top bar (HUD.tscn). Every HUD node is mouse_filter = IGNORE so
+## it costs no clicks, but a cell half under the gold/lives readout is still half invisible.
+const HUD_BAR_HEIGHT := 40.0
+## Top edge of the buildable area, in WORLD px. Same screen-to-world conversion as
+## PLAY_RIGHT.
+const PLAY_TOP := WORLD_SIZE.y * (HUD_BAR_HEIGHT / SCREEN_SIZE.y)  # 48
 
-# Build-grid rows as Vector2(centre_y, cell_height). Two rows fill the gap between
-# each pair of horizontal legs, giving 56 buildable cells.
-#
-# The pairing is the whole point: a bend's vertical leg runs from one horizontal road
-# to the next, so the number of rows it passes is the number of cells you get down the
-# narrow outer side of that turn. One row per gap gave a 2x1 corner; two gives 2x2.
-#
-# Legs are 264 apart, which leaves 184 of grass between two road edges — two 88px rows
-# and 8px of slack. Rows stay 88 rather than 96 tall because the height buys the slack
-# and the width is what carries the tap target: a 96px-wide cell is still ~48 CSS px on
-# a phone. The HUD no longer constrains this the way it did on the old one-screen board;
-# the whole world is on screen at once, so nothing is trapped under a bar.
-const GRID_ROWS: Array = [
-	Vector2(252.0, 88.0), Vector2(340.0, 88.0),  # between legs 1 and 2
-	Vector2(516.0, 88.0), Vector2(604.0, 88.0),  # between legs 2 and 3
-]
-## Column bounds for a row NO vertical road crosses. Every row in the current layout is
-## crossed by a bend and so tiles outward from it instead; these stay for a row placed
-## clear of both bends.
-const GRID_COL_START := 64.0     ## First column centre.
-const GRID_COL_END := 1440.0     ## Last column centre (= PLAY_RIGHT - CELL_WIDTH * 0.5).
+# Build cells are TILED across the whole play area and kept wherever they clear the road
+# by ROAD_CLEARANCE — see grid.gd. The old design listed explicit horizontal rows, which
+# only described a board whose road ran in straight horizontal legs; a spiral has
+# buildable ground in blocks that no row table can express.
+const CELL_HEIGHT := 88.0        ## Row height (px); rows step by this.
 
 # START_GOLD / START_LIVES moved to the Balance autoload with the rest of the economy —
 # see scripts/balance.gd. This file keeps the map geometry and the data tables.

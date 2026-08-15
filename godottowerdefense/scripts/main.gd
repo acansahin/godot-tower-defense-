@@ -102,6 +102,33 @@ func _ready() -> void:
 		print("--- clock rewound 4h; relaunch to collect ---")
 	if OS.get_cmdline_user_args().has("--show-choice"):
 		_on_choice_due(30)  # late wave: exercises the higher-rarity cards and NEW TOWER
+	for arg in OS.get_cmdline_user_args():
+		if String(arg).begins_with("--shot"):
+			# `--shot` grabs the opening board; `--shot:20` waits 20 seconds first, which is
+			# how you photograph a wave in flight rather than an empty map.
+			var parts := String(arg).split(":")
+			_save_screenshot(float(parts[1]) if parts.size() > 1 else 1.0)
+
+## TEMPORARY: saves one frame of the running game to `user://shot.png` and prints where it
+## landed. Every other harness here prints numbers, and numbers cannot see a board — the
+## grid overlapping the HUD, a road drawn behind the tower palette, a marker that vanishes
+## at phone scale. `--headless` never calls _draw(), so this one must run WITHOUT it:
+##
+##   Godot.exe --path <project> res://scenes/Main.tscn --quit-after 150 -- --shot
+##   Godot.exe --path <project> res://scenes/Main.tscn --quit-after 4000 -- --shot:60
+##
+## The wait is not decoration: the viewport texture is only complete after a frame has been
+## drawn, and grabbing it in _ready gives back an empty image.
+func _save_screenshot(delay: float) -> void:
+	await get_tree().create_timer(delay).timeout
+	await RenderingServer.frame_post_draw
+	var image := get_viewport().get_texture().get_image()
+	var path := "user://shot.png"
+	var err := image.save_png(path)
+	if err != OK:
+		print("--- SHOT FAILED: ", error_string(err))
+		return
+	print("--- SHOT: ", ProjectSettings.globalize_path(path))
 
 ## TEMPORARY verification harness for the roguelite modifier layer. Proves the three things
 ## that would otherwise only show up as a vague "the cards feel like they do nothing":
@@ -305,6 +332,12 @@ func _fill_board() -> void:
 ## the best cells, needed to bring 95% of the road inside somebody's range. A board where
 ## two towers cover everything has no placement decisions left in it.
 ##
+## `raw` is the same "best 1" measured with Balance.MAX_TOWER_RANGE lifted — the ported
+## range as the source map wrote it. That column judges the SHAPE of the board rather than
+## our cap, which is what makes it comparable with the original's own arena as printed by
+## `python tools/extract_w3x.py "<map>.w3x" pathing`. Everything left of it is the board
+## you actually play on.
+##
 ##   Godot.exe --headless --path <project> res://scenes/Main.tscn --quit-after 5 -- --dump-board
 func _dump_board() -> void:
 	print("--- BOARD DUMP BEGIN ---")
@@ -326,13 +359,14 @@ func _dump_board() -> void:
 	print("  road length      : %.0f px over %d waypoints" % [total, path.size()])
 	print("  buildable cells  : %d" % cells.size())
 	print("  road samples     : %d (every %.0f px)" % [samples.size(), STEP])
-	print("  %-10s %7s %8s %8s  %s" % ["element", "range", "best 1", "median", "cover 95%"])
+	print("  %-10s %7s %8s %8s  %-12s %7s %8s"
+			% ["element", "range", "best 1", "median", "cover 95%", "raw", "raw best"])
 	for tid in Game.TOWER_ORDER:
 		var def: Dictionary = Game.TOWER_DEFS[String(tid)]
-		# Same formula as Tower._recompute, cap included — a harness that measured the
-		# uncapped range would report a board nobody plays on.
-		var r: float = minf(float(def.get("range", 0.0)) * Balance.WC3_RANGE_SCALE,
-				Balance.MAX_TOWER_RANGE)
+		# Same formula as Tower._recompute, cap included — the columns that describe the
+		# board you play on must measure the range you actually get.
+		var raw: float = float(def.get("range", 0.0)) * Balance.WC3_RANGE_SCALE
+		var r: float = minf(raw, Balance.MAX_TOWER_RANGE)
 		var r_sq := r * r
 		# Which samples each cell can see. Built once, then reused for both statistics.
 		var seen: Array[PackedInt32Array] = []
@@ -372,10 +406,25 @@ func _dump_board() -> void:
 		var cover_txt := "%d towers" % used if covered.size() >= target \
 				else "%d towers (only %.0f%% reachable)" % [used,
 					100.0 * float(covered.size()) / float(samples.size())]
-		print("  %-10s %7.0f %7.0f%% %7.0f%%  %s" % [tid, r,
+		print("  %-10s %7.0f %7.0f%% %7.0f%%  %-12s %7.0f %7.0f%%" % [tid, r,
 				100.0 * float(best) / float(samples.size()),
-				100.0 * float(median) / float(samples.size()), cover_txt])
+				100.0 * float(median) / float(samples.size()), cover_txt,
+				raw, 100.0 * float(_best_seen(cells, samples, raw)) / float(samples.size())])
 	print("--- BOARD DUMP END ---")
+
+## Road samples visible from the single best cell at radius `r`. Used for the `raw` column,
+## which repeats the "best 1" measurement with the cap lifted.
+func _best_seen(cells: Array[Rect2], samples: Array[Vector2], r: float) -> int:
+	var r_sq := r * r
+	var best := 0
+	for c in cells:
+		var centre := c.get_center()
+		var n := 0
+		for s in samples:
+			if centre.distance_squared_to(s) <= r_sq:
+				n += 1
+		best = maxi(best, n)
+	return best
 
 ## Verification harness for the seven support duals. The risky one is the aura: it is the
 ## first stat that depends on a tower OTHER than the one being computed, so the thing worth

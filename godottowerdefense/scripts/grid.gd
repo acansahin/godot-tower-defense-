@@ -1,9 +1,7 @@
 extends Node2D
-## The faint build grid. Precomputes the discrete cells where towers may be
-## placed, flush against the road on every side. Rows are one square cell tall per
-## gap between the horizontal roads; columns in a band tile outward from the
-## vertical road that crosses it so towers also sit flush against the bends.
-## Occupancy is tracked by Main against placed towers.
+## The faint build grid. Precomputes the discrete cells where towers may be placed: one
+## uniform tiling of the play area, minus everything the road runs through or too close
+## to. Occupancy is tracked by Main against placed towers.
 
 ## How far outside a cell a *drop* may land and still count as that cell. Sized for a
 ## finger: on a phone the whole board is drawn at ~0.5 scale, so a release that looks
@@ -20,43 +18,34 @@ func _ready() -> void:
 	_build_cells()
 	queue_redraw()
 
+## Tiles the play area and keeps every cell that clears the road.
+##
+## This replaced a table of explicit horizontal rows, each tiled outward from the vertical
+## road crossing it. That worked only while the road ran in straight horizontal legs: the
+## road is now a spiral, and the ground it leaves buildable is a ring of blocks that no row
+## table can describe. Tiling and testing the distance describes any road shape at all, and
+## it is the same rule the player sees — "you may build wherever you are not on the road".
+##
+## The tiling is anchored at the world origin rather than at the road, so cells line up in
+## a single grid across the whole board instead of in per-row runs that drift out of step
+## with each other where two legs meet.
+##
+## A cell must fit WHOLE inside the play area: off the bottom edge, under the HUD's top bar
+## (Game.PLAY_TOP) or under the tower palette (Game.PLAY_RIGHT) all mean a tower you cannot
+## fully see, and under the palette also one you could never click again.
 func _build_cells() -> void:
-	for row in Game.GRID_ROWS:
-		var yc: float = row.x       # Vector2(centre_y, cell_height)
-		var h: float = row.y
-		var xv := _vertical_road_x(yc)
-		if is_inf(xv):
-			# No vertical road crosses this row: plain uniform columns.
-			var x := Game.GRID_COL_START
-			while x <= Game.GRID_COL_END:
-				_try_add(x, yc, h)
-				x += Game.CELL_WIDTH
-		else:
-			# Tile outward from flush against each side of the vertical road.
-			var edge := Game.ROAD_HALF + Game.CELL_WIDTH * 0.5
-			var half := Game.CELL_WIDTH * 0.5
-			var x := xv - edge
-			while x - half >= 0.0:
-				_try_add(x, yc, h)
-				x -= Game.CELL_WIDTH
-			x = xv + edge
-			while x + half <= Game.PLAY_RIGHT:
-				_try_add(x, yc, h)
-				x += Game.CELL_WIDTH
-
-func _try_add(x: float, yc: float, h: float) -> void:
-	if Game.dist_to_road(Vector2(x, yc)) >= Game.ROAD_CLEARANCE:
-		cells.append(Rect2(x - Game.CELL_WIDTH * 0.5, yc - h * 0.5, Game.CELL_WIDTH, h))
-
-## X of the vertical road segment crossing this y, or INF if none.
-func _vertical_road_x(yc: float) -> float:
-	var path: Array = Game.PATH
-	for i in range(path.size() - 1):
-		var a: Vector2 = path[i]
-		var b: Vector2 = path[i + 1]
-		if absf(a.x - b.x) < 1.0 and yc >= minf(a.y, b.y) and yc <= maxf(a.y, b.y):
-			return a.x
-	return INF
+	var half_w := Game.CELL_WIDTH * 0.5
+	var half_h := Game.CELL_HEIGHT * 0.5
+	var y := half_h
+	while y - half_h < Game.PLAY_TOP:
+		y += Game.CELL_HEIGHT
+	while y + half_h <= Game.WORLD_SIZE.y:
+		var x := half_w
+		while x + half_w <= Game.PLAY_RIGHT:
+			if Game.dist_to_road(Vector2(x, y)) >= Game.ROAD_CLEARANCE:
+				cells.append(Rect2(x - half_w, y - half_h, Game.CELL_WIDTH, Game.CELL_HEIGHT))
+			x += Game.CELL_WIDTH
+		y += Game.CELL_HEIGHT
 
 ## The buildable cell containing world_pos, or an empty Rect2 (size zero). Exact —
 ## use this for anything that acts on what is ALREADY on the board (upgrade, sell,

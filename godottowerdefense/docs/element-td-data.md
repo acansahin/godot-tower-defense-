@@ -7,6 +7,7 @@ wiki and not guessed. Re-derive any of it with:
 python tools/extract_w3x.py "<path>/ELEMENT TD.w3x" towers
 python tools/extract_w3x.py "<path>/ELEMENT TD.w3x" recipes
 python tools/extract_w3x.py "<path>/ELEMENT TD.w3x" waves
+python tools/extract_w3x.py "<path>/ELEMENT TD.w3x" pathing
 ```
 
 **Source:** `ELEMENT TD.w3x` — *Element TD version 2.0* by **Pimp10110**, 2005-12-26.
@@ -161,22 +162,64 @@ hand-authored rather than generated.
 Two class interactions matter and match rules we already have: **mechanical** is
 immune to Poison, and **undead / mechanical** cannot be instant-killed by Death.
 
-## 5. Where the port deviates
+## 5. The arena — shape of the board
+
+`war3map.wpm`, the pathing map, is a `MP3W` header followed by one flag byte per
+32×32-unit cell. Bit `0x02` is *unwalkable* and bit `0x08` is *unbuildable*, and those two
+bits separate the three things a tower defense board is made of: wall, creep lane
+(walkable, not buildable) and tower ground (both). `pathing` reads them.
+
+The map holds **eight identical player arenas** side by side, so the walkable cells fall
+into eight equal components of 3768 cells; one of them is the board:
+
+| | |
+|---|---|
+| Arena | 80×118 cells = **2560×3776 units** |
+| Lane | 1468 cells (39% of the arena) |
+| Tower ground | 2300 cells |
+
+The shape is a **rectangular spiral wound inward four times**, ending at the centre — not
+a serpentine, and not a lane with strips of grass beside it. Its buildable ground sits in
+thick blocks *between* the arms of the spiral, so a tower stands with lane on two or three
+sides of it and a short-ranged tower has to be pushed to the edge of its block to reach
+anything at all. That is what makes range worth paying for. Run `pathing` to print it.
+
+Coverage from a single tower, over the lane of one arena:
+
+| Range | Best spot | Median spot | Towers with it |
+|---|---|---|---|
+| 500 | 14% | 7% | Fire |
+| 750 | 25% | 11% | Water / Nature / Earth |
+| 2000 | 94% | 58% | Light / Darkness |
+
+**The original's own Light watches 94% of its own lane.** Worth stating plainly, because
+the port's range cap was argued for as if a blanketing Light were an artifact of our
+smaller board. It is not — it is how these towers behave on the map they come from, and
+the cap is a design choice about the game we want (see below), not a fidelity repair.
+
+`Game.PATH` is one turn of this spiral rather than four. At `WC3_RANGE_SCALE` the arena
+would be 896×1321px and our world is 1536×864 — we have the width and two thirds of the
+height, and each further turn costs a lane plus the two rows of grass beside it. The
+port's own `--dump-board` prints a `raw` column measuring the uncapped ported ranges,
+which is the like-for-like against the table above: 12% / 28% / 98%.
+
+## 6. Where the port deviates
 
 Everything above is reproduced as written, with one exception worth stating here rather
 than burying in the code: **`Balance.MAX_TOWER_RANGE` caps every tower at 380px.**
 
-Light and Darkness reach 2000 WC3 units, four times Fire. That is a real trade on the
-original's very large boards. On a board that fits a phone screen it is free power,
-because all six elements sit at near-equal DPS — `--dump-board` measured one faithful
-Light tower watching ~90% of the road and two covering the whole map, on every world size
-small enough to play on. The definitions in `Game.TOWER_DEFS` still carry the real 2000;
-only what the board honours is capped.
+Light and Darkness reach 2000 WC3 units, four times Fire, and all six elements sit at
+near-equal DPS — so on our board the reach is close to free power: `--dump-board` measures
+a faithful 700px Light watching 98% of the road and covering it with two towers. Section 5
+shows the original is no different in this respect; the difference is that the original
+gates Light behind an element draw and surrounds it with 35 other towers, while ours is on
+the palette from the first wave. Capping keeps placement a decision. The definitions in
+`Game.TOWER_DEFS` still carry the real 2000; only what the board honours is capped.
 
 Damage, cost, the five tiers, the recipes, the hit-point curve and the bounty growth are
 all the map's.
 
-## 6. What could not be extracted
+## 7. What could not be extracted
 
 - **The element damage matchup.** The maps use Warcraft III's built-in attack-type
   versus armour-type table rather than a scripted multiplier, so there is no number

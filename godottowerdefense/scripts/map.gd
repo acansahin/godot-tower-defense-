@@ -1,11 +1,11 @@
 extends Node2D
-## Draws the whole static level: layered grass background with scattered flora,
-## and the cobblestone serpentine road (drop shadow, shaded border, varied stones, and
-## direction chevrons) built from Game.PATH. Pure _draw(), no nodes needed.
+## Draws the whole static level: layered grass background with scattered flora, the
+## cobblestone spiral road (drop shadow, shaded border, varied stones, direction chevrons)
+## built from Game.PATH, and the goal at the end of it. Pure _draw(), no nodes needed.
 ##
-## Everything here is sized to Game.WORLD_SIZE, not the viewport: the world is four
-## screens and the camera pans across it, so drawing to the screen size would leave
-## three quarters of the board as empty background.
+## Everything here is sized to Game.WORLD_SIZE, not the viewport. The two are the same
+## shape but not the same size — the camera scales 1536x864 of world down onto 1280x720 of
+## screen — so drawing to the screen size would leave a fifth of the board as bare grass.
 
 # Grass decoration is scattered procedurally from a fixed seed rather than hand-placed.
 # Same seed = same layout every run, so it is still "art" and not noise — but it costs
@@ -22,9 +22,11 @@ const N_PATCHES_LIGHT := 5
 const N_BUSHES := 6
 const N_ROCKS := 5
 const N_FLOWERS := 10
-## World area in screens. 2560x1440 against a 1280x720 viewport is 4.
-const DECOR_DENSITY := int((Game.WORLD_SIZE.x * Game.WORLD_SIZE.y)
-		/ (Game.SCREEN_SIZE.x * Game.SCREEN_SIZE.y))
+## World area in screens, never less than one. 1536x864 against a 1280x720 viewport is
+## 1.44, so today this is 1 and the counts above are the counts you get; it exists so a
+## world that grows again does not silently thin its decoration out.
+const DECOR_DENSITY := maxi(1, int((Game.WORLD_SIZE.x * Game.WORLD_SIZE.y)
+		/ (Game.SCREEN_SIZE.x * Game.SCREEN_SIZE.y)))
 
 var _patches_dark: PackedVector2Array
 var _patches_light: PackedVector2Array
@@ -83,10 +85,33 @@ func _draw() -> void:
 	_draw_road(path, road_w - 13.0, Vector2.ZERO, Color(1, 1, 1, 0.05))    # centre highlight
 	_draw_cobbles(path)                                                    # cobble detail
 	_draw_arrows(path)                                                     # travel direction
+	_draw_goal(path[path.size() - 1])                                      # where a leak happens
 
 	# Corner vignette.
 	for c in [Vector2(0, 0), Vector2(w, 0), Vector2(0, h), Vector2(w, h)]:
 		draw_circle(c, 400.0, Color(0, 0, 0, 0.05))
+
+## The thing enemies are walking towards, drawn at the last waypoint.
+##
+## The road used to leave the board on the right, so an enemy that got through simply
+## walked off the edge and the shake plus the lives counter told the story. The road is now
+## a spiral that dead-ends at the middle of the board, and a creep winking out on bare
+## stone reads as a bug rather than as a life lost — so the dead end is drawn as somewhere
+## worth defending: a stone rim around a rune the same blue as the lives readout.
+func _draw_goal(at: Vector2) -> void:
+	# Nothing here reaches past Game.ROAD_HALF: the marker sits ON the road, and a cell may
+	# legally start one clearance away from the stone.
+	draw_circle(at + Vector2(0, 6), 40.0, Color(0, 0, 0, 0.18))       # ground shadow
+	draw_circle(at, 40.0, Color(0.26, 0.26, 0.29))                    # outer rim
+	draw_circle(at, 33.0, Color(0.42, 0.42, 0.46))                    # inner rim
+	draw_circle(at, 26.0, Color(0.14, 0.20, 0.32))                    # dark well
+	draw_circle(at, 18.0, Color(0.35, 0.62, 0.95, 0.55))              # rune glow
+	# A four-pointed star in the well, so the marker still reads at phone scale where the
+	# rings blur into one dot.
+	for i in range(4):
+		var ang := i * PI * 0.5
+		var tip := at + Vector2(cos(ang), sin(ang)) * 15.0
+		draw_line(at, tip, Color(0.85, 0.93, 1.0, 0.85), 4.0)
 
 func _draw_flora() -> void:
 	for b in _bushes:  # bushes = clustered dark-green blobs
