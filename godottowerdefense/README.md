@@ -4,8 +4,9 @@ A tiny, fully-playable 2D tower-defense prototype inspired by the Warcraft III
 custom map **Element TD**. Built with typed GDScript, deliberately small and
 readable rather than production-architected.
 
-When you press **Play** you get: a grassy map, an S-shaped cobblestone road, a
-faint build grid beside the road, and an **endless** run of enemies drawn from a data table
+When you press **Play** you get: a grassy 1536x864 world shown whole on one screen,
+a cobblestone road spiralling inward to the base at its heart, a faint build grid of 63
+cells in the blocks between its arms, and an **endless** run of enemies drawn from a data table
 of **creep archetypes** (including flyers, tanks, swarms, splitters, regenerators, periodic
 **bosses** and **elite** waves). The buildable roster is the six elements —
 **Light / Darkness / Water / Fire / Nature / Earth**, with the stats of the original
@@ -75,6 +76,9 @@ code with primitive shapes and colors.
   board stays reachable with a thumb on a phone.
 - Towers always target the enemy **closest to the exit** ("First") — the one most likely
   to cost you a life. There is no per-tower target picker.
+- **The whole board is on screen at once.** The world is slightly larger than the design
+  viewport and the camera zooms to frame all of it, so there is no scrolling and no leak
+  you cannot see.
 - **Time controls** sit in the bottom-left corner: **Pause** (or **Space**) freezes
   everything, and the speed button (or **F**) cycles **1x → 2x → 3x**.
 - **Ground-only towers** (Earth) can't hit flyers; the other five can.
@@ -129,7 +133,7 @@ godottowerdefense/
     ├── enemy_index.gd       # "EnemyIndex" autoload: per-frame spatial hash for targeting
     ├── menu.gd              # Title screen: play / how-to-play / sound / quit
     ├── main.gd             # Wires the level together (placement, upgrades, sell)
-    ├── map.gd              # Draws grass + cobblestone S-road
+    ├── map.gd              # Draws grass, the spiral road and the base at its end
     ├── grid.gd            # Builds + draws the faint placement grid, snapping
     ├── enemy.gd            # Path walking, health, flyer visuals, slow/poison
     ├── enemy_layer.gd      # Draw-only child layer for enemy.gd (body / overlay split)
@@ -171,7 +175,7 @@ stays in sync with the **M** key.
 ### `Main.tscn` (the level)
 ```
 Main (Node2D)               [main.gd]
-├── Map (Node2D)            [map.gd]   -> draws grass + road
+├── Map (Node2D)            [map.gd]   -> draws grass, road and the base
 ├── Grid (Node2D)           [grid.gd]  -> faint build cells + snapping
 ├── Enemies (Node2D)                   -> enemies spawned here at runtime
 ├── Towers (Node2D)                    -> built towers live here
@@ -239,8 +243,9 @@ otherwise survive the scene change and leave the next screen frozen.
 
 The `Game` autoload (`scripts/game.gd`) is registered in `project.godot` and is
 globally accessible as `Game`. It holds the shared map layout (`PATH`), the build
-grid definition (`GRID_ROWS`, `CELL_WIDTH`, `ROAD_HALF`, `ROAD_CLEARANCE`,
-`PLAY_RIGHT`, `GRID_COL_*`) plus the shared `dist_to_road()` helper, the
+grid definition (`CELL_WIDTH`, `CELL_HEIGHT`, `ROAD_HALF`, `ROAD_CLEARANCE`) and the
+bounds of the play area (`PLAY_RIGHT`, `PLAY_TOP` — derived from the screen-space UI that
+covers the board, not written down) plus the shared `dist_to_road()` helper, the
 costs, and the mutable `gold` / `lives` with signals. Four more autoloads sit beside it:
 `Balance` (`scripts/balance.gd`, every tunable curve and economy number),
 `Run` (`scripts/run.gd`, the current run's roguelite upgrades and unlocks),
@@ -267,12 +272,13 @@ editing three files and hunting for un-named literals; it is now one file.
   `lives_changed` and `game_over` — there is no `victory`, because waves are
   endless. It also stores the road `PATH` and
   the grid constants so every script reads one source of truth.
-- **`Grid`** precomputes the buildable cells (flush against the road, one row on
-  each side of every horizontal road, tiled flush to the vertical bends), draws
+- **`Grid`** precomputes the buildable cells — one uniform tiling of the play area, minus
+  every cell the road runs through or within `ROAD_CLEARANCE` of — draws
   them faintly, and answers two lookups: `snap()` (exact — used for upgrade, sell
   and hover, where being generous would spend gold on a mistap) and
   `snap_forgiving()` (nearest cell within `SNAP_TOLERANCE` — used only for placing).
-  Cells stop at `Game.PLAY_RIGHT` so none ever sits under the tower palette.
+  A cell must fit whole between `Game.PLAY_TOP` and `Game.PLAY_RIGHT`, so none is ever
+  half under the HUD bar or under the tower palette (which also eats the click).
 - **`TowerPalette`** (top-right) draws every tower in `Game.TOWER_ORDER` with its
   colour and cost and emits `drag_started(id)` when pressed. **`Main`** then drags
   the **`Preview`** ghost to the snapped cell and builds on release if the cell is
@@ -367,36 +373,44 @@ editing three files and hunting for un-named literals; it is now one file.
 | Immune archetype | `game.gd` `WAVE_TYPES` + `enemy.gd` `cc_immune` | ignores **slow and stun**, but **not poison** — poison is damage rather than crowd control, so Nature stays the answer to these waves instead of the whole roster going dead |
 | Regen archetype | `game.gd` `WAVE_TYPES` + `enemy.gd` `REGEN_DELAY` | heals 3.5% of max HP/s, but **paused for 2s after taking any damage** — so it only heals through gaps in your coverage instead of setting a hard DPS threshold. Its "+" marker dims while suppressed. Poison ticks count as damage, so a single Nature tower shuts the healing off entirely |
 | Prep time between waves | `wave_manager.gd` `PREP_TIME` | 4s (skippable via the HUD's Send Next button, for a small gold bonus) |
-| Wave scaling (`n` = wave) | `balance.gd` | HP `75 × 1.16^(n-1)` and a **flat** count of 28 — both from the map, where difficulty lives entirely in the HP curve and never in wave size. Reward `max(n/3, 1.10^(n-1))`, speed `60 + 6·n`, each × the archetype's multipliers |
+| Enemy speed | `balance.gd` `BASE_SPEED_*` | `80 + 9·n` px/s, giving a ~45s wave-1 crossing. Tied to the ROAD LENGTH and nothing else reads it, so move these if the road changes |
+| Tower range cap | `balance.gd` `MAX_TOWER_RANGE` | 380px. **The only unfaithful number in the port.** Light and Darkness reach 2000 WC3 units (700px), which covers 98% of the road from one cell — as it does on the original's own arena, which is why this is a design choice and not a repair. The defs keep the real 2000; this caps what the board honours |
+| Wave scaling (`n` = wave) | `balance.gd` | HP `75 × 1.16^(n-1)` from the map. Count ramps `9 + 1.2·n` to the map's flat 28 — starting at 28 meant wave 1 spent 25s just spawning. Reward `3 + max(n/3, 1.10^(n-1))`; the flat 3 is ours, because the map's curve pays 1 gold a kill until wave 5, speed `60 + 6·n`, each × the archetype's multipliers |
 | Flyers (non-Air waves) | `wave_manager.gd` | from wave 3, 15% chance per enemy (halved on top of Air waves existing); `make_flying()` gives HP ×0.65, speed ×1.25 |
 | Bosses | `game.gd` `WAVES` (`"boss": true` per entry) | HP ×6, speed ×0.6, reward ×10, costs 10 lives |
 | Economy: interest | `balance.gd` `INTEREST_RATE`/`INTEREST_CAP` | 2.5% of banked gold per wave cleared, capped at 400. The map pays 2.5% every 15s and has no cap; the cap is ours, so that hoarding gold never beats building |
 | Economy: leak-free bonus | `wave_manager.gd` `LEAK_FREE_BONUS` | +6 gold if no enemy reached the end that wave |
-| Road path | `game.gd` `PATH` | 6 waypoints (S-shape), 80px wide (`ROAD_HALF` 40), ~3296px long |
-| Build grid | `game.gd` `GRID_ROWS` / `CELL_WIDTH` | 96×88 cells, 40 of them (10 per row, 4 rows in 2 pairs) |
-| Tower ranges | `game.gd` `TOWER_DEFS` | 225–278px ≈ 2.3–2.9 cells |
+| Road path | `game.gd` `PATH` | 6 waypoints, one inward turn of the original's spiral, 80px wide (`ROAD_HALF` 40), 3992px long, dead-ending at the base |
+| Build grid | `game.gd` `CELL_WIDTH` / `CELL_HEIGHT` | 96×88 cells tiled over the play area, 63 of them survive `ROAD_CLEARANCE` |
+| Tower ranges | `game.gd` `TOWER_DEFS` × `WC3_RANGE_SCALE`, capped | 175–380px ≈ 1.8–4 cells |
 | Drop forgiveness | `grid.gd` `SNAP_TOLERANCE` | 24px outside a cell still counts (placement only) |
 | Enemy size | `wave_manager.gd` | radius 24 × the archetype multiplier; boss 38 (must stay under the 80px road width) |
 | Board scale | see note below | everything is sized so a cell lands at ~48 CSS px on a landscape phone |
 
-The road (`PATH`) and the grid rows (`GRID_ROWS`) are defined as plain arrays in
-`game.gd`. The road drawing, enemy walking, grid and map decoration all follow
-from `PATH`; the grid rows are hand-placed for the fixed S-map, in pairs filling
-each gap between horizontal roads. The pairing is deliberate: a bend's vertical
-leg runs from one horizontal road to the next, so the number of rows it passes is
-how many cells you get down the narrow outer side of that turn — two rows make it
-a 2×2 block instead of a lone column.
+The road (`PATH`) is a plain array in `game.gd` and everything else follows from it: the
+road drawing, enemy walking, the map decoration, and the build grid, which is simply the
+play area tiled at `CELL_WIDTH`×`CELL_HEIGHT` with every cell within `ROAD_CLEARANCE` of
+the road dropped. There is no table of rows to keep in sync — an earlier board had one, and
+it could only describe a road running in straight horizontal legs.
+
+The shape is one inward turn of the original's spiral, read out of its pathing map (see
+[docs/element-td-data.md](docs/element-td-data.md) §5). What that buys over a serpentine is
+the thickness of the buildable blocks: a tower can sit with road on two or three sides, and
+a short-ranged one has to be pushed to the edge of its block to reach anything — which is
+what makes range worth its price. Measure any change to it with `--dump-board` before and
+after; the numbers move in ways eyeballing does not predict.
 
 **The whole board is sized for a phone, and the sizes are coupled.** The game is
 authored in a fixed 1280×720 world that `canvas_items` stretch fits to the screen,
 so on a landscape phone everything arrives at roughly half scale — a 96×88 cell
 lands at ~48×44 CSS px, right at the minimum comfortable tap target, which is why
-the cells are as large as they are and why only 40 fit. The vertical budget is
-exact: the HUD bar ends at y 40, the bottom-corner buttons start at y 664, and
-4 rows × 88 + 3 roads × 80 = 592 uses all but 32px of that gap. Those last 32px
-are the grass strip above the top road, and they are load-bearing — without them a
-boss walking the top road draws its health bar up behind the HUD. That is also why
-rows are 88 tall rather than a square 96.
+the cells are as large as they are and why so few fit.
+
+The UI eats into the board on two sides, and the grid knows it: `Game.PLAY_TOP` and
+`Game.PLAY_RIGHT` convert the HUD bar (40 screen px) and the tower palette (200) into world
+px, and a cell must fit whole between them. The palette matters most — it swallows clicks
+across its whole rect, so a tower under it could never be upgraded or sold. `PLAY_RIGHT`
+was a literal for a while and went stale through a world resize; it is now derived.
 
 If you ever change `CELL_WIDTH`, these have to move with it or the game quietly
 rebalances itself: `TOWER_DEFS` ranges and splash radii, `tower.gd`

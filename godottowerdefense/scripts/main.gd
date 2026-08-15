@@ -56,6 +56,14 @@ func _ready() -> void:
 	wave_manager.choice_due.connect(_on_choice_due)
 	upgrade_choice.chosen.connect(_on_upgrade_chosen)
 
+	# Frame the WHOLE world, once. There is no panning: a tower defense you have to scroll
+	# is one where the leak that just cost you a life happened somewhere you were not
+	# looking. The world is a 16:9 box like the viewport, so a single zoom fits it exactly
+	# on both axes with nothing cropped and no letterboxing.
+	camera.position = Game.WORLD_SIZE * 0.5
+	camera.zoom = Vector2.ONE * minf(Game.SCREEN_SIZE.x / Game.WORLD_SIZE.x,
+			Game.SCREEN_SIZE.y / Game.WORLD_SIZE.y)
+
 	wave_manager.enemies_root = enemies_root
 	wave_manager.start(run_seed)
 
@@ -78,6 +86,8 @@ func _ready() -> void:
 		_dump_mods()
 	if OS.get_cmdline_user_args().has("--dump-duals"):
 		_dump_duals()
+	if OS.get_cmdline_user_args().has("--dump-board"):
+		_dump_board()
 	# TEMPORARY: pops the choice screen immediately, so its _draw can be exercised in a
 	# rendered run without first playing three waves. Headless never calls _draw at all, so
 	# nothing else in the suite would catch a broken card layout.
@@ -92,6 +102,33 @@ func _ready() -> void:
 		print("--- clock rewound 4h; relaunch to collect ---")
 	if OS.get_cmdline_user_args().has("--show-choice"):
 		_on_choice_due(30)  # late wave: exercises the higher-rarity cards and NEW TOWER
+	for arg in OS.get_cmdline_user_args():
+		if String(arg).begins_with("--shot"):
+			# `--shot` grabs the opening board; `--shot:20` waits 20 seconds first, which is
+			# how you photograph a wave in flight rather than an empty map.
+			var parts := String(arg).split(":")
+			_save_screenshot(float(parts[1]) if parts.size() > 1 else 1.0)
+
+## TEMPORARY: saves one frame of the running game to `user://shot.png` and prints where it
+## landed. Every other harness here prints numbers, and numbers cannot see a board — the
+## grid overlapping the HUD, a road drawn behind the tower palette, a marker that vanishes
+## at phone scale. `--headless` never calls _draw(), so this one must run WITHOUT it:
+##
+##   Godot.exe --path <project> res://scenes/Main.tscn --quit-after 150 -- --shot
+##   Godot.exe --path <project> res://scenes/Main.tscn --quit-after 4000 -- --shot:60
+##
+## The wait is not decoration: the viewport texture is only complete after a frame has been
+## drawn, and grabbing it in _ready gives back an empty image.
+func _save_screenshot(delay: float) -> void:
+	await get_tree().create_timer(delay).timeout
+	await RenderingServer.frame_post_draw
+	var image := get_viewport().get_texture().get_image()
+	var path := "user://shot.png"
+	var err := image.save_png(path)
+	if err != OK:
+		print("--- SHOT FAILED: ", error_string(err))
+		return
+	print("--- SHOT: ", ProjectSettings.globalize_path(path))
 
 ## TEMPORARY verification harness for the roguelite modifier layer. Proves the three things
 ## that would otherwise only show up as a vague "the cards feel like they do nothing":
@@ -283,6 +320,112 @@ func _fill_board() -> void:
 	print("--- FILL BOARD: placed %d towers over %d cells, all at max level ---"
 			% [i, grid.cells.size()])
 
+## Measures the BOARD rather than the towers: how much of the road one tower can watch,
+## and how many towers it takes to watch all of it.
+##
+## This exists because "Light covers half the board" was an assertion nobody had checked.
+## Tower ranges are now the source map's, and that map's boards are far larger than ours,
+## so the ratio of range to road length is the number that actually moved — not any single
+## stat. Redesigning the path by eye cannot tell you whether it improved; this can.
+##
+## `cover` is the honest headline: the number of towers of that element, placed greedily on
+## the best cells, needed to bring 95% of the road inside somebody's range. A board where
+## two towers cover everything has no placement decisions left in it.
+##
+## `raw` is the same "best 1" measured with Balance.MAX_TOWER_RANGE lifted — the ported
+## range as the source map wrote it. That column judges the SHAPE of the board rather than
+## our cap, which is what makes it comparable with the original's own arena as printed by
+## `python tools/extract_w3x.py "<map>.w3x" pathing`. Everything left of it is the board
+## you actually play on.
+##
+##   Godot.exe --headless --path <project> res://scenes/Main.tscn --quit-after 5 -- --dump-board
+func _dump_board() -> void:
+	print("--- BOARD DUMP BEGIN ---")
+	# Sample the road evenly. 12px is well under the smallest range (Fire, 175px), so the
+	# sampling grain never decides the answer.
+	const STEP := 12.0
+	var samples: Array[Vector2] = []
+	var path: Array = Game.PATH
+	var total := 0.0
+	for i in range(path.size() - 1):
+		var a: Vector2 = path[i]
+		var b: Vector2 = path[i + 1]
+		var seg := a.distance_to(b)
+		total += seg
+		var n := int(seg / STEP)
+		for k in n:
+			samples.append(a.lerp(b, float(k) / float(n)))
+	var cells: Array[Rect2] = grid.cells
+	print("  road length      : %.0f px over %d waypoints" % [total, path.size()])
+	print("  buildable cells  : %d" % cells.size())
+	print("  road samples     : %d (every %.0f px)" % [samples.size(), STEP])
+	print("  %-10s %7s %8s %8s  %-12s %7s %8s"
+			% ["element", "range", "best 1", "median", "cover 95%", "raw", "raw best"])
+	for tid in Game.TOWER_ORDER:
+		var def: Dictionary = Game.TOWER_DEFS[String(tid)]
+		# Same formula as Tower._recompute, cap included — the columns that describe the
+		# board you play on must measure the range you actually get.
+		var raw: float = float(def.get("range", 0.0)) * Balance.WC3_RANGE_SCALE
+		var r: float = minf(raw, Balance.MAX_TOWER_RANGE)
+		var r_sq := r * r
+		# Which samples each cell can see. Built once, then reused for both statistics.
+		var seen: Array[PackedInt32Array] = []
+		for c in cells:
+			var hit := PackedInt32Array()
+			var centre := c.get_center()
+			for s in samples.size():
+				if centre.distance_squared_to(samples[s]) <= r_sq:
+					hit.append(s)
+			seen.append(hit)
+		var counts: Array[int] = []
+		for h in seen:
+			counts.append(h.size())
+		counts.sort()
+		var best := counts[counts.size() - 1] if not counts.is_empty() else 0
+		var median := counts[counts.size() / 2] if not counts.is_empty() else 0
+		# Greedy set cover to 95%: repeatedly take the cell that adds the most new road.
+		var covered := {}
+		var target := int(float(samples.size()) * 0.95)
+		var used := 0
+		while covered.size() < target and used < cells.size():
+			var best_gain := 0
+			var best_i := -1
+			for i in seen.size():
+				var gain := 0
+				for s in seen[i]:
+					if not covered.has(s):
+						gain += 1
+				if gain > best_gain:
+					best_gain = gain
+					best_i = i
+			if best_i < 0:
+				break  # nothing left can add road; the rest is out of everyone's reach
+			for s in seen[best_i]:
+				covered[s] = true
+			used += 1
+		var cover_txt := "%d towers" % used if covered.size() >= target \
+				else "%d towers (only %.0f%% reachable)" % [used,
+					100.0 * float(covered.size()) / float(samples.size())]
+		print("  %-10s %7.0f %7.0f%% %7.0f%%  %-12s %7.0f %7.0f%%" % [tid, r,
+				100.0 * float(best) / float(samples.size()),
+				100.0 * float(median) / float(samples.size()), cover_txt,
+				raw, 100.0 * float(_best_seen(cells, samples, raw)) / float(samples.size())])
+	print("--- BOARD DUMP END ---")
+
+## Road samples visible from the single best cell at radius `r`. Used for the `raw` column,
+## which repeats the "best 1" measurement with the cap lifted.
+func _best_seen(cells: Array[Rect2], samples: Array[Vector2], r: float) -> int:
+	var r_sq := r * r
+	var best := 0
+	for c in cells:
+		var centre := c.get_center()
+		var n := 0
+		for s in samples:
+			if centre.distance_squared_to(s) <= r_sq:
+				n += 1
+		best = maxi(best, n)
+	return best
+
 ## Verification harness for the seven support duals. The risky one is the aura: it is the
 ## first stat that depends on a tower OTHER than the one being computed, so the thing worth
 ## proving is that it unwinds — a Fire tower next to a sold Well must return to exactly its
@@ -456,7 +599,8 @@ func _update_ghost(world_pos: Vector2) -> void:
 	# TOWER_DEFS stores range in Warcraft III units — scale to pixels, exactly as
 	# tower.gd's _recompute does, or the ghost circle lies about the tower's reach.
 	preview.show_at(cell, _cell_is_free(center) and Game.gold >= _cost(_drag_kind),
-			d.get("range", 160.0) * Balance.WC3_RANGE_SCALE, d.get("color", Color.WHITE))
+			minf(d.get("range", 160.0) * Balance.WC3_RANGE_SCALE, Balance.MAX_TOWER_RANGE),
+			d.get("color", Color.WHITE))
 
 func _drop(world_pos: Vector2) -> void:
 	var kind := _drag_kind

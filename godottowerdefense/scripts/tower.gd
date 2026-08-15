@@ -171,7 +171,8 @@ func _recompute() -> void:
 	damage = _def.get("damage", 8.0)
 	# TOWER_DEFS stores range in Warcraft III units; this is the one place (with main.gd's
 	# build preview) that turns them into board pixels.
-	tower_range = _def.get("range", 160.0) * Balance.WC3_RANGE_SCALE
+	tower_range = minf(_def.get("range", 160.0) * Balance.WC3_RANGE_SCALE,
+			Balance.MAX_TOWER_RANGE)
 	fire_interval = _def.get("interval", 0.5)
 	poison_dps = _def.get("poison_dps", 0.0)
 	poison_time = _def.get("poison_time", 0.0)

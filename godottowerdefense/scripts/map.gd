@@ -1,7 +1,11 @@
 extends Node2D
-## Draws the whole static level: layered grass background with scattered flora,
-## and the cobblestone S-road (drop shadow, shaded border, varied stones, and
-## direction chevrons) built from Game.PATH. Pure _draw(), no nodes needed.
+## Draws the whole static level: layered grass background with scattered flora, the
+## cobblestone spiral road (drop shadow, shaded border, varied stones, direction chevrons)
+## built from Game.PATH, and the goal at the end of it. Pure _draw(), no nodes needed.
+##
+## Everything here is sized to Game.WORLD_SIZE, not the viewport. The two are the same
+## shape but not the same size — the camera scales 1536x864 of world down onto 1280x720 of
+## screen — so drawing to the screen size would leave a fifth of the board as bare grass.
 
 # Grass decoration is scattered procedurally from a fixed seed rather than hand-placed.
 # Same seed = same layout every run, so it is still "art" and not noise — but it costs
@@ -11,11 +15,18 @@ const DECOR_SEED := 20250812
 const DECOR_CLEARANCE := 24.0  ## Extra gap kept between a decoration and the road edge.
 
 # How many of each to scatter, and the minimum gap from the road for each kind.
+# Counts are per screen-sized area and multiplied up by DECOR_DENSITY below, so the
+# world growing does not silently thin the decoration out to nothing.
 const N_PATCHES_DARK := 5
 const N_PATCHES_LIGHT := 5
 const N_BUSHES := 6
 const N_ROCKS := 5
 const N_FLOWERS := 10
+## World area in screens, never less than one. 1536x864 against a 1280x720 viewport is
+## 1.44, so today this is 1 and the counts above are the counts you get; it exists so a
+## world that grows again does not silently thin its decoration out.
+const DECOR_DENSITY := maxi(1, int((Game.WORLD_SIZE.x * Game.WORLD_SIZE.y)
+		/ (Game.SCREEN_SIZE.x * Game.SCREEN_SIZE.y)))
 
 var _patches_dark: PackedVector2Array
 var _patches_light: PackedVector2Array
@@ -27,11 +38,11 @@ func _ready() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = DECOR_SEED
 	# Big blobs need to clear the road by their own radius; small ones only by a hair.
-	_patches_dark = _scatter(rng, N_PATCHES_DARK, 86.0)
-	_patches_light = _scatter(rng, N_PATCHES_LIGHT, 76.0)
-	_bushes = _scatter(rng, N_BUSHES, 20.0)
-	_rocks = _scatter(rng, N_ROCKS, 14.0)
-	_flowers = _scatter(rng, N_FLOWERS, 6.0)
+	_patches_dark = _scatter(rng, N_PATCHES_DARK * DECOR_DENSITY, 86.0)
+	_patches_light = _scatter(rng, N_PATCHES_LIGHT * DECOR_DENSITY, 76.0)
+	_bushes = _scatter(rng, N_BUSHES * DECOR_DENSITY, 20.0)
+	_rocks = _scatter(rng, N_ROCKS * DECOR_DENSITY, 14.0)
+	_flowers = _scatter(rng, N_FLOWERS * DECOR_DENSITY, 6.0)
 	queue_redraw()
 
 ## `count` points on the grass, each at least `clear` px of its own bulk away from the
@@ -43,15 +54,15 @@ func _scatter(rng: RandomNumberGenerator, count: int, clear: float) -> PackedVec
 	var tries := 0
 	while out.size() < count and tries < count * 40:
 		tries += 1
-		var p := Vector2(rng.randf_range(0.0, Game.SCREEN_SIZE.x),
-				rng.randf_range(0.0, Game.SCREEN_SIZE.y))
+		var p := Vector2(rng.randf_range(0.0, Game.WORLD_SIZE.x),
+				rng.randf_range(0.0, Game.WORLD_SIZE.y))
 		if Game.dist_to_road(p) >= min_dist:
 			out.append(p)
 	return out
 
 func _draw() -> void:
-	var w := Game.SCREEN_SIZE.x
-	var h := Game.SCREEN_SIZE.y
+	var w := Game.WORLD_SIZE.x
+	var h := Game.WORLD_SIZE.y
 
 	# Grass with a soft top-light / bottom-shade gradient.
 	draw_rect(Rect2(0, 0, w, h), Color(0.30, 0.55, 0.24))
@@ -74,10 +85,33 @@ func _draw() -> void:
 	_draw_road(path, road_w - 13.0, Vector2.ZERO, Color(1, 1, 1, 0.05))    # centre highlight
 	_draw_cobbles(path)                                                    # cobble detail
 	_draw_arrows(path)                                                     # travel direction
+	_draw_goal(path[path.size() - 1])                                      # where a leak happens
 
 	# Corner vignette.
 	for c in [Vector2(0, 0), Vector2(w, 0), Vector2(0, h), Vector2(w, h)]:
 		draw_circle(c, 400.0, Color(0, 0, 0, 0.05))
+
+## The thing enemies are walking towards, drawn at the last waypoint.
+##
+## The road used to leave the board on the right, so an enemy that got through simply
+## walked off the edge and the shake plus the lives counter told the story. The road is now
+## a spiral that dead-ends at the middle of the board, and a creep winking out on bare
+## stone reads as a bug rather than as a life lost — so the dead end is drawn as somewhere
+## worth defending: a stone rim around a rune the same blue as the lives readout.
+func _draw_goal(at: Vector2) -> void:
+	# Nothing here reaches past Game.ROAD_HALF: the marker sits ON the road, and a cell may
+	# legally start one clearance away from the stone.
+	draw_circle(at + Vector2(0, 6), 40.0, Color(0, 0, 0, 0.18))       # ground shadow
+	draw_circle(at, 40.0, Color(0.26, 0.26, 0.29))                    # outer rim
+	draw_circle(at, 33.0, Color(0.42, 0.42, 0.46))                    # inner rim
+	draw_circle(at, 26.0, Color(0.14, 0.20, 0.32))                    # dark well
+	draw_circle(at, 18.0, Color(0.35, 0.62, 0.95, 0.55))              # rune glow
+	# A four-pointed star in the well, so the marker still reads at phone scale where the
+	# rings blur into one dot.
+	for i in range(4):
+		var ang := i * PI * 0.5
+		var tip := at + Vector2(cos(ang), sin(ang)) * 15.0
+		draw_line(at, tip, Color(0.85, 0.93, 1.0, 0.85), 4.0)
 
 func _draw_flora() -> void:
 	for b in _bushes:  # bushes = clustered dark-green blobs
