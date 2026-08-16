@@ -355,6 +355,14 @@ func fire_bolt(target: Enemy, damage_mult: float = 1.0) -> void:
 	p.gold_on_kill = gold_on_kill
 	p.life_on_kill_chance = life_on_kill_chance
 
+const Sprites := preload("res://scripts/sprites.gd")
+
+## How wide the painted tower is drawn, per level, in board px. The footprint it must sit on
+## is 60px across (2 * Game.TOWER_RADIUS); a tower drawn exactly that wide looks like a
+## bollard, so the art overhangs its own plot and grows with the tier — which is most of what
+## an upgrade FEELS like before any number is read.
+const SPRITE_WIDTH: Array = [84.0, 98.0, 112.0, 128.0, 150.0]
+
 func _draw() -> void:
 	# Range indicator in the element's colour: quiet by default so a full board stays
 	# readable, clear while hovered so the player can judge coverage.
@@ -364,6 +372,14 @@ func _draw() -> void:
 		draw_arc(Vector2.ZERO, tower_range, 0.0, TAU, 64, Color(ec.r, ec.g, ec.b, 0.50), 2.5, true)
 	else:
 		draw_arc(Vector2.ZERO, tower_range, 0.0, TAU, 48, Color(ec.r, ec.g, ec.b, 0.12), 2.0, true)
+	# Painted sprite if this element and tier have been drawn; the code art below is the
+	# fallback, and it is what the board still looks like everywhere the art has not landed.
+	var art := Sprites.tower(element, level)
+	if art != null:
+		_draw_sprite(art)
+		_draw_level_pips(element_color.lightened(0.35))
+		_draw_sell_button()
+		return
 	# Flat drop shadow under the base.
 	draw_set_transform(Vector2(0, 24), 0.0, Vector2(1.0, 0.45))
 	draw_circle(Vector2.ZERO, 27.0, Color(0, 0, 0, 0.20))
@@ -382,6 +398,26 @@ func _draw() -> void:
 	_draw_level_pips(element_color.lightened(0.35))
 	# Drawn last so it stays tappable even when the barrel swings over the corner.
 	_draw_sell_button()
+
+## Hangs the painted tower off its ground anchor, so the base sits on the spot the tower
+## occupies and the tower grows UPWARD as it is upgraded — which is where a tall sprite has
+## room, since the board is seen from slightly above.
+func _draw_sprite(art: Texture2D) -> void:
+	var size := art.get_size()
+	var anchor := Sprites.anchor(art)
+	var target: float = float(SPRITE_WIDTH[clampi(level, 1, SPRITE_WIDTH.size()) - 1])
+	var scale := target / size.x
+	# A soft contact shadow: the painting has none (it was asked for without one, so it can
+	# be lit by whatever board it lands on) and without one a tower floats.
+	draw_set_transform(Vector2(0, 6), 0.0, Vector2(1.0, 0.4))
+	draw_circle(Vector2.ZERO, target * 0.34, Color(0, 0, 0, 0.28))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	var where := Rect2(Vector2(-anchor.x * scale, -anchor.y * scale), size * scale)
+	# Nudged down a little: the anchor is the sprite's lowest pixel, and letting the base
+	# overlap the ground point slightly is what makes it read as standing ON the board
+	# rather than behind it.
+	where.position.y += 10.0
+	draw_texture_rect(art, where, false)
 
 ## The classic turret: barrel + element orb, aimed at the target and kicked back while
 ## firing. Public because BoltBehavior draws it; kept here rather than in the behavior

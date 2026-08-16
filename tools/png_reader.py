@@ -1,4 +1,9 @@
-"""Minimal PNG reader: enough to get RGB pixels out of a 8-bit truecolour file."""
+"""Minimal PNG read/write: enough for the sprite tools, with no third-party dependency.
+
+The repo already reads Warcraft III archives with nothing but the standard library, and the
+art pipeline holds the same line: a PNG is a few chunks around a zlib stream, and decoding
+one is shorter than the argument for adding Pillow to a hobby project's toolchain.
+"""
 import struct
 import zlib
 
@@ -61,3 +66,31 @@ class Png:
     def rgb(self, x, y):
         i = (y * self.width + x) * self.channels
         return self.pixels[i], self.pixels[i + 1], self.pixels[i + 2]
+
+
+    def rgba(self, x, y):
+        """(r, g, b, a); alpha is 255 on files that have no alpha channel."""
+        i = (y * self.width + x) * self.channels
+        px = self.pixels
+        if self.channels == 4:
+            return px[i], px[i + 1], px[i + 2], px[i + 3]
+        return px[i], px[i + 1], px[i + 2], 255
+
+
+def write_rgba(path, width, height, pixels):
+    """Write 8-bit RGBA `pixels` (a bytes-like of width*height*4) as a PNG."""
+    raw = bytearray()
+    stride = width * 4
+    for y in range(height):
+        raw.append(0)  # filter: none. The images are small and zlib does the work.
+        raw += pixels[y * stride:(y + 1) * stride]
+
+    def chunk(kind, payload):
+        return (struct.pack(">I", len(payload)) + kind + payload
+                + struct.pack(">I", zlib.crc32(kind + payload) & 0xFFFFFFFF))
+
+    header = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
+    signature = bytes([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+    blob = (signature + chunk(b"IHDR", header)
+            + chunk(b"IDAT", zlib.compress(bytes(raw), 9)) + chunk(b"IEND", b""))
+    open(path, "wb").write(blob)
