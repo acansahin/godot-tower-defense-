@@ -73,11 +73,16 @@ const WC3_RANGE_SCALE := 0.35
 ## arrives through an element draw, one of 36 towers, deep into a run. Ours is on the
 ## palette at wave 1, so we cap: a tower you can place anywhere is not a placement.
 ##
-## 380 was chosen by measurement, not feel: it puts the longest towers at 44% of the road
-## and four towers to cover it, next to Fire's 12% and twelve. It also catches the
-## longest duals (Poison, Tech and Moon reach 481px uncapped), which face the same problem
-## for the same reason.
-const MAX_TOWER_RANGE := 380.0
+## 300 was chosen by measurement, not feel: it puts the longest towers at 41% of the road and
+## four towers to cover it, next to Fire's 19% and eight. It also catches the longest duals
+## (Poison, Tech and Moon reach 481px uncapped), which face the same problem for the reason.
+##
+## It was 380 on the board before this one. The painted map is a rounder and tighter spiral,
+## and at 380 a single Light tower watched 70% of the road while TWO covered the whole thing
+## — the board had no placement decisions left in it. 260 was measured too and is worse than
+## either: it drags Light down to Water's 32% and the longest range in the game stops being
+## a different tower.
+const MAX_TOWER_RANGE := 300.0
 
 ## Gold cost of upgrading a tower from `level` to `level + 1`.
 ## `build_cost` is ignored: in the map every element shares one cost ladder regardless

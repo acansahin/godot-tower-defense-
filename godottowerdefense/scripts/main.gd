@@ -579,6 +579,7 @@ func _on_drag_started(kind: String) -> void:
 	if Game.is_over:
 		return
 	_drag_kind = kind
+	grid.set_showing(true)  # closed ground is only worth showing while something is being placed
 	_set_hovered(null)  # the drag preview takes over; don't compete with a hover ring
 	_update_ghost(get_global_mouse_position())
 
@@ -631,6 +632,7 @@ func _drop(world_pos: Vector2) -> void:
 	var kind := _drag_kind
 	_drag_kind = ""
 	preview.hide()
+	grid.set_showing(false)
 	var center := world_pos
 	if not Game.can_build_at(center, towers_root.get_children()):
 		Audio.play("denied")

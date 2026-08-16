@@ -71,13 +71,65 @@ const WORLD_SIZE := Vector2(1536, 864)
 # exactly that reason: at 1160 the column at 1200 sat 40px from the stone, was dropped, and
 # the strip between the road and the palette was 96px of grass nobody could build on. Eight
 # cells, invisible in a screenshot and obvious in --dump-board.
+# Waypoints of the painted road, TRACED OUT OF THE ARTWORK rather than authored. The board
+# is a hand-painted map now (assets/art/board_source.png) and the geometry has to follow the
+# picture, or enemies walk beside the road instead of on it.
+#
+# Produced by tools/trace_road.py: it casts rays from the keep at the centre of the spiral
+# and follows the band of pale cobble across them. Both ends are extrapolated — the straight
+# run in from the left edge is not an arc the ray-walk can start on, and the last approach is
+# too close to the keep for a band to separate from the building — so this is a tracing
+# checked by eye against the painting (map.gd's `show_road` draws it back over the art), not
+# a proof.
+#
+# It replaces the spiral ported from Element TD's own pathing map. That geometry was measured
+# and this one is drawn; the trade was made deliberately when the art moved to a painted
+# board. The coverage table in docs/element-td-data.md describes the old board — --dump-board
+# reports this one.
 const PATH: Array = [
-	Vector2(-144, 120),
-	Vector2(1112, 120),
-	Vector2(1112, 744),
-	Vector2(136, 744),
-	Vector2(136, 392),
-	Vector2(920, 392),
+	Vector2(-144, 309),
+	Vector2(0, 309),
+	Vector2(308, 324),
+	Vector2(409, 252),
+	Vector2(451, 187),
+	Vector2(539, 157),
+	Vector2(607, 136),
+	Vector2(681, 142),
+	Vector2(733, 145),
+	Vector2(771, 130),
+	Vector2(812, 134),
+	Vector2(858, 131),
+	Vector2(907, 150),
+	Vector2(935, 175),
+	Vector2(991, 162),
+	Vector2(1017, 196),
+	Vector2(1071, 211),
+	Vector2(1125, 240),
+	Vector2(1187, 282),
+	Vector2(1217, 343),
+	Vector2(1229, 412),
+	Vector2(1207, 477),
+	Vector2(1202, 551),
+	Vector2(1149, 601),
+	Vector2(1076, 622),
+	Vector2(1025, 660),
+	Vector2(967, 683),
+	Vector2(906, 691),
+	Vector2(846, 712),
+	Vector2(774, 689),
+	Vector2(717, 669),
+	Vector2(659, 652),
+	Vector2(587, 641),
+	Vector2(535, 598),
+	Vector2(523, 527),
+	Vector2(499, 468),
+	Vector2(548, 397),
+	Vector2(590, 338),
+	Vector2(601, 296),
+	Vector2(645, 269),
+	Vector2(732, 281),
+	Vector2(805, 320),
+	Vector2(839, 351),
 ]
 
 # Grid placement: towers snap to cells drawn faintly on the grass, flush against
@@ -134,12 +186,18 @@ const ROAD_KEEPOUT := ROAD_HALF + TOWER_RADIUS
 ## blob at phone scale; a little air makes a row of towers countable.
 const TOWER_GAP := TOWER_RADIUS * 2.0 + 8.0
 
-## Scenery that BLOCKS building — the lake, the boulders, the tree clumps. Stored as
-## [centre, radius] in board px and generated once from a fixed seed, so the collision and
-## the thing the player sees are the same list rather than two lists that drift apart.
-var obstacles: Array = []
-const OBSTACLE_SEED := 20250812
-const OBSTACLE_COUNT := 14
+## Scenery that BLOCKS building, as [centre, radius] in board px. FOUND IN THE PAINTING, not
+## invented: tools/trace_road.py's companion scan looks for teal water in the board art and
+## reports its clusters, and these are what it found — the lake in the lower left and the
+## pool the waterfall drops into.
+##
+## Only the water is listed. The trees and rocks the map is scattered with are small enough
+## that a tower standing among them reads as a tower in a wood, and every one of them added
+## here is a place the player is told "no" for a reason they cannot see at a glance.
+const OBSTACLES: Array = [
+	[Vector2(259, 710), 150.0],   # the lake
+	[Vector2(128, 533), 44.0],    # the waterfall pool
+]
 
 ## True when a tower of TOWER_RADIUS may stand here. `others` is every tower already on the
 ## board (main passes its Towers node's children); pass an empty array to ask only about
@@ -151,34 +209,13 @@ func can_build_at(pos: Vector2, others: Array = []) -> bool:
 		return false
 	if dist_to_road(pos) < ROAD_KEEPOUT:
 		return false
-	for entry in obstacles:
+	for entry in OBSTACLES:
 		if pos.distance_to(entry[0]) < float(entry[1]) + TOWER_RADIUS:
 			return false
 	for other in others:
 		if other != null and pos.distance_to(other.position) < TOWER_GAP:
 			return false
 	return true
-
-## Scatters the scenery. Deterministic, and every piece is kept clear of the road by its own
-## radius so the map never blocks the lane it decorates.
-func _build_obstacles() -> void:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = OBSTACLE_SEED
-	var tries := 0
-	while obstacles.size() < OBSTACLE_COUNT and tries < OBSTACLE_COUNT * 60:
-		tries += 1
-		var radius := rng.randf_range(38.0, 92.0)
-		var p := Vector2(rng.randf_range(radius, PLAY_RIGHT - radius),
-				rng.randf_range(PLAY_TOP + radius, WORLD_SIZE.y - radius))
-		if dist_to_road(p) < ROAD_HALF + radius + 24.0:
-			continue
-		var clash := false
-		for entry in obstacles:
-			if p.distance_to(entry[0]) < float(entry[1]) + radius + 40.0:
-				clash = true
-				break
-		if not clash:
-			obstacles.append([p, radius])
 
 # START_GOLD / START_LIVES moved to the Balance autoload with the rest of the economy —
 # see scripts/balance.gd. This file keeps the map geometry and the data tables.
@@ -666,7 +703,6 @@ var wave_reached: int = 0
 var _path_cum: PackedFloat32Array = PackedFloat32Array()
 
 func _ready() -> void:
-	_build_obstacles()
 	_path_cum.resize(PATH.size())
 	for i in range(1, PATH.size()):
 		_path_cum[i] = _path_cum[i - 1] + (PATH[i] as Vector2).distance_to(PATH[i - 1])

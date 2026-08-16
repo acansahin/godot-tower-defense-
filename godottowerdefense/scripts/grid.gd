@@ -1,27 +1,32 @@
 extends Node2D
-## Draws the scenery that BLOCKS building — the boulders, thickets and ponds in
-## Game.obstacles — and nothing else. There is no build grid any more: a tower goes wherever
-## the ground is clear, and Game.can_build_at() is the whole rule.
+## Shades the ground a tower may NOT stand on, and only while one is being dragged.
 ##
-## The node is still called Grid because Main and the scene tree call it that, and renaming
-## a node in a .tscn is a bigger change than the job it does.
+## There is no build grid any more: Game.can_build_at() is the whole rule — off the road, out
+## of the water, clear of other towers. This makes that rule visible at the moment the player
+## is asking it, and stays out of the way the rest of the time. The painting already says
+## where the lake and the road are; this is for the margins, which it cannot.
 ##
-## What it draws is a placeholder: once the painted terrain lands, each obstacle will be a
-## lake or a stand of trees drawn on the background, and these mounds go away. Keeping the
-## DRAWING and the COLLISION on one list is the point either way — a board where the picture
-## says "rock" and the rule says "buildable" is worse than either alone.
+## The node is still called Grid because Main and the scene tree call it that.
 
-func _ready() -> void:
+const STEP := 32.0
+
+var _show: bool = false
+
+## Main turns this on while a tower is being dragged.
+func set_showing(value: bool) -> void:
+	if _show == value:
+		return
+	_show = value
 	queue_redraw()
 
 func _draw() -> void:
-	for entry in Game.obstacles:
-		var centre: Vector2 = entry[0]
-		var radius: float = entry[1]
-		# A soft mound: shadow, body, lighter cap — something standing on the grass rather
-		# than a hole cut in it.
-		draw_circle(centre + Vector2(0, radius * 0.18), radius, Color(0, 0, 0, 0.16))
-		draw_circle(centre, radius, Color(0.24, 0.40, 0.20))
-		draw_circle(centre - Vector2(radius * 0.15, radius * 0.20), radius * 0.72,
-				Color(0.30, 0.48, 0.24))
-		draw_arc(centre, radius, 0.0, TAU, 28, Color(0.14, 0.24, 0.12, 0.7), 2.0, true)
+	if not _show:
+		return
+	var y := 0.0
+	while y < Game.WORLD_SIZE.y:
+		var x := 0.0
+		while x < Game.PLAY_RIGHT:
+			if not Game.can_build_at(Vector2(x + STEP * 0.5, y + STEP * 0.5)):
+				draw_rect(Rect2(x, y, STEP, STEP), Color(0.06, 0.02, 0.12, 0.30))
+			x += STEP
+		y += STEP
