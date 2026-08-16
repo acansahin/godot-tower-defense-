@@ -357,11 +357,14 @@ func fire_bolt(target: Enemy, damage_mult: float = 1.0) -> void:
 
 const Sprites := preload("res://scripts/sprites.gd")
 
-## How wide the painted tower is drawn, per level, in board px. The footprint it must sit on
-## is 60px across (2 * Game.TOWER_RADIUS); a tower drawn exactly that wide looks like a
-## bollard, so the art overhangs its own plot and grows with the tier — which is most of what
-## an upgrade FEELS like before any number is read.
-const SPRITE_WIDTH: Array = [84.0, 98.0, 112.0, 128.0, 150.0]
+## How TALL the painted tower is drawn, per level, in board px.
+##
+## By height, not width, because these sprites get proportionally taller as they upgrade —
+## the fire set runs from 1.23 to 1.67 times as tall as it is wide, all of it flame plume.
+## Scaling by width let that compound: the top tier ended up 29% of the board's height, when
+## a tower on the reference art is at most 19%. Fixing the height fixes the silhouette and
+## leaves the widths where they belong, around 60-85px over a 60px footprint.
+const SPRITE_HEIGHT: Array = [78.0, 92.0, 106.0, 120.0, 138.0]
 
 func _draw() -> void:
 	# Range indicator in the element's colour: quiet by default so a full board stays
@@ -405,12 +408,12 @@ func _draw() -> void:
 func _draw_sprite(art: Texture2D) -> void:
 	var size := art.get_size()
 	var anchor := Sprites.anchor(art)
-	var target: float = float(SPRITE_WIDTH[clampi(level, 1, SPRITE_WIDTH.size()) - 1])
-	var scale := target / size.x
+	var target: float = float(SPRITE_HEIGHT[clampi(level, 1, SPRITE_HEIGHT.size()) - 1])
+	var scale := target / size.y
 	# A soft contact shadow: the painting has none (it was asked for without one, so it can
 	# be lit by whatever board it lands on) and without one a tower floats.
 	draw_set_transform(Vector2(0, 6), 0.0, Vector2(1.0, 0.4))
-	draw_circle(Vector2.ZERO, target * 0.34, Color(0, 0, 0, 0.28))
+	draw_circle(Vector2.ZERO, size.x * scale * 0.34, Color(0, 0, 0, 0.28))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	var where := Rect2(Vector2(-anchor.x * scale, -anchor.y * scale), size * scale)
 	# Nudged down a little: the anchor is the sprite's lowest pixel, and letting the base
