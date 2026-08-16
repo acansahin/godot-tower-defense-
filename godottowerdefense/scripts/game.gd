@@ -113,11 +113,72 @@ const HUD_BAR_HEIGHT := 40.0
 ## PLAY_RIGHT.
 const PLAY_TOP := WORLD_SIZE.y * (HUD_BAR_HEIGHT / SCREEN_SIZE.y)  # 48
 
-# Build cells are TILED across the whole play area and kept wherever they clear the road
-# by ROAD_CLEARANCE — see grid.gd. The old design listed explicit horizontal rows, which
-# only described a board whose road ran in straight horizontal legs; a spiral has
-# buildable ground in blocks that no row table can express.
-const CELL_HEIGHT := 88.0        ## Row height (px); rows step by this.
+# --- Free placement ------------------------------------------------------------
+#
+# There is NO BUILD GRID. A tower goes wherever the ground is clear: off the road, off the
+# scenery, and not on top of another tower. The board used to be a tiling of 96x88 cells,
+# which is a fine rule for a board drawn in code and the wrong one for a board that is a
+# painted picture — a grid of pads over hand-painted terrain reads as a spreadsheet laid on
+# a landscape, and it forces the art to line up with a lattice nobody drew.
+#
+# What replaces it is three distances, all in board px, all measured from a tower's centre.
+
+## A tower's footprint. Placement, overlap and the click target all use this one radius, so
+## what you can build on, what you can hit and what you can see are the same disc.
+const TOWER_RADIUS := 30.0
+## Clear of the stone by the tower's own bulk: the road is 80px wide, so a tower may sit
+## with its edge exactly against the kerb. Tighter than the old ROAD_CLEARANCE of 82, which
+## was not a design choice but an artefact of where a 96px cell could fall.
+const ROAD_KEEPOUT := ROAD_HALF + TOWER_RADIUS
+## Centre-to-centre spacing. Two towers at exactly 2*TOWER_RADIUS touch, which reads as one
+## blob at phone scale; a little air makes a row of towers countable.
+const TOWER_GAP := TOWER_RADIUS * 2.0 + 8.0
+
+## Scenery that BLOCKS building — the lake, the boulders, the tree clumps. Stored as
+## [centre, radius] in board px and generated once from a fixed seed, so the collision and
+## the thing the player sees are the same list rather than two lists that drift apart.
+var obstacles: Array = []
+const OBSTACLE_SEED := 20250812
+const OBSTACLE_COUNT := 14
+
+## True when a tower of TOWER_RADIUS may stand here. `others` is every tower already on the
+## board (main passes its Towers node's children); pass an empty array to ask only about
+## the terrain, which is what the coverage harness does.
+func can_build_at(pos: Vector2, others: Array = []) -> bool:
+	if pos.x - TOWER_RADIUS < 0.0 or pos.x + TOWER_RADIUS > PLAY_RIGHT:
+		return false
+	if pos.y - TOWER_RADIUS < PLAY_TOP or pos.y + TOWER_RADIUS > WORLD_SIZE.y:
+		return false
+	if dist_to_road(pos) < ROAD_KEEPOUT:
+		return false
+	for entry in obstacles:
+		if pos.distance_to(entry[0]) < float(entry[1]) + TOWER_RADIUS:
+			return false
+	for other in others:
+		if other != null and pos.distance_to(other.position) < TOWER_GAP:
+			return false
+	return true
+
+## Scatters the scenery. Deterministic, and every piece is kept clear of the road by its own
+## radius so the map never blocks the lane it decorates.
+func _build_obstacles() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = OBSTACLE_SEED
+	var tries := 0
+	while obstacles.size() < OBSTACLE_COUNT and tries < OBSTACLE_COUNT * 60:
+		tries += 1
+		var radius := rng.randf_range(38.0, 92.0)
+		var p := Vector2(rng.randf_range(radius, PLAY_RIGHT - radius),
+				rng.randf_range(PLAY_TOP + radius, WORLD_SIZE.y - radius))
+		if dist_to_road(p) < ROAD_HALF + radius + 24.0:
+			continue
+		var clash := false
+		for entry in obstacles:
+			if p.distance_to(entry[0]) < float(entry[1]) + radius + 40.0:
+				clash = true
+				break
+		if not clash:
+			obstacles.append([p, radius])
 
 # START_GOLD / START_LIVES moved to the Balance autoload with the rest of the economy —
 # see scripts/balance.gd. This file keeps the map geometry and the data tables.
@@ -605,6 +666,7 @@ var wave_reached: int = 0
 var _path_cum: PackedFloat32Array = PackedFloat32Array()
 
 func _ready() -> void:
+	_build_obstacles()
 	_path_cum.resize(PATH.size())
 	for i in range(1, PATH.size()):
 		_path_cum[i] = _path_cum[i - 1] + (PATH[i] as Vector2).distance_to(PATH[i - 1])
