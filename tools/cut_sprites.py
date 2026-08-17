@@ -8,7 +8,7 @@ bounding box, and writes them out numbered.
 
 Usage::
 
-    python tools/cut_sprites.py <sheet.png> <out_dir> <prefix>   # e.g. ... towers fire
+    python tools/cut_sprites.py <sheet.png> <out_dir> <prefix> [max_height]
 
 Each sprite is written as ``<prefix>_<n>.png``, numbered left to right from 1, and the tool
 prints the trimmed size and the ground anchor it measured (the horizontal centre of the
@@ -71,11 +71,53 @@ def cut(img: Png, x0: int, x1: int):
     return w, h, bytes(out), anchor
 
 
+def box_downscale(w, h, pixels, target_h):
+    """Average-filter the sprite down to `target_h`, keeping the aspect.
+
+    Generated art arrives far bigger than it is drawn — the fire set carries four to seven
+    source pixels for every screen pixel — and letting the GPU do that reduction each frame
+    either aliases (no mipmaps) or blurs (with them). Doing it ONCE here, with every source
+    pixel actually averaged in, is sharper than both, and it takes the files down with it.
+
+    Premultiplying by alpha matters: averaging colour across a transparent edge without it
+    drags the background colour of the transparent pixels into the fringe.
+    """
+    if h <= target_h:
+        return w, h, pixels
+    scale = target_h / float(h)
+    tw, th = max(1, int(round(w * scale))), int(target_h)
+    out = bytearray(tw * th * 4)
+    for y in range(th):
+        y0, y1 = int(y * h / th), max(int((y + 1) * h / th), int(y * h / th) + 1)
+        for x in range(tw):
+            x0, x1 = int(x * w / tw), max(int((x + 1) * w / tw), int(x * w / tw) + 1)
+            r = g = b = a = 0.0
+            n = 0
+            for sy in range(y0, y1):
+                for sx in range(x0, x1):
+                    i = (sy * w + sx) * 4
+                    pa = pixels[i + 3] / 255.0
+                    r += pixels[i] * pa
+                    g += pixels[i + 1] * pa
+                    b += pixels[i + 2] * pa
+                    a += pixels[i + 3]
+                    n += 1
+            i = (y * tw + x) * 4
+            alpha = a / n
+            weight = (a / 255.0) or 1.0
+            out[i] = min(255, int(r / weight))
+            out[i + 1] = min(255, int(g / weight))
+            out[i + 2] = min(255, int(b / weight))
+            out[i + 3] = int(alpha)
+    return tw, th, bytes(out)
+
+
 def main() -> int:
     if len(sys.argv) < 4:
         print(__doc__)
         return 1
     sheet, out_dir, prefix = sys.argv[1], sys.argv[2], sys.argv[3]
+    max_height = int(sys.argv[4]) if len(sys.argv) > 4 else 0
     img = Png(sheet)
     os.makedirs(out_dir, exist_ok=True)
     runs = columns(img)
@@ -85,9 +127,14 @@ def main() -> int:
         if piece is None:
             continue
         w, h, pixels, anchor = piece
+        before = f"{w}x{h}"
+        if max_height:
+            # Tiers are drawn at increasing sizes, so the cap grows with the index rather
+            # than flattening the whole set to one height.
+            w, h, pixels = box_downscale(w, h, pixels, max_height * (0.8 + 0.1 * i))
         path = os.path.join(out_dir, f"{prefix}_{i}.png")
         write_rgba(path, w, h, pixels)
-        print(f"    {prefix}_{i}.png  {w}x{h}  ground anchor x={anchor}")
+        print(f"    {prefix}_{i}.png  {before} -> {w}x{h}  ground anchor x={anchor}")
     return 0
 
 

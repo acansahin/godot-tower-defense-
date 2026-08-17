@@ -17,6 +17,9 @@ const BOARD := preload("res://assets/art/board_source.png")
 @export var show_road: bool = false
 
 func _ready() -> void:
+	# The board is 1672px of painting shown across 1280px of screen: a mild downscale, but
+	# still one that samples between pixels, so it gets the same filtering as the towers.
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	queue_redraw()
 
 func _draw() -> void:

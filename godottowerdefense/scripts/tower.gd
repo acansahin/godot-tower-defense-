@@ -83,6 +83,11 @@ var _was_upgrade_ready: bool = false  ## Last frame's _upgrade_ready(); the badg
 var _highlighted: bool = false      ## Hovered by the mouse: draw the range clearly.
 
 func _ready() -> void:
+	# Painted towers carry four to seven source pixels for every screen pixel they are drawn
+	# at, and plain linear filtering samples ONE of them — which is why the sprites looked
+	# crunchy rather than detailed. Mipmaps are generated on import; this is the half that
+	# asks for them.
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	# A card picked mid-run has to reach towers that are already standing. Re-resolving is
 	# safe at any moment because _recompute() rebuilds from the definition rather than
 	# editing the current values.
