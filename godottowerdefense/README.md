@@ -53,9 +53,9 @@ tower reference this is growing toward.
    title screen; press **Play** there to start a run.
 
 No plugins or downloads are required. Two kinds of art now sit side by side: the
-**painted** board and the fire and water towers, five tiers each (`assets/art/`), and the
-**code-drawn** everything else — enemies, the other four elements, projectiles, every
-effect and all of the UI — still built from primitive shapes in `_draw()`. Every sound is still synthesized
+**painted** board and the fire, water and nature towers, five tiers each (`assets/art/`),
+and the **code-drawn** everything else — enemies, the other three elements, projectiles,
+every effect and all of the UI — still built from primitive shapes in `_draw()`. Every sound is still synthesized
 at startup; no audio file ships with the game. See §6.
 
 ### Controls
@@ -341,7 +341,7 @@ editing three files and hunting for un-named literals; it is now one file.
   it; a tap on the small red **×** at its bottom-right corner (`is_sell_hit`) sells it —
   no info panel, so the actions live on the tower itself and stay reachable on a phone.
   It draws itself from **`sprites.gd`** if its element and tier have been painted (today:
-  fire and water, all five tiers) and from the old code art if they have not, which lets the
+  fire, water and nature, all five tiers) and from the code art if not, which lets the
   board be repainted one element at a time. A sprite is hung by its **ground anchor** — the
   middle of its lowest opaque row — so the base sits on the spot the tower occupies, and
   `SPRITE_HEIGHT` fixes how tall it is drawn per level (78 → 138 board px), so the
@@ -467,17 +467,17 @@ element.
 - **The board**: `board_source.png`, 1672×941, drawn at the towers' 3/4 camera angle so a
   tower reads as standing *in* the scene rather than pasted onto a top-down field.
   `map.gd` stretches it to `Game.WORLD_SIZE` and draws nothing else.
-- **The fire and water towers**, five tiers each: `towers/<element>_1..5.png`, cut from one
-  generated sheet (`_source_<element>.png`) by `tools/cut_sprites.py` at `max_height` 220,
-  which is what puts the tiers at ~2x their drawn size. Sets are generated five-at-a-time on
+- **The fire, water and nature towers**, five tiers each: `towers/<element>_1..5.png`, cut
+  from one generated sheet (`_source_<element>.png`) by `tools/cut_sprites.py` at
+  `max_height` 220, which puts the tiers at ~2x their drawn size. Sets are generated
+  five-at-a-time on
   purpose — asked for one at a time, the tiers come back looking unrelated. The tool splits
   the sheet on its empty columns, trims each sprite to its alpha bounds, and box-downscales
   it to roughly twice its drawn size: the raw art carries four to seven source pixels per
   screen pixel, which is what made the flames sparkle. Mipmaps are on, and every node that
   draws a texture asks for `TEXTURE_FILTER_LINEAR_WITH_MIPMAPS` — the 2D default is plain
   linear and ignores a mip chain entirely.
-- **Not yet painted**: light, darkness, nature and earth, all fifteen duals, and every
-  enemy. They
+- **Not yet painted**: light, darkness and earth, all fifteen duals, and every enemy. They
   draw the code art below, and `sprites.gd` returning `null` is what selects it — so a new
   set is added by dropping files in, with no code change.
 
