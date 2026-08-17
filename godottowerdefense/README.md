@@ -465,16 +465,20 @@ two kinds of art are meant to sit side by side while the repaint proceeds elemen
 element.
 
 **Painted** (`assets/art/`, the project's only bitmap assets — `icon.svg` aside):
-- **The board**: `board_source.png`, 1672×941, drawn at the towers' 3/4 camera angle so a
-  tower reads as standing *in* the scene rather than pasted onto a top-down field.
-  `map.gd` stretches it to `Game.WORLD_SIZE` and draws nothing else.
+- **The board**: `board_source.png`, 1672×941. `map.gd` stretches it to `Game.WORLD_SIZE`
+  and draws nothing else. It is also the **style reference every tower sheet is generated
+  against** — attached to the prompt, not described in it. That is what makes the towers
+  look like they were painted for this map; see
+  [docs/tower-art-prompt.md](docs/tower-art-prompt.md), which is mostly the story of the
+  first six sheets that were not.
 - **All six element towers**, five tiers each: `towers/<element>_1..5.png`, cut from one
   generated sheet (`_source_<element>.png`) by `tools/cut_sprites.py` at `max_height` 220,
   which puts the tiers at ~2x their drawn size.
   Because the sprite is scaled by HEIGHT, an element's silhouette is free to say something:
-  light reaches furthest in the game and is a slim spire at 104-126px wide, earth hits
-  hardest at close range and is a broad bastion at 142-150, darkness reaches nearly as far
-  as light but strikes slowest and is a heavy obelisk at 125-136, against fire's 161-171.
+  light reaches furthest in the game and is a slender spire at 106-134px wide, fire is the
+  shortest-ranged and is a squat forge at 176-195, and the rest sit between them — darkness
+  144-167, nature 147-170, water 160-169, earth 162-176. A tower's role is meant to be
+  legible before its range ring is drawn.
   Sets are generated five-at-a-time on
   purpose — asked for one at a time, the tiers come back looking unrelated. The tool splits
   the sheet on its empty columns, trims each sprite to its alpha bounds, and box-downscales
