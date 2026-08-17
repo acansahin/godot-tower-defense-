@@ -14,7 +14,7 @@ const BOARD := preload("res://assets/art/board_source.png")
 
 ## Draws the traced Game.PATH over the painting. Turn on after re-tracing; the question it
 ## answers is whether the line sits down the middle of the cobbles all the way to the keep.
-@export var show_road: bool = true
+@export var show_road: bool = false
 
 func _ready() -> void:
 	queue_redraw()

@@ -35,42 +35,6 @@ const SCREEN_SIZE := Vector2(1280, 720)
 ## Balance.MAX_TOWER_RANGE. Geometry could not solve both; this is the half worth keeping.
 const WORLD_SIZE := Vector2(1536, 864)
 
-# Waypoints that define the road. Enemies walk these in order: the first point is
-# off-screen left, where they spawn, and the last is the base they leak into.
-#
-# An inward SPIRAL, not a serpentine: in from the left, once around the outside, then
-# back along a middle lane that dead-ends at the heart of the board. There is no exit —
-# an enemy that walks to the end of the lane has reached the base, and leaks there.
-#
-# This is the shape the original uses, read out of its own pathing map with
-# `python tools/extract_w3x.py "<map>.w3x" pathing` — see docs/element-td-data.md.
-# Element TD's arena is a rectangular spiral wound inward four times, with the buildable
-# ground in THICK blocks between the arms rather than in thin strips beside a lane. A
-# tower there sits with road on two or three sides of it, which is what makes range worth
-# paying for, and the run ends at the centre rather than off the far edge.
-#
-# We only get one turn of that spiral, because the original's arena is TALL: 2560x3776
-# units, which at WC3_RANGE_SCALE is 896x1321px against our 1536x864 world. We have the
-# width and two thirds of the height, and each further turn costs a lane plus the two
-# rows of grass beside it (80 + 176 = 256px of it).
-#
-# One turn still reproduces the original's coverage profile — `--dump-board` prints a
-# `raw` column measuring the uncapped ported ranges, which is the like-for-like against
-# the `pathing` dump: ours 12% / 28% / 98%, the original's 14% / 25% / 94% of the road
-# watched from the best single cell by Fire / the 750-unit elements / Light. Note what
-# that does NOT say: a spiral does not make a 700px tower reasonable, on our board or on
-# the original's. Balance.MAX_TOWER_RANGE is what does that, and it still has to.
-#
-# Geometry is bounded on the right by PLAY_RIGHT, not by WORLD_SIZE.x: the tower palette
-# is drawn over the last 240px of the world, so the road stays out of it too — a leg
-# behind the panel is a leg you watch enemies walk down through a menu.
-#
-# Every coordinate here is placed against the CELL TILING, which is anchored at the world
-# origin and steps by 96 — so a leg only earns cells on its outer side if a column centre
-# lands at least ROAD_CLEARANCE from it. The right leg is at 1112 rather than 1160 for
-# exactly that reason: at 1160 the column at 1200 sat 40px from the stone, was dropped, and
-# the strip between the road and the palette was 96px of grass nobody could build on. Eight
-# cells, invisible in a screenshot and obvious in --dump-board.
 # Waypoints of the painted road, TRACED OUT OF THE ARTWORK rather than authored. The board
 # is a hand-painted map now (assets/art/board_source.png) and the geometry has to follow the
 # picture, or enemies walk beside the road instead of on it.
@@ -87,49 +51,120 @@ const WORLD_SIZE := Vector2(1536, 864)
 # board. The coverage table in docs/element-td-data.md describes the old board — --dump-board
 # reports this one.
 const PATH: Array = [
-	Vector2(-144, 309),
-	Vector2(0, 309),
-	Vector2(308, 324),
-	Vector2(409, 252),
-	Vector2(451, 187),
-	Vector2(539, 157),
-	Vector2(607, 136),
-	Vector2(681, 142),
-	Vector2(733, 145),
-	Vector2(771, 130),
-	Vector2(812, 134),
-	Vector2(858, 131),
-	Vector2(907, 150),
-	Vector2(935, 175),
-	Vector2(991, 162),
-	Vector2(1017, 196),
-	Vector2(1071, 211),
-	Vector2(1125, 240),
-	Vector2(1187, 282),
-	Vector2(1217, 343),
-	Vector2(1229, 412),
-	Vector2(1207, 477),
-	Vector2(1202, 551),
-	Vector2(1149, 601),
-	Vector2(1076, 622),
-	Vector2(1025, 660),
-	Vector2(967, 683),
-	Vector2(906, 691),
-	Vector2(846, 712),
-	Vector2(774, 689),
-	Vector2(717, 669),
-	Vector2(659, 652),
-	Vector2(587, 641),
-	Vector2(535, 598),
-	Vector2(523, 527),
-	Vector2(499, 468),
-	Vector2(548, 397),
-	Vector2(590, 338),
-	Vector2(601, 296),
-	Vector2(645, 269),
-	Vector2(732, 281),
-	Vector2(805, 320),
-	Vector2(839, 351),
+	Vector2(-144, 321),
+	Vector2(51, 326),
+	Vector2(66, 306),
+	Vector2(81, 330),
+	Vector2(110, 306),
+	Vector2(125, 325),
+	Vector2(140, 306),
+	Vector2(198, 309),
+	Vector2(213, 316),
+	Vector2(228, 334),
+	Vector2(243, 337),
+	Vector2(257, 333),
+	Vector2(272, 322),
+	Vector2(287, 340),
+	Vector2(346, 306),
+	Vector2(412, 247),
+	Vector2(452, 189),
+	Vector2(523, 154),
+	Vector2(588, 129),
+	Vector2(658, 121),
+	Vector2(720, 122),
+	Vector2(775, 131),
+	Vector2(827, 154),
+	Vector2(865, 164),
+	Vector2(898, 174),
+	Vector2(927, 178),
+	Vector2(959, 169),
+	Vector2(985, 188),
+	Vector2(1016, 206),
+	Vector2(1058, 194),
+	Vector2(1088, 209),
+	Vector2(1101, 242),
+	Vector2(1125, 272),
+	Vector2(1134, 302),
+	Vector2(1162, 326),
+	Vector2(1168, 358),
+	Vector2(1185, 391),
+	Vector2(1177, 425),
+	Vector2(1174, 459),
+	Vector2(1158, 489),
+	Vector2(1167, 539),
+	Vector2(1117, 549),
+	Vector2(1098, 574),
+	Vector2(1076, 599),
+	Vector2(1040, 615),
+	Vector2(1013, 653),
+	Vector2(983, 679),
+	Vector2(946, 683),
+	Vector2(910, 677),
+	Vector2(871, 694),
+	Vector2(834, 683),
+	Vector2(800, 664),
+	Vector2(762, 654),
+	Vector2(718, 647),
+	Vector2(675, 630),
+	Vector2(635, 605),
+	Vector2(589, 578),
+	Vector2(548, 541),
+	Vector2(501, 499),
+	Vector2(479, 444),
+	Vector2(493, 387),
+	Vector2(557, 341),
+	Vector2(596, 303),
+	Vector2(640, 274),
+	Vector2(709, 270),
+	Vector2(740, 254),
+	Vector2(788, 253),
+	Vector2(826, 263),
+	Vector2(845, 253),
+	Vector2(872, 264),
+	Vector2(892, 267),
+	Vector2(910, 271),
+	Vector2(927, 288),
+	Vector2(938, 306),
+	Vector2(948, 316),
+	Vector2(957, 325),
+	Vector2(969, 327),
+	Vector2(974, 339),
+	Vector2(988, 341),
+	Vector2(990, 354),
+	Vector2(990, 367),
+	Vector2(996, 376),
+	Vector2(981, 390),
+	Vector2(1005, 398),
+	Vector2(1024, 411),
+	Vector2(1008, 422),
+	Vector2(1006, 434),
+	Vector2(987, 437),
+	Vector2(996, 456),
+	Vector2(992, 472),
+	Vector2(980, 478),
+	Vector2(962, 473),
+	Vector2(957, 487),
+	Vector2(947, 497),
+	Vector2(933, 493),
+	Vector2(921, 487),
+	Vector2(910, 489),
+	Vector2(895, 502),
+	Vector2(882, 497),
+	Vector2(867, 496),
+	Vector2(849, 498),
+	Vector2(829, 496),
+	Vector2(806, 492),
+	Vector2(791, 479),
+	Vector2(775, 465),
+	Vector2(756, 449),
+	Vector2(755, 427),
+	Vector2(739, 405),
+	Vector2(773, 385),
+	Vector2(805, 364),
+	Vector2(866, 360),
+	Vector2(892, 341),
+	Vector2(917, 349),
+	Vector2(920, 402),
 ]
 
 # Grid placement: towers snap to cells drawn faintly on the grass, flush against
@@ -195,8 +230,7 @@ const TOWER_GAP := TOWER_RADIUS * 2.0 + 8.0
 ## that a tower standing among them reads as a tower in a wood, and every one of them added
 ## here is a place the player is told "no" for a reason they cannot see at a glance.
 const OBSTACLES: Array = [
-	[Vector2(259, 710), 150.0],   # the lake
-	[Vector2(128, 533), 44.0],    # the waterfall pool
+	[Vector2(315, 715), 176.0],   # the lake and the pool the waterfall drops into
 ]
 
 ## True when a tower of TOWER_RADIUS may stand here. `others` is every tower already on the

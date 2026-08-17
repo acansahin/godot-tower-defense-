@@ -6,6 +6,12 @@ whose radius changes least from one ray to the next walks the spiral inward.
 """
 import math
 import os
+
+TAU = math.pi * 2.0
+## How far the painted road is allowed to wander outward while the walk is heading inward.
+## The spiral is hand-drawn, so it wobbles; at 5px the follower gave up after a quarter turn
+## and at 55 it hopped onto the neighbouring arm and circled forever.
+WOBBLE = 20.0
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -23,11 +29,14 @@ def is_road(x, y):
     if x < 0 or y < 0 or x >= img.width or y >= img.height:
         return False
     r, g, b = img.rgb(int(x), int(y))
-    # Pale tan cobble: bright, warm, and clearly not the green of the grass.
-    return r > 150 and g > 130 and b < g and (r - b) > 40
+    # The cobble is a GREY-TAN: bright, and with real blue in it. Sunlit grass in this
+    # painting is bright too — and warmer than the road, since it carries almost no blue at
+    # all — so "bright and warm" picked the meadow and sent the first trace diagonally
+    # across the lake. Blue is what separates the two.
+    return r > 140 and b > 70 and r > b and g > b and (r - g) < 45
 
 
-def bands(cx, cy, theta, r_max, step=2.0, min_width=10.0):
+def bands(cx, cy, theta, r_max, step=2.0, min_width=8.0):
     """Radii where the ray crosses the road, as (centre_r, width) per crossing."""
     out = []
     run_start = None
@@ -94,20 +103,33 @@ r_max = math.hypot(max(cx, img.width - cx), max(cy, img.height - cy))
 # road that is not a spiral arm — a straight run in from the edge — and the first ray that
 # leaves the picture ends the trace. The innermost arm is small, fully inside the image and
 # unambiguous, so the walk starts there and the result is reversed at the end.
-def walk(direction, radius):
-    """Follow the road from the start ray, one angular direction, until it runs out."""
+def walk(direction, radius, inward):
+    """Follow the road from the start ray, one angular direction, until it runs out.
+
+    The walk is MONOTONIC in radius: an inward walk may only shrink and an outward walk may
+    only grow, give or take a few pixels of noise. Without that the follower is free to hop
+    onto the neighbouring arm each time the angle wraps — which it did, going round and
+    round the same ring for four thousand rays and reporting a 20,000px road.
+    """
     theta = start_theta
     run = []
     misses = 0
+    swept = 0.0
     for _ in range(4000):
-        theta += direction * math.radians(2.0)
+        if swept > TAU * 3.5:
+            break
+        swept += math.radians(1.5)
+        theta += direction * math.radians(1.5)
         found = bands(cx, cy, theta, r_max)
-        near = [b for b in found if abs(b[0] - radius) <= 44.0]
+        near = [b for b in found if abs(b[0] - radius) <= 55.0
+                and ((b[0] <= radius + WOBBLE) if inward else (b[0] >= radius - WOBBLE))]
         if not near:
             # A tree or a rock sitting on the road hides it for a ray or two; only give up
             # once the road has really gone.
+            # Trees overhang the road in the painting, and a tree is worth several rays:
+            # the walk coasts through a gap rather than calling it the end of the road.
             misses += 1
-            if misses > 6:
+            if misses > 16:
                 break
             continue
         misses = 0
@@ -124,15 +146,27 @@ def walk(direction, radius):
 # one of them gets half a road, which is what the first attempt produced.
 seed = bands(cx, cy, start_theta, r_max)
 assert seed, "no road on the entry ray"
-seed_radius = min(b[0] for b in seed if b[0] > 120.0)
-inward = walk(+1, seed_radius)
-outward = walk(-1, seed_radius)
-if inward and outward and inward[-1][1] > outward[-1][1]:
-    inward, outward = outward, inward
-best_run = list(reversed(outward)) + [(start_theta, seed_radius)] + inward
+# EVERY band on the entry ray is tried as a seed, and the trace that spans the most RADIUS
+# wins — not the longest one.
+#
+# Which band to start from is not knowable in advance: the outermost is usually the straight
+# run in from the edge, which leaves the picture after a few degrees, and the innermost is
+# the ring around the keep. Scoring by length picks that ring, because a follower going round
+# and round it racks up rays forever; scoring by how far the radius travels picks the actual
+# spiral, which is the one thing a spiral does that a circle does not.
+best_run = []
+best_span = -1.0
+for candidate in sorted((b[0] for b in seed), reverse=True):
+    for d in (+1, -1):
+        joined = (list(reversed(walk(-d, candidate, False)))
+                  + [(start_theta, candidate)] + walk(d, candidate, True))
+        radii = [r for _t, r in joined]
+        span = max(radii) - min(radii)
+        if span > best_span:
+            best_span, best_run = span, joined
 
 print(f"traced       : {len(best_run)} rays, radius {best_run[0][1]:.0f} -> "
-      f"{best_run[-1][1]:.0f}px")
+      f"{best_run[-1][1]:.0f}px, span {best_span:.0f}px")
 
 # Extend the two ends the ray-walk cannot see. The trace covers the spiral arms; what it
 # misses is the straight run in from the left edge (not an arc, so the walk never starts on
@@ -158,9 +192,41 @@ for i, (theta, radius) in enumerate(best_run):
     y = (cy + math.sin(theta) * radius) * SY
     points.append((x, y))
 
-# The entry: the painted road crosses the left edge at entry_y, and enemies spawn beyond it.
-points.insert(0, (0.0, entry_y * SY))
-points.insert(0, (-144.0, entry_y * SY))
+## Columns of the painted entry road, scanned straight down rather than swept as arcs.
+##
+## The ray-walk cannot see this stretch: it is a straight run in from the left edge, not an
+## arc around the keep, so there is no band for it to follow. Scanning columns finds it, and
+## keeping only the bands near the height the road crosses the edge at keeps the scan from
+## picking up the spiral arms it passes under.
+def entry_chain(entry_px_y, until_x):
+    found = []
+    for x in range(8, int(until_x), 16):
+        runs, run_start = [], None
+        for y in range(img.height):
+            hit = is_road(x, y)
+            if hit and run_start is None:
+                run_start = y
+            elif not hit and run_start is not None:
+                if y - run_start > 12:
+                    runs.append((run_start + y) * 0.5)
+                run_start = None
+        for centre in runs:
+            if abs(centre - entry_px_y) < 70.0:
+                found.append((x * SX, centre * SY))
+                break
+    return found
+
+
+# The trace's outer end can sit anywhere the follower happened to stop, including well below
+# the height the road actually enters at. Anything that far off the entry line is dropped
+# before the entry is stitched on, or the path dives to it and back.
+entry_world_y = entry_y * SY
+while len(points) > 4 and abs(points[0][1] - entry_world_y) > 90.0:
+    points.pop(0)
+
+chain = entry_chain(entry_y, points[0][0] / SX if points else 300)
+points[0:0] = chain
+points.insert(0, (-144.0, entry_world_y))
 # The keep is where the road ends, so the last waypoint IS the keep.
 points.append((cx * SX, cy * SY))
 
