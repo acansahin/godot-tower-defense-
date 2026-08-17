@@ -55,7 +55,15 @@ var _path: Array = []
 var _target_index: int = 1
 var _dead: bool = false
 var _wing_phase: float = 0.0  ## Drives the wing-flap animation.
-var _anim_phase: float = 0.0  ## Drives the idle breathing wobble.
+var _anim_phase: float = 0.0  ## Drives the idle breathing wobble, the stun sparks, the regen pulse.
+## Drives the walk cycle of a PAINTED creep. Separate from _anim_phase because it advances
+## with the creep's own speed — a slowed one steps slower, a swarmling scurries, a tank
+## plods — while the effects above must keep their own steady rate.
+var _walk_phase: float = 0.0
+## Which pose of the walk cycle is on screen. Swaps at each footfall, and swapping is the
+## one thing in the walk that costs a redraw — twice a stride, against a transform every
+## frame, which is the right way round.
+var _frame: int = 0
 ## +1 while walking the way the art is drawn (screen-left), -1 while walking the other way.
 ## Painted creeps are drawn facing ONE direction and mirrored for the other, because the road
 ## is a spiral and a creep meets every heading on it. Folded into `_body.scale` alongside the
@@ -180,9 +188,7 @@ func _process(delta: float) -> void:
 	if _dead:
 		return
 	_anim_phase += delta * 3.0
-	# Idle breathing wobble — a transform on the body layer, so it costs no redraw.
-	var br := sin(_anim_phase)
-	_body.scale = Vector2(_facing * (1.0 + 0.05 * br), 1.0 - 0.05 * br)
+	_animate_body(delta)
 	if _flash > 0.0:
 		_flash = maxf(0.0, _flash - delta * 7.0)
 		_body.queue_redraw()  # the impact pop fades on the body layer
@@ -199,6 +205,40 @@ func _process(delta: float) -> void:
 	if _dead:
 		return  # poison may have killed it this frame
 	_move(delta)
+
+## Moves the body layer. Pure transform — position, rotation and scale — so none of this
+## costs a redraw no matter how busy the wave is.
+##
+## The blob keeps the breathing wobble it was designed around. A painted creep must NOT have
+## it: squashing a standing figure vertically reads as inflating, not as breathing, which is
+## the one thing a ball never looked like. It gets a walk cycle instead — a hop at every
+## footfall, and a slow roll of the shoulders across the stride.
+##
+## This is deliberately not limb animation, which one image cannot have. It is the carrier
+## motion under the step, and it is what makes a two-pose sprite read as walking rather than
+## as a picture sliding along the road.
+func _animate_body(delta: float) -> void:
+	if Sprites.enemy(kind) == null:
+		var br := sin(_anim_phase)
+		_body.scale = Vector2(_facing * (1.0 + 0.05 * br), 1.0 - 0.05 * br)
+		return
+	# Stride rate from the creep's own speed over its own size: a swarmling scurries, a tank
+	# plods, and anything slowed visibly labours. Bounded so a stun (speed 0 through
+	# _slow_factor) does not freeze mid-air and a late-wave sprinter does not blur.
+	var walk_speed: float = speed * _slow_factor
+	if _stun_time > 0.0:
+		walk_speed = 0.0
+	_walk_phase += delta * clampf(walk_speed / maxf(radius, 1.0) * 1.6, 0.0, 14.0)
+	# abs(sin) — two footfalls per cycle, and the bounce never dips below the ground.
+	var hop: float = absf(sin(_walk_phase)) * radius * 0.10
+	_body.position = Vector2(0.0, -hop)
+	_body.rotation = sin(_walk_phase * 0.5) * 0.05 * _facing
+	_body.scale = Vector2(_facing, 1.0)
+	# Opposite leg forward on every footfall, if this archetype has been painted twice.
+	var f := int(_walk_phase / PI) % 2
+	if f != _frame:
+		_frame = f
+		_repaint_body()
 
 ## Advances slow / poison timers and applies poison damage over time.
 func _tick_status(delta: float) -> void:
@@ -322,7 +362,7 @@ func _draw_element_ring() -> void:
 func _draw_body(ci: CanvasItem) -> void:
 	# Painted creep if this archetype has been drawn; the blob below is the fallback, and it
 	# is what the board still looks like everywhere the art has not landed.
-	var art := Sprites.enemy(kind)
+	var art := Sprites.enemy(kind, _frame)
 	if art != null:
 		_draw_sprite(ci, art)
 		return

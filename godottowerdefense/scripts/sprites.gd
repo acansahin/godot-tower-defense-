@@ -26,8 +26,14 @@ static func tower(element: String, level: int) -> Texture2D:
 ## The sprite for a creep archetype (the keys of Game.WAVE_TYPES: "normal", "fast", "tank",
 ## …), or null if that one has not been painted yet. Same deal as tower(): the caller falls
 ## back to the code-drawn blob, so the roster can be repainted one archetype at a time.
-static func enemy(kind: String) -> Texture2D:
-	return _load(ENEMY_DIR + kind + ".png")
+##
+## `frame` picks a pose out of a WALK CYCLE — `<kind>_1.png` and `<kind>_2.png`, the same
+## creature with opposite legs forward. An archetype that has only the single standing
+## `<kind>.png` returns that for every frame, so a one-pose creep and a two-pose one can
+## walk the same road while the art catches up.
+static func enemy(kind: String, frame: int = 0) -> Texture2D:
+	var posed := _load(ENEMY_DIR + "%s_%d.png" % [kind, frame + 1])
+	return posed if posed != null else _load(ENEMY_DIR + kind + ".png")
 
 ## Where the sprite meets the ground, in texture pixels: y is the bottom edge, x is the
 ## middle of the BAND of rows just above it.
