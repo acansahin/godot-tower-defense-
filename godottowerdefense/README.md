@@ -4,9 +4,10 @@ A tiny, fully-playable 2D tower-defense prototype inspired by the Warcraft III
 custom map **Element TD**. Built with typed GDScript, deliberately small and
 readable rather than production-architected.
 
-When you press **Play** you get: a grassy 1536x864 world shown whole on one screen,
-a cobblestone road spiralling inward to the base at its heart, a faint build grid of 63
-cells in the blocks between its arms, and an **endless** run of enemies drawn from a data table
+When you press **Play** you get: a hand-painted 1536x864 world shown whole on one screen,
+a cobblestone road spiralling inward to the keep at its heart — **traced out of the
+painting**, not authored beside it — **free placement** of towers anywhere the ground is
+clear, and an **endless** run of enemies drawn from a data table
 of **creep archetypes** (including flyers, tanks, swarms, splitters, regenerators, periodic
 **bosses** and **elite** waves). The buildable roster is the six elements —
 **Light / Darkness / Water / Fire / Nature / Earth**, with the stats of the original
@@ -51,26 +52,31 @@ tower reference this is growing toward.
 5. Press **F5** / the ▶ **Play** button. `scenes/Menu.tscn` is the main scene — the
    title screen; press **Play** there to start a run.
 
-No external assets, plugins, or downloads are required — all art is drawn in
-code with primitive shapes and colors.
+No plugins or downloads are required. Two kinds of art now sit side by side: the
+**painted** board and the fire tower's five tiers (`assets/art/`), and the **code-drawn**
+everything else — enemies, the other five elements, projectiles, every effect and all of
+the UI — still built from primitive shapes in `_draw()`. Every sound is still synthesized
+at startup; no audio file ships with the game. See §6.
 
 ### Controls
 - The game opens on a **title screen**: **Play**, **How to Play** (a controls
   summary), a **Sound** toggle, and **Quit** (hidden on Web).
 - **Drag a tower from the palette** (top-right, lists every tower with its colour
-  and cost) onto a grid cell to build it. A green ghost marks a legal cell, red an
-  illegal/unaffordable one, and the ghost also previews **the range that tower would
+  and cost) onto **any clear ground** to build it. A green ghost disc marks a legal spot,
+  red an illegal/unaffordable one, and the ghost also previews **the range that tower would
   cover** — so you can judge placement before spending the gold.
 - **Hover a placed tower** to light up its range ring. Ranges stay faint otherwise, so a
   full board doesn't turn into a tangle of overlapping circles.
-- Cells are the faint squares on the grass — 40 of them, in two rows filling each gap
-  between the horizontal roads, so the narrow outer side of every bend is a 2×2 block.
-  Towers can't be built on the road or on an occupied cell.
-  A drop that lands slightly off still snaps to the nearest cell (see
-  `grid.gd` `SNAP_TOLERANCE`); the ghost shows you which one before you let go.
-- **Click / tap a tower to upgrade it** (up to level 3) — each level boosts damage, range,
-  fire rate and DoT. A green ▲ chevron floats beside any tower whose next level you can
-  already afford, so you can spot upgrade candidates at a glance.
+- **There is no build grid.** A tower stands wherever you drop it, as long as it is off the
+  road, out of the water, inside the play area and not on top of another tower — one rule,
+  `Game.can_build_at()`, and the green/red ghost is that rule drawn. While a drag is in
+  progress the ground that is closed to building is shaded, so the margins the painting
+  cannot show (the road's keep-out, the strip under the palette) are visible exactly when
+  you are asking about them. The ghost never disappears over bad ground; it turns red,
+  because a ghost that vanishes tells you nothing about why.
+- **Click / tap a tower to upgrade it** (up to level 5) — each level raises **damage only**,
+  and a painted tower visibly grows with it. A green ▲ chevron floats beside any tower whose
+  next level you can already afford, so you can spot upgrade candidates at a glance.
 - **Tap the small red × at a tower's bottom-right corner to sell it** — refunds half of
   everything you spent on it. Keeping every action on the tower itself means the whole
   board stays reachable with a thumb on a phone.
@@ -106,7 +112,13 @@ godottowerdefense/
 ├── README.md
 ├── .gitignore
 ├── docs/
-│   └── element-td-towers.md # Element TD tower reference (design notes)
+│   ├── element-td-towers.md # Element TD tower reference (design notes)
+│   └── element-td-data.md   # Every number extracted from the source maps
+├── assets/
+│   └── art/                 # The project's only bitmap assets (icon.svg aside)
+│       ├── board_source.png # The painted board, 1672x941; Game.PATH is traced out of it
+│       └── towers/          # fire_1..5.png, cut from _source_fire.png by
+│                            # tools/cut_sprites.py (at the repo root, not here)
 ├── web/
 │   └── orientation.js       # Web build only: "rotate your device" gate + fullscreen
 │                            # landscape lock (injected via the preset's head_include)
@@ -121,7 +133,7 @@ godottowerdefense/
 └── scripts/
     ├── balance.gd           # "Balance" autoload: every tunable curve + economy number
     ├── save_service.gd      # "Save" autoload: versioned, atomic user:// persistence
-    ├── game.gd              # "Game" autoload: shared state, grid + TOWER_DEFS
+    ├── game.gd              # "Game" autoload: shared state, placement rule + TOWER_DEFS
     ├── meta.gd              # "Meta" autoload: Essence, Workshop levels, offline reward
     ├── workshop.gd          # Between-runs screen: spend Essence on permanent upgrades
     ├── run.gd               # "Run" autoload: this run's upgrades, unlocks, folded mods
@@ -133,8 +145,10 @@ godottowerdefense/
     ├── enemy_index.gd       # "EnemyIndex" autoload: per-frame spatial hash for targeting
     ├── menu.gd              # Title screen: play / how-to-play / sound / quit
     ├── main.gd             # Wires the level together (placement, upgrades, sell)
-    ├── map.gd              # Draws grass, the spiral road and the base at its end
-    ├── grid.gd            # Builds + draws the faint placement grid, snapping
+    ├── map.gd              # Draws the painted board (+ the traced-road overlay, off)
+    ├── grid.gd             # Shades the ground you may NOT build on, during a drag
+    ├── sprites.gd          # Loads the painted tower art + its ground anchor; null
+    │                       # for anything not painted yet, so the code art falls back
     ├── enemy.gd            # Path walking, health, flyer visuals, slow/poison
     ├── enemy_layer.gd      # Draw-only child layer for enemy.gd (body / overlay split)
     ├── tower.gd            # Generic tower: targeting, stats, click-upgrade + sell ×
@@ -146,7 +160,7 @@ godottowerdefense/
     ├── frost_ring.gd       # Expanding chill ring drawn by Ice's Lv2+ area slow
     ├── wave_manager.gd     # Spawns the 20-wave table (archetypes, bosses, economy)
     ├── tower_palette.gd    # Top-right drag-source, lists Game.TOWER_ORDER
-    ├── placement_preview.gd # Green/red ghost cell shown while dragging
+    ├── placement_preview.gd # Green/red ghost footprint shown while dragging
     ├── floating_text.gd    # Rising, fading damage / gold label (built in code)
     ├── death_burst.gd      # Expanding ring of dots left by a dying enemy
     ├── hud.gd              # HUD labels + the time controls (pause / speed)
@@ -175,8 +189,9 @@ stays in sync with the **M** key.
 ### `Main.tscn` (the level)
 ```
 Main (Node2D)               [main.gd]
-├── Map (Node2D)            [map.gd]   -> draws grass, road and the base
-├── Grid (Node2D)           [grid.gd]  -> faint build cells + snapping
+├── Map (Node2D)            [map.gd]   -> the painted board, stretched to WORLD_SIZE
+├── Grid (Node2D)           [grid.gd]  -> shades closed ground while a drag is in progress
+│                                         (still named Grid; there is no grid)
 ├── Enemies (Node2D)                   -> enemies spawned here at runtime
 ├── Towers (Node2D)                    -> built towers live here
 ├── Projectiles (Node2D)   [projectiles.gd]  -> object pool; reused bolts live here
@@ -242,8 +257,9 @@ Both buttons clear `get_tree().paused` first — `show_result()` sets it, and it
 otherwise survive the scene change and leave the next screen frozen.
 
 The `Game` autoload (`scripts/game.gd`) is registered in `project.godot` and is
-globally accessible as `Game`. It holds the shared map layout (`PATH`), the build
-grid definition (`CELL_WIDTH`, `CELL_HEIGHT`, `ROAD_HALF`, `ROAD_CLEARANCE`) and the
+globally accessible as `Game`. It holds the shared map layout (`PATH`, traced out of the
+board art), the placement rule (`TOWER_RADIUS`, `ROAD_HALF`, `ROAD_KEEPOUT`, `TOWER_GAP`,
+`OBSTACLES` and the `can_build_at()` that reads them) and the
 bounds of the play area (`PLAY_RIGHT`, `PLAY_TOP` — derived from the screen-space UI that
 covers the board, not written down) plus the shared `dist_to_road()` helper, the
 costs, and the mutable `gold` / `lives` with signals. Four more autoloads sit beside it:
@@ -270,19 +286,23 @@ editing three files and hunting for un-named literals; it is now one file.
 
 - **`Game` (autoload)** owns gold & lives and broadcasts `gold_changed`,
   `lives_changed` and `game_over` — there is no `victory`, because waves are
-  endless. It also stores the road `PATH` and
-  the grid constants so every script reads one source of truth.
-- **`Grid`** precomputes the buildable cells — one uniform tiling of the play area, minus
-  every cell the road runs through or within `ROAD_CLEARANCE` of — draws
-  them faintly, and answers two lookups: `snap()` (exact — used for upgrade, sell
-  and hover, where being generous would spend gold on a mistap) and
-  `snap_forgiving()` (nearest cell within `SNAP_TOLERANCE` — used only for placing).
-  A cell must fit whole between `Game.PLAY_TOP` and `Game.PLAY_RIGHT`, so none is ever
-  half under the HUD bar or under the tower palette (which also eats the click).
+  endless. It also stores the road `PATH` and the placement rule so every script reads one
+  source of truth.
+- **`Game.can_build_at(pos, others)`** *is* the placement rule, and the only one: inside
+  the play area (`PLAY_TOP` … `PLAY_RIGHT`, so no tower is half under the HUD bar or under
+  the palette, which also eats the click), at least `ROAD_KEEPOUT` from the road, clear of
+  every circle in `OBSTACLES`, and at least `TOWER_GAP` from any tower already standing.
+  One radius — `TOWER_RADIUS` — does placement, overlap, hit-testing and the drawn
+  footprint, so what you can build on, what you can tap and what you can see are the same
+  disc.
+- **`Grid`** no longer owns anything. It sweeps the play area on a 32px step and shades
+  every square `can_build_at()` rejects, but only while `Main` has switched it on for a
+  drag. The painting already says where the lake and the road are; this is for the margins,
+  which it cannot.
 - **`TowerPalette`** (top-right) draws every tower in `Game.TOWER_ORDER` with its
-  colour and cost and emits `drag_started(id)` when pressed. **`Main`** then drags
-  the **`Preview`** ghost to the snapped cell and builds on release if the cell is
-  free and affordable.
+  colour and cost and emits `drag_started(id)` when pressed. **`Main`** then follows the
+  cursor with the **`Preview`** ghost — green or red per `can_build_at()` — and builds on
+  release if the spot is legal and affordable.
 - **`WaveManager`** reads the fixed 20-entry `Game.WAVES` table using plain
   `Timer` nodes (so a restart can't leave a spawn loop running). Each entry picks
   a **creep archetype** from `Game.WAVE_TYPES` (normal / fast / swarm / tank /
@@ -320,6 +340,12 @@ editing three files and hunting for un-named literals; it is now one file.
   `level` (pips + green upgrade chevron) and `total_spent`. A click on the tower upgrades
   it; a tap on the small red **×** at its bottom-right corner (`is_sell_hit`) sells it —
   no info panel, so the actions live on the tower itself and stay reachable on a phone.
+  It draws itself from **`sprites.gd`** if its element and tier have been painted (today:
+  fire, all five tiers) and from the old code art if they have not, which is what lets the
+  board be repainted one element at a time. A sprite is hung by its **ground anchor** — the
+  middle of its lowest opaque row — so the base sits on the spot the tower occupies, and
+  `SPRITE_HEIGHT` fixes how tall it is drawn per level (78 → 138 board px), so the
+  proportionally taller upper tiers grow upward instead of ballooning.
 - **`EnemyIndex` (autoload)** is a uniform spatial hash of every live enemy, rebuilt
   lazily at most once per frame (on the first query, keyed on the frame counter). Towers
   and splash projectiles call `query(center, radius)` to get only the enemies in cells
@@ -332,8 +358,9 @@ editing three files and hunting for un-named literals; it is now one file.
   a **slow**, a **poison** DoT, and/or a chance to **stun**. Direct, splash and
   poison damage are all scaled by `Game.element_mult(element, enemy.armor_element)`
   — the tower's element vs. the enemy's armor element.
-- **`Main`** handles input: palette drags build the chosen tower on the grid, and a click
-  on a placed tower either upgrades it or, if it hit the corner ×, sells it (`_upgrade_tower`
+- **`Main`** handles input: palette drags build the chosen tower wherever the drop is
+  legal, and a click within `TOWER_RADIUS` of a placed tower (`_tower_at`, nearest wins)
+  either upgrades it or, if it hit the corner ×, sells it (`_upgrade_tower`
   / `_sell_tower`). It also owns the `Camera2D` and applies the screen shake that
   `Game.shake_requested` broadcasts, so an `Enemy` can ask for a kick without knowing the
   camera exists.
@@ -374,63 +401,91 @@ editing three files and hunting for un-named literals; it is now one file.
 | Regen archetype | `game.gd` `WAVE_TYPES` + `enemy.gd` `REGEN_DELAY` | heals 3.5% of max HP/s, but **paused for 2s after taking any damage** — so it only heals through gaps in your coverage instead of setting a hard DPS threshold. Its "+" marker dims while suppressed. Poison ticks count as damage, so a single Nature tower shuts the healing off entirely |
 | Prep time between waves | `wave_manager.gd` `PREP_TIME` | 4s (skippable via the HUD's Send Next button, for a small gold bonus) |
 | Enemy speed | `balance.gd` `BASE_SPEED_*` | `80 + 9·n` px/s, giving a ~45s wave-1 crossing. Tied to the ROAD LENGTH and nothing else reads it, so move these if the road changes |
-| Tower range cap | `balance.gd` `MAX_TOWER_RANGE` | 380px. **The only unfaithful number in the port.** Light and Darkness reach 2000 WC3 units (700px), which covers 98% of the road from one cell — as it does on the original's own arena, which is why this is a design choice and not a repair. The defs keep the real 2000; this caps what the board honours |
+| Tower range cap | `balance.gd` `MAX_TOWER_RANGE` | 300px. **The only unfaithful number in the port.** Light and Darkness reach 2000 WC3 units (700px), which watches 99% of the road from one spot — as it does on the original's own arena, which is why this is a design choice and not a repair. Capped, they watch 51% and take four towers to cover 95% of the road, against Fire's 18% and twelve. The defs keep the real 2000; this caps what the board honours |
 | Wave scaling (`n` = wave) | `balance.gd` | HP `75 × 1.16^(n-1)` from the map. Count ramps `9 + 1.2·n` to the map's flat 28 — starting at 28 meant wave 1 spent 25s just spawning. Reward `3 + max(n/3, 1.10^(n-1))`; the flat 3 is ours, because the map's curve pays 1 gold a kill until wave 5, speed `60 + 6·n`, each × the archetype's multipliers |
 | Flyers (non-Air waves) | `wave_manager.gd` | from wave 3, 15% chance per enemy (halved on top of Air waves existing); `make_flying()` gives HP ×0.65, speed ×1.25 |
 | Bosses | `game.gd` `WAVES` (`"boss": true` per entry) | HP ×6, speed ×0.6, reward ×10, costs 10 lives |
 | Economy: interest | `balance.gd` `INTEREST_RATE`/`INTEREST_CAP` | 2.5% of banked gold per wave cleared, capped at 400. The map pays 2.5% every 15s and has no cap; the cap is ours, so that hoarding gold never beats building |
 | Economy: leak-free bonus | `wave_manager.gd` `LEAK_FREE_BONUS` | +6 gold if no enemy reached the end that wave |
-| Road path | `game.gd` `PATH` | 6 waypoints, one inward turn of the original's spiral, 80px wide (`ROAD_HALF` 40), 3992px long, dead-ending at the base |
-| Build grid | `game.gd` `CELL_WIDTH` / `CELL_HEIGHT` | 96×88 cells tiled over the play area, 63 of them survive `ROAD_CLEARANCE` |
-| Tower ranges | `game.gd` `TOWER_DEFS` × `WC3_RANGE_SCALE`, capped | 175–380px ≈ 1.8–4 cells |
-| Drop forgiveness | `grid.gd` `SNAP_TOLERANCE` | 24px outside a cell still counts (placement only) |
+| Road path | `game.gd` `PATH` | 114 waypoints **traced out of the board art** by `tools/trace_road.py`, 80px wide (`ROAD_HALF` 40), 4023px long, dead-ending at the keep |
+| Placement | `game.gd` `TOWER_RADIUS` / `ROAD_KEEPOUT` / `TOWER_GAP` | free — no grid. 30px footprint, 70px clear of the road centre-line (so a tower may sit with its edge against the kerb), 68px centre-to-centre between towers. `--dump-board` counts 101 legal standing spots on that spacing |
+| Blocked ground | `game.gd` `OBSTACLES` | one circle: the lake and the waterfall pool, found in the painting by the tracer's water scan. Trees and rocks deliberately don't block — a tower among them reads as a tower in a wood |
+| Tower ranges | `game.gd` `TOWER_DEFS` × `WC3_RANGE_SCALE`, capped | 175–300px |
 | Enemy size | `wave_manager.gd` | radius 24 × the archetype multiplier; boss 38 (must stay under the 80px road width) |
-| Board scale | see note below | everything is sized so a cell lands at ~48 CSS px on a landscape phone |
+| Board scale | see note below | everything is sized so a tower lands at ~60 CSS px across on a landscape phone |
 
-The road (`PATH`) is a plain array in `game.gd` and everything else follows from it: the
-road drawing, enemy walking, the map decoration, and the build grid, which is simply the
-play area tiled at `CELL_WIDTH`×`CELL_HEIGHT` with every cell within `ROAD_CLEARANCE` of
-the road dropped. There is no table of rows to keep in sync — an earlier board had one, and
-it could only describe a road running in straight horizontal legs.
+**The geometry follows the picture, not the other way round.** The board is a painted image
+(`assets/art/board_source.png`, 1672×941) and `Game.PATH` was traced out of it by
+`tools/trace_road.py`, which casts rays from the keep at the centre of the spiral and
+follows the band of pale cobble across them. The same tool's water scan produced
+`Game.OBSTACLES`. Everything else still follows `PATH`: enemy walking, the road keep-out,
+and the coverage the `--dump-board` harness measures. Re-trace after any change to the art,
+and check the result with `map.gd`'s `show_road` overlay, which draws the traced line back
+over the painting — the question it answers, whether the line sits down the middle of the
+cobbles all the way in, is obvious in a screenshot and invisible in a number.
 
-The shape is one inward turn of the original's spiral, read out of its pathing map (see
-[docs/element-td-data.md](docs/element-td-data.md) §5). What that buys over a serpentine is
-the thickness of the buildable blocks: a tower can sit with road on two or three sides, and
-a short-ranged one has to be pushed to the edge of its block to reach anything — which is
-what makes range worth its price. Measure any change to it with `--dump-board` before and
-after; the numbers move in ways eyeballing does not predict.
+This costs the ported geometry. The old road was one inward turn of Element TD's own
+spiral, read out of its pathing map (see
+[docs/element-td-data.md](docs/element-td-data.md) §5) and measured against it; this one is
+drawn. The trade was made deliberately when the art direction moved to a painted board, and
+the coverage table in that document describes the old board — `--dump-board` reports this
+one. Measure any change with it before and after; the numbers move in ways eyeballing does
+not predict.
 
 **The whole board is sized for a phone, and the sizes are coupled.** The game is
 authored in a fixed 1280×720 world that `canvas_items` stretch fits to the screen,
-so on a landscape phone everything arrives at roughly half scale — a 96×88 cell
-lands at ~48×44 CSS px, right at the minimum comfortable tap target, which is why
-the cells are as large as they are and why so few fit.
+so on a landscape phone everything arrives at roughly half scale — a 60px tower footprint
+lands at ~30 CSS px, which is why the tap target is the *drawn* sprite (much bigger than
+the footprint) and why the sell × sits on the tower rather than in a panel.
 
-The UI eats into the board on two sides, and the grid knows it: `Game.PLAY_TOP` and
+The UI eats into the board on two sides, and placement knows it: `Game.PLAY_TOP` and
 `Game.PLAY_RIGHT` convert the HUD bar (40 screen px) and the tower palette (200) into world
-px, and a cell must fit whole between them. The palette matters most — it swallows clicks
-across its whole rect, so a tower under it could never be upgraded or sold. `PLAY_RIGHT`
-was a literal for a while and went stale through a world resize; it is now derived.
+px, and `can_build_at()` keeps a whole tower inside them. The palette matters most — it
+swallows clicks across its whole rect, so a tower under it could never be upgraded or sold.
+`PLAY_RIGHT` was a literal for a while and went stale through a world resize; it is now
+derived. The road is kept out of that strip too.
 
-If you ever change `CELL_WIDTH`, these have to move with it or the game quietly
+If you ever change `TOWER_RADIUS`, these have to move with it or the game quietly
 rebalances itself: `TOWER_DEFS` ranges and splash radii, `tower.gd`
-`RANGE_GROWTH`, `projectile.gd` `speed` (so flight *time* holds), the enemy radii
-in `wave_manager.gd`, `enemy_index.gd` `CELL`, and every `_draw()` literal.
+`RANGE_GROWTH` and `SPRITE_HEIGHT`, `projectile.gd` `speed` (so flight *time* holds), the
+enemy radii in `wave_manager.gd`, `enemy_index.gd` `CELL`, and every `_draw()` literal.
 Ranges are what keep the difficulty fixed: about 10 towers can cover any given
-point of road, and that number depends on range measured *in cells*, not pixels.
+point of road, and that number depends on range measured *against the tower spacing*, not
+in pixels.
 
 ---
 
-## 6. Generated placeholder resources
+## 6. Where the art comes from
 
-There are **no image/audio files** — every visual is procedurally drawn and every
-sound effect is synthesized in code:
-- Grass, cobblestone road and grass patches: `map.gd` `_draw()`.
-- Build grid cells: `grid.gd` `_draw()`.
+The project began with **no asset files at all** — every visual drawn in `_draw()`, every
+sound synthesized at startup. That still holds for the audio and for most of the screen.
+It no longer holds for the board and for the fire tower, which are painted images, and the
+two kinds of art are meant to sit side by side while the repaint proceeds element by
+element.
+
+**Painted** (`assets/art/`, the project's only bitmap assets — `icon.svg` aside):
+- **The board**: `board_source.png`, 1672×941, drawn at the towers' 3/4 camera angle so a
+  tower reads as standing *in* the scene rather than pasted onto a top-down field.
+  `map.gd` stretches it to `Game.WORLD_SIZE` and draws nothing else.
+- **The fire tower**, five tiers: `towers/fire_1..5.png`, cut from one generated sheet
+  (`_source_fire.png`) by `tools/cut_sprites.py`. Sets are generated five-at-a-time on
+  purpose — asked for one at a time, the tiers come back looking unrelated. The tool splits
+  the sheet on its empty columns, trims each sprite to its alpha bounds, and box-downscales
+  it to roughly twice its drawn size: the raw art carries four to seven source pixels per
+  screen pixel, which is what made the flames sparkle. Mipmaps are on, and every node that
+  draws a texture asks for `TEXTURE_FILTER_LINEAR_WITH_MIPMAPS` — the 2D default is plain
+  linear and ignores a mip chain entirely.
+- **Not yet painted**: the other five elements, all fifteen duals, and every enemy. They
+  draw the code art below, and `sprites.gd` returning `null` is what selects it — so a new
+  set is added by dropping files in, with no code change.
+
+**Drawn in code** — every visual not listed above:
 - Enemies (colored blobs with eyes + health bar; flyers add wings + a shadow;
   status rings for slow/poison; a white pop on impact): `enemy.gd` `_draw()`.
-- Towers (element-coloured orb, level pips, upgrade chevron, muzzle flash, and the red
-  sell ×), projectiles, the drag ghost and the palette: their respective `_draw()` methods.
+- Towers with no sprite yet (element-coloured orb, muzzle flash), plus the level pips,
+  upgrade chevron and red sell × that every tower carries painted or not; the shaded
+  no-build overlay (`grid.gd`), projectiles, the drag ghost and the palette: their
+  respective `_draw()` methods.
 - Combat feedback: floating damage numbers (`floating_text.gd`) sized and coloured by
   the element matchup — big and gold at ×1.75, small and grey at ×0.7 — plus the
   gold-gain pop and the death puff (`death_burst.gd`). These are the only place the
@@ -445,4 +500,3 @@ sound effect is synthesized in code:
   progression) plays continuously underneath so between-wave lulls aren't silent. No
   sound files ship with the game. Press **M** to mute everything.
 - `icon.svg` is a simple hand-written SVG placeholder for the app icon.
-```

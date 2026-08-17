@@ -102,20 +102,31 @@ Both workflows run automatically on push to `main`:
 ## The board is measured, not eyeballed
 
 `Game.WORLD_SIZE` is 1536x864 and the camera frames **all** of it at one zoom — there is no
-panning. Run `--dump-board` before and after touching `Game.PATH`, `CELL_WIDTH`,
-`CELL_HEIGHT`, `Balance.WC3_RANGE_SCALE` or `Balance.MAX_TOWER_RANGE`, and `--shot` to
-actually look at the result; the numbers move in ways eyeballing does not predict, and the
-draw code breaks in ways the numbers do not show.
+panning. Run `--dump-board` before and after touching `Game.PATH`, `Game.TOWER_RADIUS`,
+`Game.TOWER_GAP`, `Game.OBSTACLES`, `Balance.WC3_RANGE_SCALE` or `Balance.MAX_TOWER_RANGE`,
+and `--shot` to actually look at the result; the numbers move in ways eyeballing does not
+predict, and the draw code breaks in ways the numbers do not show.
 
-The road is **one inward turn of the original's spiral**, dead-ending at the base in the
-middle of the board rather than leaving the far edge. It was ported from the map's own
-pathing data — `python tools/extract_w3x.py "<map>.w3x" pathing` prints the original arena,
-and docs/element-td-data.md §5 writes it up. What the spiral buys over the serpentine it
-replaced is thick buildable blocks: road on two or three sides of a tower, and short-ranged
-towers forced to the edge of a block to reach anything.
+**The board is a painting now, and the geometry is traced out of it.**
+`assets/art/board_source.png` is the terrain; `Game.PATH` is 114 waypoints that
+`python tools/trace_road.py` read off the cobbles, and `Game.OBSTACLES` is the water the
+same tool's scan found. Re-trace after any change to the art and check the result with
+`map.gd`'s `show_road` overlay — it draws the traced line back over the painting, which is
+the only check that catches enemies walking beside the road rather than on it.
 
-The history matters because four plausible fixes are all wrong, and one of them was shipped
-for a commit before play proved it:
+**There is also no build grid.** A tower stands wherever `Game.can_build_at()` allows: off
+the road by `ROAD_KEEPOUT`, out of `OBSTACLES`, inside `PLAY_TOP`/`PLAY_RIGHT`, and
+`TOWER_GAP` from its neighbours. `--dump-board` and `--fill-board` therefore sweep a
+lattice (`main.gd` `_buildable_lattice()`) instead of walking a cell list.
+
+The road that came before it was **one inward turn of the original's spiral**, ported from
+the map's own pathing data — `python tools/extract_w3x.py "<map>.w3x" pathing` prints the
+original arena, and docs/element-td-data.md §5 writes it up. That geometry was measured and
+the current one is drawn; the trade was made deliberately when the art moved to a painted
+board, so §5's coverage table describes the old board and `--dump-board` describes this one.
+
+The history below is about the *ported* board, and it still matters, because four plausible
+fixes are all wrong and one of them was shipped for a commit before play proved it:
 
 - A faithful 700px Light watches 98% of the road and covers the board with **two** towers.
   The six elements sit at near-equal DPS, so 4x range is simply free power.
@@ -131,16 +142,19 @@ for a commit before play proved it:
   quarter of the board visible at a time, leaks happening off-screen where the only feedback
   is a shake, and 196 cells against an economy that pays for 18 by wave 10.
 
-So the reach is capped (`Balance.MAX_TOWER_RANGE`) and the world stays on one screen. That
-cap is the only number in the port that is not the map's; the definitions still carry the
-real 2000 so nothing is lost.
+So the reach is capped (`Balance.MAX_TOWER_RANGE`, 300 on the painted board) and the world
+stays on one screen. That cap is the only number in the port that is not the map's; the
+definitions still carry the real 2000 so nothing is lost. On this board the cap measures
+51% of the road watched from the best spot and four towers to cover 95% of it, against
+Fire's 18% and twelve — re-measure it whenever the map is repainted, because the two boards
+gave different answers to the same cap.
 
-**The UI covers part of the world, and the grid has to know.** The HUD and the tower palette
+**The UI covers part of the world, and placement has to know.** The HUD and the tower palette
 live in 1280x720 SCREEN space while the board lives in 1536x864 WORLD space, so the palette's
 200px panel hides 240px of board — and it eats clicks, so a tower under it can never be
 upgraded or sold. `Game.PLAY_TOP` / `Game.PLAY_RIGHT` derive those bounds instead of stating
 them; the literal that came before them went stale through a world resize and put two
-columns of cells under the panel. Keep the road out of that strip too.
+columns of buildable ground under the panel. Keep the road out of that strip too.
 
 Two constants are tied to the road length and nothing else reads it, so they move together
 or the pacing breaks silently: `Balance.BASE_SPEED_*` (at the wrong value a wave-1 enemy
@@ -191,23 +205,38 @@ To add content, add a **data row**, not a scene or script:
 | Tower behavior (beam/charge/…) | a `TowerBehavior` subclass + a case in `Tower._make_behavior` — but only if the CONTROL FLOW differs. An aura is data read by the neighbours; an on-kill payout is data read by the projectile. Of fifteen duals exactly one (Magic) needed a subclass |
 | Dual tower | a row in `Game.DUAL_RECIPES` + a `TOWER_DEFS` entry; it becomes buildable when `Run.element_level` reaches `DUAL_ELEMENT_LEVEL` in both its elements |
 | Sound effect | a block in `audio.gd`'s `_build_all()` |
+| Painted tower set | `assets/art/towers/<element>_1..5.png`, cut from one generated sheet by `python tools/cut_sprites.py <sheet.png> <out_dir> <element> <max_height>`. **No code change** — `sprites.gd` picks the files up by name and `tower.gd` prefers them over the code art. Keep the sheet as `_source_<element>.png` beside them |
 
 ## Conventions
 
 - Typed GDScript, **tab** indentation, `##` doc comments on scripts and non-obvious
   functions.
-- **Zero asset files by design.** Every visual is `_draw()` code; every sound is
-  synthesized in `audio.gd`. Don't add `.png` / `.wav` / `.ogg` without asking first — it
-  breaks the project's whole premise.
+- **Sound is still zero-asset**, and stays that way: every SFX and the music loop are
+  synthesized in `audio.gd`. Don't add `.wav` / `.ogg`.
+- **Art is no longer zero-asset**, but it is still *mostly* code. The board and the fire
+  tower are painted PNGs under `godottowerdefense/assets/art/`; everything else — the other
+  five elements, every dual, every enemy, all effects and all UI — is `_draw()`. The two
+  coexist on purpose: `sprites.gd` returns `null` for anything unpainted and the caller
+  falls back to the code art, which is what lets the repaint proceed one element at a time
+  instead of in one unplayable jump. Adding a painted set is dropping files in; it needs no
+  code change. Adding an asset for anything else is still worth asking about first.
 
 ## Known traps
 
 Each of these cost real time; don't rediscover them.
 
 - **Android export requires ETC2/ASTC.** `project.godot` needs
-  `textures/vram_compression/import_etc2_astc=true` under `[rendering]` even though the
-  game has no textures. Without it the export aborts with a configuration error (this
-  failed two CI builds).
+  `textures/vram_compression/import_etc2_astc=true` under `[rendering]`. It was needed even
+  back when the game had no textures at all — without it the export aborts with a
+  configuration error (this failed two CI builds) — and it now actually applies to the
+  board and tower art.
+- **Generating mipmaps changes nothing on its own.** The 2D default texture filter is plain
+  linear and ignores a mip chain entirely, so a node that draws a texture must also set
+  `texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS` (see `tower.gd` and
+  `map.gd` `_ready()`). Downscaling in the pipeline is the other half: `cut_sprites.py`
+  averages the source down to ~2x its drawn size, because sampling one pixel out of a 7x7
+  block is what makes generated art sparkle — which reads as "low resolution" and is the
+  opposite.
 - **GDScript `abs()` returns Variant**, so `var s := 4.0 * abs(x) - 1.0` fails with
   "cannot infer type". Use `absf()`, or type it explicitly (`var s: float = …`). Apply the
   same care to `:=` on ternary expressions.
@@ -248,6 +277,15 @@ python tools/extract_w3x.py "<map>.w3x" towers    # roster grouped by cost tier
 python tools/extract_w3x.py "<map>.w3x" recipes   # the "( X + Y )" combination table
 python tools/extract_w3x.py "<map>.w3x" waves     # the 60-level HP curve + creep classes
 python tools/extract_w3x.py "<map>.w3x" pathing  # the arena: spiral shape, size, coverage
+```
+
+`tools/` holds three more scripts, all built on the same rule — **no third-party
+dependency**, which is why `tools/png_reader.py` is a 100-line stdlib PNG decoder/encoder
+rather than Pillow:
+
+```
+python tools/trace_road.py                        # re-derive Game.PATH + OBSTACLES from the board art
+python tools/cut_sprites.py <sheet> <dir> <name> <max_h>   # split a generated tier sheet into sprites
 ```
 
 The extracted result is written up in
