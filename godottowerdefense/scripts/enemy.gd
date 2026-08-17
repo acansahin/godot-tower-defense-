@@ -236,7 +236,13 @@ func _move(delta: float) -> void:
 	# near-vertical steps, and flipping on their pixel of horizontal drift makes a creep
 	# shimmy down the screen.
 	if absf(to_target.x) > 2.0:
-		_facing = -1.0 if to_target.x > 0.0 else 1.0
+		var face := -1.0 if to_target.x > 0.0 else 1.0
+		if face != _facing:
+			_facing = face
+			# The overlay hangs off _visual_dx(), which mirrors with the facing, and it
+			# otherwise only repaints on a state change — so a creep that turned around
+			# would wear its health bar on the wrong side until something hit it.
+			_repaint_overlay()
 	var step := speed * _slow_factor * delta
 	if to_target.length() <= step:
 		global_position = target
@@ -361,6 +367,32 @@ func _draw_sprite(ci: CanvasItem, art: Texture2D) -> void:
 		var w := 5.0 * _flash
 		ci.draw_texture_rect(art, where, false, Color(w, w, w, 1.0))
 
+## Y of the top of whatever is actually drawn: the blob's crown at -radius, or the painted
+## creep's head, which stands far higher than that.
+##
+## The overlay used to hang the health bar and the crown off `radius`, which is the enemy's
+## SIZE but not its HEIGHT — true of a ball and false of a figure standing on its feet. A
+## painted scout reaches 2.6 radii up, so a bar 20px above -radius was drawn across its
+## chest. Everything that sits "above the head" reads this instead.
+func _head_y() -> float:
+	if Sprites.enemy(kind) == null:
+		return -radius
+	return -(radius * SPRITE_HEIGHT_PER_RADIUS - radius * 0.22)
+
+## X of the middle of the drawn creep, which is not the middle of its feet.
+##
+## A sprite is hung by its ground anchor, and these figures lean: a running skirmisher's
+## body is well ahead of the foot it is pushing off. Centring the health bar on the anchor
+## therefore hangs it off to one side of the creature it belongs to. Mirrored with the
+## facing, since the lean mirrors with it.
+func _visual_dx() -> float:
+	var art := Sprites.enemy(kind)
+	if art == null:
+		return 0.0
+	var size := art.get_size()
+	var scale := (radius * SPRITE_HEIGHT_PER_RADIUS) / size.y
+	return (size.x * 0.5 - Sprites.anchor(art).x) * scale * _facing
+
 ## Top layer: status rings, archetype/regen markers, boss crown, and the health bar, drawn
 ## onto the `_overlay` canvas item `ci`. Sits over the body (rings hug just outside the body
 ## radius; crown + regen "+" sit over it).
@@ -397,7 +429,9 @@ func _draw_overlay(ci: CanvasItem) -> void:
 	# Health bar above the head (scales with body size so bosses read clearly).
 	var bar_w := radius * 2.2
 	var bar_h := 7.0
-	var top := Vector2(-bar_w * 0.5, -radius - 20.0)
+	# 20px above whatever the top of this creep is — the gap the blob has always had, kept
+	# the same for a painted one so the unpainted archetypes do not shift.
+	var top := Vector2(_visual_dx() - bar_w * 0.5, _head_y() - 20.0)
 	ci.draw_rect(Rect2(top, Vector2(bar_w, bar_h)), Color(0.15, 0.05, 0.05))
 	var ratio: float = clamp(health / max_health, 0.0, 1.0)
 	var hp_col := Color(0.30, 0.85, 0.30)
@@ -409,16 +443,17 @@ func _draw_overlay(ci: CanvasItem) -> void:
 ## Gold crown sitting on a boss's head, drawn onto the overlay canvas item `ci`.
 func _draw_crown(ci: CanvasItem) -> void:
 	var gold := Color(1.0, 0.82, 0.2)
-	var y := -radius + 3.0
+	var y := _head_y() + 3.0
 	var wd := radius * 0.9
-	ci.draw_rect(Rect2(-wd, y, wd * 2.0, 7.0), gold)
+	var dx := _visual_dx()
+	ci.draw_rect(Rect2(dx - wd, y, wd * 2.0, 7.0), gold)
 	for i in range(3):
-		var cx := -wd + wd * i
+		var cx := dx - wd + wd * i
 		ci.draw_colored_polygon(PackedVector2Array([
 			Vector2(cx - 9, y), Vector2(cx + 9, y), Vector2(cx, y - 16),
 		]), gold)
 		ci.draw_circle(Vector2(cx, y - 16.0), 3.3, Color(0.9, 0.2, 0.2))  # gem tip
-	ci.draw_rect(Rect2(-wd, y, wd * 2.0, 7.0), Color(0, 0, 0, 0.3), false, 1.5)
+	ci.draw_rect(Rect2(dx - wd, y, wd * 2.0, 7.0), Color(0, 0, 0, 0.3), false, 1.5)
 
 ## Flapping wings and a ground shadow, drawn behind the body for flyers.
 func _draw_wings() -> void:
