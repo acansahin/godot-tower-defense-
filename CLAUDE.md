@@ -213,9 +213,9 @@ To add content, add a **data row**, not a scene or script:
   functions.
 - **Sound is still zero-asset**, and stays that way: every SFX and the music loop are
   synthesized in `audio.gd`. Don't add `.wav` / `.ogg`.
-- **Art is no longer zero-asset**, but it is still *mostly* code. The board and the fire
-  tower are painted PNGs under `godottowerdefense/assets/art/`; everything else — the other
-  five elements, every dual, every enemy, all effects and all UI — is `_draw()`. The two
+- **Art is no longer zero-asset**, but it is still *mostly* code. The board and the fire and
+  water towers are painted PNGs under `godottowerdefense/assets/art/`; everything else — the
+  other four elements, every dual, every enemy, all effects and all UI — is `_draw()`. The two
   coexist on purpose: `sprites.gd` returns `null` for anything unpainted and the caller
   falls back to the code art, which is what lets the repaint proceed one element at a time
   instead of in one unplayable jump. Adding a painted set is dropping files in; it needs no
@@ -237,6 +237,12 @@ Each of these cost real time; don't rediscover them.
   averages the source down to ~2x its drawn size, because sampling one pixel out of a 7x7
   block is what makes generated art sparkle — which reads as "low resolution" and is the
   opposite.
+- **A newly added PNG imports with `mipmaps/generate=false`.** So a fresh tower set arrives
+  looking worse than the one beside it, for a reason nothing in the code shows. After
+  dropping files in and running `--import`, check
+  `grep mipmaps/generate assets/art/towers/*.import` against the sets already there, flip
+  the new ones to `true` and re-import. `.import` files are committed, which is why the
+  existing sets stay correct.
 - **GDScript `abs()` returns Variant**, so `var s := 4.0 * abs(x) - 1.0` fails with
   "cannot infer type". Use `absf()`, or type it explicitly (`var s: float = …`). Apply the
   same care to `:=` on ternary expressions.
