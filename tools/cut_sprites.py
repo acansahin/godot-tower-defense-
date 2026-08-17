@@ -9,10 +9,21 @@ bounding box, and writes them out numbered.
 Usage::
 
     python tools/cut_sprites.py <sheet.png> <out_dir> <prefix> [max_height]
+    python tools/cut_sprites.py <sheet.png> <out_dir> <name,name,...> [max_height]
 
-Each sprite is written as ``<prefix>_<n>.png``, numbered left to right from 1, and the tool
-prints the trimmed size and the ground anchor it measured (the horizontal centre of the
-bottom row of opaque pixels), which is what the game positions the sprite by.
+With a PREFIX, sprites are written ``<prefix>_<n>.png`` numbered left to right from 1, and
+each tier is capped a little taller than the last — which is what a tower upgrade ladder
+wants.
+
+With a COMMA-SEPARATED NAME LIST, each column is written under its own name and every
+sprite gets the same height cap. Rows are detected too: a sheet with one row writes
+``<name>.png``, and a sheet with several writes ``<name>_1.png``, ``<name>_2.png``, … one
+per row. That is how a walk cycle arrives — the same creature painted twice, opposite legs
+forward — and naming the columns here is what stops a five-creature sheet from being
+renamed by hand into the wrong archetypes afterwards.
+
+The tool prints the trimmed size and the ground anchor it measured (the horizontal centre
+of the bottom row of opaque pixels), which is what the game positions the sprite by.
 """
 
 from __future__ import annotations
@@ -27,11 +38,13 @@ ALPHA_FLOOR = 40      # below this a pixel counts as background
 MIN_RUN = 40          # ignore specks narrower than this when splitting columns
 
 
-def columns(img: Png) -> list[tuple[int, int]]:
+def columns(img: Png, y0: int = 0, y1: int = -1) -> list[tuple[int, int]]:
+    if y1 < 0:
+        y1 = img.height
     runs, start = [], None
     for x in range(img.width):
         used = False
-        for y in range(0, img.height, 3):
+        for y in range(y0, y1, 3):
             if img.rgba(x, y)[3] > ALPHA_FLOOR:
                 used = True
                 break
@@ -46,10 +59,32 @@ def columns(img: Png) -> list[tuple[int, int]]:
     return runs
 
 
-def cut(img: Png, x0: int, x1: int):
-    """Trim the slice to its opaque bounds and return (w, h, pixels, anchor_x)."""
-    top, bottom, left, right = img.height, -1, x1, -1
+def rows(img: Png) -> list[tuple[int, int]]:
+    """Bands of non-empty scanlines, so a multi-row sheet splits into one row per pose."""
+    runs, start = [], None
     for y in range(img.height):
+        used = False
+        for x in range(0, img.width, 3):
+            if img.rgba(x, y)[3] > ALPHA_FLOOR:
+                used = True
+                break
+        if used and start is None:
+            start = y
+        elif not used and start is not None:
+            if y - start >= MIN_RUN:
+                runs.append((start, y))
+            start = None
+    if start is not None:
+        runs.append((start, img.height))
+    return runs
+
+
+def cut(img: Png, x0: int, x1: int, y0: int = 0, y1: int = -1):
+    """Trim the slice to its opaque bounds and return (w, h, pixels, anchor_x)."""
+    if y1 < 0:
+        y1 = img.height
+    top, bottom, left, right = y1, -1, x1, -1
+    for y in range(y0, y1):
         for x in range(x0, x1):
             if img.rgba(x, y)[3] > ALPHA_FLOOR:
                 top = min(top, y)
@@ -118,23 +153,47 @@ def main() -> int:
         return 1
     sheet, out_dir, prefix = sys.argv[1], sys.argv[2], sys.argv[3]
     max_height = int(sys.argv[4]) if len(sys.argv) > 4 else 0
+    names = [n for n in prefix.split(",") if n] if "," in prefix else []
     img = Png(sheet)
     os.makedirs(out_dir, exist_ok=True)
-    runs = columns(img)
-    print(f"  {os.path.basename(sheet)}: {img.width}x{img.height}, {len(runs)} sprites")
-    for i, (x0, x1) in enumerate(runs, start=1):
-        piece = cut(img, x0, x1)
-        if piece is None:
-            continue
-        w, h, pixels, anchor = piece
+    bands = rows(img) if names else [(0, img.height)]
+    print(f"  {os.path.basename(sheet)}: {img.width}x{img.height}, {len(bands)} row(s)")
+    # Cut everything first, then scale, because the cap for a column depends on its TALLEST
+    # pose — see below.
+    pieces: dict = {}
+    for r, (y0, y1) in enumerate(bands, start=1):
+        runs = columns(img, y0, y1)
+        if names and len(runs) != len(names):
+            print(f"    ! row {r} has {len(runs)} sprites but {len(names)} names were given")
+        for i, (x0, x1) in enumerate(runs, start=1):
+            piece = cut(img, x0, x1, y0, y1)
+            if piece is not None:
+                pieces[(r, i)] = piece
+    # Every pose of ONE creature must come out at ONE scale. Their trimmed boxes differ —
+    # an extended leg makes a pose taller — so capping each to the same pixel height would
+    # shrink the taller pose back down, and the creature would visibly pulse with every
+    # step. Scaling a column by its own tallest pose keeps the difference, which is the
+    # bob of the walk itself.
+    tallest: dict = {}
+    for (r, i), (w, h, _px, _a) in pieces.items():
+        tallest[i] = max(tallest.get(i, 0), h)
+    for (r, i) in sorted(pieces):
+        w, h, pixels, anchor = pieces[(r, i)]
         before = f"{w}x{h}"
         if max_height:
-            # Tiers are drawn at increasing sizes, so the cap grows with the index rather
-            # than flattening the whole set to one height.
-            w, h, pixels = box_downscale(w, h, pixels, max_height * (0.8 + 0.1 * i))
-        path = os.path.join(out_dir, f"{prefix}_{i}.png")
-        write_rgba(path, w, h, pixels)
-        print(f"    {prefix}_{i}.png  {before} -> {w}x{h}  ground anchor x={anchor}")
+            # A named sheet is a cast of separate creatures, each drawn at its own size by
+            # the game, so one flat cap per column. A prefixed one is an upgrade ladder,
+            # where each tier is drawn bigger than the last, so the cap grows with it.
+            cap = max_height * (h / float(tallest[i])) if names else max_height * (0.8 + 0.1 * i)
+            w, h, pixels = box_downscale(w, h, pixels, cap)
+        if names:
+            stem = names[i - 1] if i <= len(names) else f"extra{i}"
+            if len(bands) > 1:
+                stem = f"{stem}_{r}"
+        else:
+            stem = f"{prefix}_{i}"
+        write_rgba(os.path.join(out_dir, f"{stem}.png"), w, h, pixels)
+        print(f"    {stem}.png  {before} -> {w}x{h}  ground anchor x={anchor}")
     return 0
 
 

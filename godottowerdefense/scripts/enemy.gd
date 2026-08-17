@@ -394,7 +394,11 @@ func _draw_body(ci: CanvasItem) -> void:
 func _draw_sprite(ci: CanvasItem, art: Texture2D) -> void:
 	var size := art.get_size()
 	var anchor := Sprites.anchor(art)
-	var scale := (radius * SPRITE_HEIGHT_PER_RADIUS) / size.y
+	# Scale from the FIRST pose's height, not this one's. The poses of a walk cycle differ
+	# in height — a leg reaching forward lowers the figure, which is the bob of the step —
+	# and fitting each pose to the same drawn height would cancel exactly that, leaving a
+	# creature that pulses in size instead of walking.
+	var scale := (radius * SPRITE_HEIGHT_PER_RADIUS) / Sprites.enemy(kind, 0).get_size().y
 	var where := Rect2(Vector2(-anchor.x * scale, -anchor.y * scale), size * scale)
 	# Feet a little below the walked point, so the creep stands ON the road rather than
 	# behind it — the towers get the same nudge, scaled here because creeps vary in size.

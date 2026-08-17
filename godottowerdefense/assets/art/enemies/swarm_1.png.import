@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bpw7macmfhk12"
-path="res://.godot/imported/swarm.png-2cfded37986a130b5f215c7e6c520417.ctex"
+uid="uid://cdhnwjbw566m1"
+path="res://.godot/imported/swarm_1.png-fc9e0bc93e947936d9d0c564e9e72306.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/art/enemies/swarm.png"
-dest_files=["res://.godot/imported/swarm.png-2cfded37986a130b5f215c7e6c520417.ctex"]
+source_file="res://assets/art/enemies/swarm_1.png"
+dest_files=["res://.godot/imported/swarm_1.png-fc9e0bc93e947936d9d0c564e9e72306.ctex"]
 
 [params]
 
