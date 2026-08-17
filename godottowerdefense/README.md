@@ -53,9 +53,9 @@ tower reference this is growing toward.
    title screen; press **Play** there to start a run.
 
 No plugins or downloads are required. Two kinds of art now sit side by side: the
-**painted** board and five of the six element towers, five tiers each (`assets/art/`), and
-the **code-drawn** everything else — enemies, darkness, projectiles, every effect and all
-of the UI — still built from primitive shapes in `_draw()`. Every sound is still synthesized
+**painted** board and all six element towers, five tiers each (`assets/art/`), and the
+**code-drawn** everything else — enemies, the fifteen dual towers, projectiles, every
+effect and all of the UI — still built from primitive shapes in `_draw()`. Every sound is still synthesized
 at startup; no audio file ships with the game. See §6.
 
 ### Controls
@@ -341,8 +341,8 @@ editing three files and hunting for un-named literals; it is now one file.
   it; a tap on the small red **×** at its bottom-right corner (`is_sell_hit`) sells it —
   no info panel, so the actions live on the tower itself and stay reachable on a phone.
   It draws itself from **`sprites.gd`** if its element and tier have been painted (today:
-  every element but darkness, all five tiers) and from the code art if not, which lets the
-  board be repainted one element at a time. A sprite is hung by its **ground anchor** — the
+  all six elements, five tiers each) and from the code art if not — which is still what the
+  fifteen duals get, and is what let the board be repainted one element at a time. A sprite is hung by its **ground anchor** — the
   median middle of the bottom 4% of its opaque rows, *not* the lowest row alone, which on a
   painted tower is a sliver of one rock — so the base sits on the spot the tower occupies, and
   `SPRITE_HEIGHT` fixes how tall it is drawn per level (78 → 138 board px), so the
@@ -468,20 +468,21 @@ element.
 - **The board**: `board_source.png`, 1672×941, drawn at the towers' 3/4 camera angle so a
   tower reads as standing *in* the scene rather than pasted onto a top-down field.
   `map.gd` stretches it to `Game.WORLD_SIZE` and draws nothing else.
-- **Five of the six element towers** — everything but darkness — five tiers each:
-  `towers/<element>_1..5.png`, cut from one generated sheet (`_source_<element>.png`) by
-  `tools/cut_sprites.py` at `max_height` 220, which puts the tiers at ~2x their drawn size.
+- **All six element towers**, five tiers each: `towers/<element>_1..5.png`, cut from one
+  generated sheet (`_source_<element>.png`) by `tools/cut_sprites.py` at `max_height` 220,
+  which puts the tiers at ~2x their drawn size.
   Because the sprite is scaled by HEIGHT, an element's silhouette is free to say something:
   light reaches furthest in the game and is a slim spire at 104-126px wide, earth hits
-  hardest at close range and is a broad bastion at 142-150, against fire's 161-171. Sets
-  are generated five-at-a-time on
+  hardest at close range and is a broad bastion at 142-150, darkness reaches nearly as far
+  as light but strikes slowest and is a heavy obelisk at 125-136, against fire's 161-171.
+  Sets are generated five-at-a-time on
   purpose — asked for one at a time, the tiers come back looking unrelated. The tool splits
   the sheet on its empty columns, trims each sprite to its alpha bounds, and box-downscales
   it to roughly twice its drawn size: the raw art carries four to seven source pixels per
   screen pixel, which is what made the flames sparkle. Mipmaps are on, and every node that
   draws a texture asks for `TEXTURE_FILTER_LINEAR_WITH_MIPMAPS` — the 2D default is plain
   linear and ignores a mip chain entirely.
-- **Not yet painted**: darkness, all fifteen duals, and every enemy. They
+- **Not yet painted**: all fifteen duals, and every enemy. They
   draw the code art below, and `sprites.gd` returning `null` is what selects it — so a new
   set is added by dropping files in, with no code change.
 
