@@ -9,8 +9,9 @@ extends RefCounted
 ##
 ## The GROUND ANCHOR is the point of this file. A tower stands at a board position, and the
 ## sprite has to be hung so its base sits on that spot — not its centre, which would bury a
-## tall tower's feet and leave a short one floating. It is measured once per texture: the
-## middle of the lowest opaque row.
+## tall tower's feet and leave a short one floating. It is measured once per texture, from
+## the band of rows just above the sprite's lowest pixel — see anchor() for why not from
+## that lowest row itself.
 
 const DIR := "res://assets/art/towers/"
 
@@ -21,8 +22,17 @@ static var _anchors: Dictionary = {}   ## path -> Vector2 in texture pixels
 static func tower(element: String, level: int) -> Texture2D:
 	return _load(DIR + "%s_%d.png" % [element, level])
 
-## Where the sprite meets the ground, in texture pixels: x is the centre of its lowest
-## opaque row, y is the bottom edge.
+## Where the sprite meets the ground, in texture pixels: y is the bottom edge, x is the
+## middle of the BAND of rows just above it.
+##
+## Not the lowest row alone, which is what this measured first. On a painted tower that row
+## is a 4-6px sliver — the tip of one rock in the rubble, the corner of a stair — and where
+## it happens to sit says nothing about where the building stands. Earth's top tier put it
+## 17% left of centre and Water's 12% right, which hangs the tower a visible step off the
+## spot it occupies. Four pixels up, both are within 1% of their true centre.
+##
+## The band is the bottom 4% of the sprite's height, and the per-row midpoints are combined
+## by MEDIAN rather than mean so that a sliver or two cannot drag the answer the way it did.
 static func anchor(texture: Texture2D) -> Vector2:
 	var path := texture.resource_path
 	if _anchors.has(path):
@@ -33,6 +43,21 @@ static func anchor(texture: Texture2D) -> Vector2:
 	# but a re-exported one can carry a transparent row or two.
 	while y > 0 and not _row_has_ink(image, y):
 		y -= 1
+	var band := maxi(3, int(round(image.get_height() * 0.04)))
+	var mids: Array[float] = []
+	for row in range(maxi(0, y - band + 1), y + 1):
+		var mid := _row_middle(image, row)
+		if mid >= 0.0:
+			mids.append(mid)
+	mids.sort()
+	var centre: float = mids[mids.size() / 2] if not mids.is_empty() \
+			else image.get_width() * 0.5
+	var found := Vector2(centre, y + 1)
+	_anchors[path] = found
+	return found
+
+## Horizontal middle of one row's opaque span, or -1 if the row is empty.
+static func _row_middle(image: Image, y: int) -> float:
 	var first := -1
 	var last := -1
 	for x in image.get_width():
@@ -40,10 +65,7 @@ static func anchor(texture: Texture2D) -> Vector2:
 			if first < 0:
 				first = x
 			last = x
-	var centre := float(first + last) * 0.5 if first >= 0 else image.get_width() * 0.5
-	var found := Vector2(centre, y + 1)
-	_anchors[path] = found
-	return found
+	return float(first + last) * 0.5 if first >= 0 else -1.0
 
 static func _row_has_ink(image: Image, y: int) -> bool:
 	for x in range(0, image.get_width(), 3):

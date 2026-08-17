@@ -343,7 +343,8 @@ editing three files and hunting for un-named literals; it is now one file.
   It draws itself from **`sprites.gd`** if its element and tier have been painted (today:
   every element but darkness, all five tiers) and from the code art if not, which lets the
   board be repainted one element at a time. A sprite is hung by its **ground anchor** — the
-  middle of its lowest opaque row — so the base sits on the spot the tower occupies, and
+  median middle of the bottom 4% of its opaque rows, *not* the lowest row alone, which on a
+  painted tower is a sliver of one rock — so the base sits on the spot the tower occupies, and
   `SPRITE_HEIGHT` fixes how tall it is drawn per level (78 → 138 board px), so the
   proportionally taller upper tiers grow upward instead of ballooning.
 - **`EnemyIndex` (autoload)** is a uniform spatial hash of every live enemy, rebuilt
