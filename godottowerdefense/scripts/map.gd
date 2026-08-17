@@ -11,6 +11,10 @@ extends Node2D
 ## mistake that is obvious in a screenshot and invisible in a number.
 
 const BOARD := preload("res://assets/art/board_source.png")
+const WATER_SHADER := preload("res://shaders/water_flow.gdshader")
+## Where the water is, found in the painting by tools/water_mask.py. Re-run that after any
+## repaint; the shader ripples exactly what this file calls white.
+const WATER_MASK := preload("res://assets/art/board_water.png")
 
 ## Draws the traced Game.PATH over the painting. Turn on after re-tracing; the question it
 ## answers is whether the line sits down the middle of the cobbles all the way to the keep.
@@ -20,6 +24,14 @@ func _ready() -> void:
 	# The board is 1672px of painting shown across 1280px of screen: a mild downscale, but
 	# still one that samples between pixels, so it gets the same filtering as the towers.
 	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	# The board is the only thing on screen that never redraws, which is what makes a shader
+	# the right tool for moving its water: the animation happens per pixel on the GPU and
+	# costs this node nothing per frame. Built here rather than saved into the scene so the
+	# mask and the board it was derived from stay next to each other in one file.
+	var mat := ShaderMaterial.new()
+	mat.shader = WATER_SHADER
+	mat.set_shader_parameter("water_mask", WATER_MASK)
+	material = mat
 	queue_redraw()
 
 func _draw() -> void:
