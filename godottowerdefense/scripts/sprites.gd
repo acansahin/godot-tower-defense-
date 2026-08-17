@@ -14,6 +14,7 @@ extends RefCounted
 ## that lowest row itself.
 
 const DIR := "res://assets/art/towers/"
+const ENEMY_DIR := "res://assets/art/enemies/"
 
 static var _textures: Dictionary = {}  ## path -> Texture2D or null
 static var _anchors: Dictionary = {}   ## path -> Vector2 in texture pixels
@@ -21,6 +22,12 @@ static var _anchors: Dictionary = {}   ## path -> Vector2 in texture pixels
 ## The sprite for an element at a level, or null if that one has not been painted yet.
 static func tower(element: String, level: int) -> Texture2D:
 	return _load(DIR + "%s_%d.png" % [element, level])
+
+## The sprite for a creep archetype (the keys of Game.WAVE_TYPES: "normal", "fast", "tank",
+## …), or null if that one has not been painted yet. Same deal as tower(): the caller falls
+## back to the code-drawn blob, so the roster can be repainted one archetype at a time.
+static func enemy(kind: String) -> Texture2D:
+	return _load(ENEMY_DIR + kind + ".png")
 
 ## Where the sprite meets the ground, in texture pixels: y is the bottom edge, x is the
 ## middle of the BAND of rows just above it.

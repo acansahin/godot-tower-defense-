@@ -18,6 +18,15 @@ class_name Enemy
 ## (shadow → body → overlay) in spawn order — visually identical to a single-node draw.
 
 const EnemyLayer := preload("res://scripts/enemy_layer.gd")
+const Sprites := preload("res://scripts/sprites.gd")
+
+## How tall a painted creep is drawn, as a multiple of its `radius`.
+##
+## Radius is the game's own size for an enemy — it drives the archetype scaling (0.8x to
+## 1.35x), the boss size, the health-bar width and every status ring — so the art is hung off
+## it rather than off a per-archetype table. 2.6 puts a Normal at 62px tall against the 48px
+## blob it replaces: a standing figure reads taller than the ball did at the same footprint.
+const SPRITE_HEIGHT_PER_RADIUS := 2.6
 
 signal removed  ## Emitted whenever the enemy leaves play (death OR escape).
 ## Emitted by a splitter when it dies so WaveManager can spawn its children.
@@ -38,12 +47,20 @@ var cc_immune: bool = false  ## Ignores slow / stun. Poison still applies (it's 
 var regen_dps: float = 0.0   ## Heals this much per second.
 var split_into: int = 0      ## Children spawned on death (0 = none).
 var armor_element: String = ""  ## Element matchup vs tower damage element ("" = neutral).
+## Which WAVE_TYPES archetype this is ("normal", "fast", …). Set by WaveManager; the only
+## thing that reads it is the painted sprite lookup, which is why an unset one is harmless.
+var kind: String = ""
 
 var _path: Array = []
 var _target_index: int = 1
 var _dead: bool = false
 var _wing_phase: float = 0.0  ## Drives the wing-flap animation.
 var _anim_phase: float = 0.0  ## Drives the idle breathing wobble.
+## +1 while walking the way the art is drawn (screen-left), -1 while walking the other way.
+## Painted creeps are drawn facing ONE direction and mirrored for the other, because the road
+## is a spiral and a creep meets every heading on it. Folded into `_body.scale` alongside the
+## breathing wobble, so turning around costs a transform rather than a redraw.
+var _facing: float = 1.0
 var _body: Node2D             ## Mid layer: body + eyes; scaled for the breathing wobble.
 var _overlay: Node2D          ## Top layer: rings, markers, crown, health bar.
 
@@ -165,7 +182,7 @@ func _process(delta: float) -> void:
 	_anim_phase += delta * 3.0
 	# Idle breathing wobble — a transform on the body layer, so it costs no redraw.
 	var br := sin(_anim_phase)
-	_body.scale = Vector2(1.0 + 0.05 * br, 1.0 - 0.05 * br)
+	_body.scale = Vector2(_facing * (1.0 + 0.05 * br), 1.0 - 0.05 * br)
 	if _flash > 0.0:
 		_flash = maxf(0.0, _flash - delta * 7.0)
 		_body.queue_redraw()  # the impact pop fades on the body layer
@@ -215,6 +232,11 @@ func _move(delta: float) -> void:
 		return
 	var target: Vector2 = _path[_target_index]
 	var to_target := target - global_position
+	# Turn to face the way we are walking, with a dead zone: the traced road has plenty of
+	# near-vertical steps, and flipping on their pixel of horizontal drift makes a creep
+	# shimmy down the screen.
+	if absf(to_target.x) > 2.0:
+		_facing = -1.0 if to_target.x > 0.0 else 1.0
 	var step := speed * _slow_factor * delta
 	if to_target.length() <= step:
 		global_position = target
@@ -270,11 +292,34 @@ func _draw() -> void:
 		draw_set_transform(Vector2(0, radius * 0.85), 0.0, Vector2(1.0, 0.4))
 		draw_circle(Vector2.ZERO, radius * 0.9, Color(0, 0, 0, 0.18))
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	_draw_element_ring()
+
+## The armour element, as a ring on the ground the creep stands in.
+##
+## The blob wore its element as body colour, which a painted creep cannot do without losing
+## the painting. The matchup still has to be answerable at a glance — it decides which tower
+## does 1.75x and which does 0.7x — so it moves to the one place around a creep that carries
+## no art: the ground. Drawn under everything, and only for elemental waves; neutral ones
+## stay clean.
+func _draw_element_ring() -> void:
+	if armor_element == "" or Sprites.enemy(kind) == null:
+		return
+	var ec: Color = Game.ELEMENT_COLORS.get(armor_element, Color.WHITE)
+	draw_set_transform(Vector2(0, radius * 0.85), 0.0, Vector2(1.0, 0.4))
+	draw_circle(Vector2.ZERO, radius * 1.15, Color(ec.r, ec.g, ec.b, 0.30))
+	draw_arc(Vector2.ZERO, radius * 1.15, 0.0, TAU, 20, Color(ec.r, ec.g, ec.b, 0.85), 3.0, true)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 ## Mid layer: the body itself, drawn onto the `_body` canvas item `ci`. Drawn at rest — the
 ## breathing wobble is `_body.scale`, set in _process — so this only repaints on an impact
 ## flash or a colour change (make_flying).
 func _draw_body(ci: CanvasItem) -> void:
+	# Painted creep if this archetype has been drawn; the blob below is the fallback, and it
+	# is what the board still looks like everywhere the art has not landed.
+	var art := Sprites.enemy(kind)
+	if art != null:
+		_draw_sprite(ci, art)
+		return
 	# Body with a soft top-left highlight for volume.
 	ci.draw_circle(Vector2.ZERO, radius, color)
 	var hl := color.lightened(0.25)
@@ -291,6 +336,30 @@ func _draw_body(ci: CanvasItem) -> void:
 	ci.draw_circle(eye, radius * 0.16, Color.WHITE)
 	ci.draw_circle(Vector2(-eye.x, eye.y), radius * 0.075, Color.BLACK)
 	ci.draw_circle(eye, radius * 0.075, Color.BLACK)
+
+## Hangs the painted creep off its ground anchor, so its feet stand on the point that walks
+## the road — the same rule the towers use, and for the same reason: centring the sprite
+## would sink a tall creature's legs and float a short one.
+##
+## The archetype's colour is deliberately NOT applied to the art. The blob was tinted per
+## archetype and per armour element because a coloured circle is all the identity it had; a
+## painted creep carries its own, and multiplying a tint over it turns a colour scheme into
+## mud. The element instead reads from the ring drawn on the ground beneath it (see _draw).
+func _draw_sprite(ci: CanvasItem, art: Texture2D) -> void:
+	var size := art.get_size()
+	var anchor := Sprites.anchor(art)
+	var scale := (radius * SPRITE_HEIGHT_PER_RADIUS) / size.y
+	var where := Rect2(Vector2(-anchor.x * scale, -anchor.y * scale), size * scale)
+	# Feet a little below the walked point, so the creep stands ON the road rather than
+	# behind it — the towers get the same nudge, scaled here because creeps vary in size.
+	where.position.y += radius * 0.22
+	ci.draw_texture_rect(art, where, false)
+	# Impact pop. Over-bright modulate washes every lit pixel of the sprite towards white,
+	# which is the painted equivalent of the white circle the blob flashes: it lights up the
+	# creep's own shape instead of stamping a ball over it.
+	if _flash > 0.0:
+		var w := 5.0 * _flash
+		ci.draw_texture_rect(art, where, false, Color(w, w, w, 1.0))
 
 ## Top layer: status rings, archetype/regen markers, boss crown, and the health bar, drawn
 ## onto the `_overlay` canvas item `ci`. Sits over the body (rings hug just outside the body

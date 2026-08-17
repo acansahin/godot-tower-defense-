@@ -486,7 +486,11 @@ element.
   screen pixel, which is what made the flames sparkle. Mipmaps are on, and every node that
   draws a texture asks for `TEXTURE_FILTER_LINEAR_WITH_MIPMAPS` — the 2D default is plain
   linear and ignores a mip chain entirely.
-- **Not yet painted**: all fifteen duals, and every enemy. They
+- **Not yet painted**: all fifteen duals, and every enemy — though the enemy path is built
+  and waiting: drop `assets/art/enemies/<archetype>.png` (named for its `Game.WAVE_TYPES`
+  key) and `enemy.gd` draws it instead of the blob, hung by the same ground anchor, mirrored
+  to face the way it walks, with the armour element moved to a ring on the ground beneath it
+  so a painted creature never has to be tinted. They
   draw the code art below, and `sprites.gd` returning `null` is what selects it — so a new
   set is added by dropping files in, with no code change.
 
