@@ -42,14 +42,21 @@ static func enemy(kind: String, frame: int = 0) -> Texture2D:
 ##
 ## The cycle length is READ OFF THE FOLDER rather than declared anywhere, which is what keeps
 ## re-animating a creep a pure file copy: drop six frames next to a creature that had two and
-## it steps six, with nothing in the code to update. Nothing caps N but MAX_POSES, which only
-## exists to bound the probe.
+## it steps six, with nothing in the code to update. Nothing caps N but MAX_POSES, and that is
+## only there to bound the probe — it is not a budget.
+##
+## What sets the USEFUL number is the rate, and it is worth writing down because six looked
+## like plenty and was not. The cycle is one stride, and the stride rate comes from the creep's
+## own speed: a wave-2 creep walks 1.04 strides a second, so six frames play at 6.2 fps and the
+## eye counts them one by one. Twelve is the working figure (12.5 fps there, 27 by wave 25).
+## Past about sixteen a creature drawn 62 px tall has no room left to show the difference, and
+## the generator loses the character's likeness long before that anyway.
 ##
 ## The animation also asks so it can LEAN ON THE ART WHERE THERE IS ART AND FAKE IT WHERE
 ## THERE IS NOT — a one-pose flyer gets a wing sweep faked out of a scale pulse, and the more
 ## real frames arrive the further that fake steps back instead of double-counting against
 ## them. Free after the first call: `_load` caches its misses as well as its hits.
-const MAX_POSES := 12
+const MAX_POSES := 24
 
 static func pose_count(kind: String) -> int:
 	if _cycle.has(kind):

@@ -8,8 +8,14 @@ one painted with six walk the same road, and re-animating one is a file copy.
 This file is the recipe. The pipeline around it is in [CLAUDE.md](../../CLAUDE.md) ("Painted
 creep"); this file is only the prompt and the traps.
 
-**The target is six frames per archetype.** The nine are: `tutorial`, `normal`, `fast`,
+**The target is twelve frames per archetype.** The nine are: `tutorial`, `normal`, `fast`,
 `swarm`, `tank`, `air`, `immune`, `regen`, `split`.
+
+Twelve because the cycle is ONE STRIDE and the game plays it at the creep's own walking rate,
+which is about one stride a second early in a run. Six frames is therefore **6.2 fps**, and
+6 fps is slow enough that the eye counts the frames — the first six-frame goblin was rejected
+on exactly that. Twelve gives 12.5 fps at wave 2 and 27 by wave 25. Past about sixteen there
+is nothing left to see: the creep is drawn 62 px tall.
 
 ## Attach the board, and attach the creature. This is the whole method.
 
@@ -31,7 +37,7 @@ Two attachments, and they do different jobs.
   | `tutorial` `normal` `fast` `swarm` `tank` | `assets/art/enemies/<archetype>_1.png` |
   | `air` `immune` `regen` `split` | `assets/art/enemies/<archetype>.png` — no `_1`, these four are single-pose |
 
-## One sheet per creature. Six rows. One column.
+## One sheet per creature. One column, one frame per row.
 
 Do not put several archetypes on one sheet. The tower sets could be generated five-to-a-sheet
 because a tier ladder is *supposed* to change between columns; a walk cycle is the opposite —
@@ -79,17 +85,32 @@ IT MUST BE THE SAME CREATURE IN ALL SIX FRAMES. Same silhouette, same armour pie
 same places, same colours, same weapon in the same hand, same size. Only the POSE changes.
 Treat the second image as the character sheet, not as inspiration.
 
-THE CYCLE (frames top to bottom):
-1. Contact — LEFT foot striking the ground ahead, weight coming down onto it, body at its
-   LOWEST.
-2. Down — weight fully over the left leg, knee bent, right leg swinging through.
-3. Passing — pushing off the left foot, body at its HIGHEST, right leg reaching forward.
-4. Contact — the mirror of 1: RIGHT foot striking ahead, body at its lowest.
-5. Down — the mirror of 2.
-6. Passing — the mirror of 3.
+THE CYCLE — TWELVE frames, top to bottom, ONE COMPLETE STRIDE:
+1.  Contact — LEFT foot striking the ground ahead, arms at their full opposite swing.
+2.  Down — weight settling onto the left leg, knee bending, body dropping.
+3.  Low — knee at its deepest bend, body at its LOWEST point of the whole cycle.
+4.  Passing — left leg straightening under the body, right knee driving forward past it.
+5.  Up — pushing off the left toe, body rising to its HIGHEST point.
+6.  Reach — airborne, both feet off the ground, right leg extended forward to land.
+7.  Contact — the mirror of 1: RIGHT foot striking ahead.
+8.  Down — the mirror of 2.
+9.  Low — the mirror of 3.
+10. Passing — the mirror of 4.
+11. Up — the mirror of 5.
+12. Reach — the mirror of 6, left leg extended forward.
 
-The arms swing opposite the legs. Frames 1 and 4 are the two footfalls and must read as
-impacts; 3 and 6 are the airborne part of the stride.
+Frames 7-12 are the same POSES with the legs and arms swapped. They are NOT mirrored
+images — the creature still faces screen-left in all twelve.
+
+The arms swing opposite the legs throughout.
+
+SPACE THE FRAMES EVENLY, AND CLOSE THE LOOP. Frame 12 must lead straight back into frame 1
+as smoothly as 1 leads into 2 — the game plays this on repeat forever, with no pause and no
+reset. Each step from one frame to the next must move the body about the SAME amount. The
+last sheet failed on precisely this: measured frame to frame, the poses moved 10%, 17%, 20%,
+17%, 20% of the silhouette — and then 25% from the last frame back to the first. That
+oversized final step is a visible stumble once every stride, and no number of frames fixes
+it.
 
 DRAW THE HEIGHT CHANGE. The body really is lower in frames 1 and 4 than in 3 and 6 — that
 rise and fall is the bounce of the run and the game preserves it rather than flattening it.
@@ -105,7 +126,8 @@ CRITICAL REQUIREMENTS (the reference images cannot show these — follow them ex
 - At least 60 px of completely empty rows between frames, and the frames must not touch.
 - Do not re-centre the frames: a pose that leans forward should sit forward on its row.
 - No text, no numbers, no labels, no UI, no frame borders, no grid lines.
-- Canvas tall and narrow — roughly 900 x 3600 pixels.
+- ONE COLUMN: all twelve frames in a single vertical stack, not a grid.
+- Canvas tall and narrow — roughly 700 x 4200 pixels.
 ```
 
 ### The Air frame list is different
@@ -114,20 +136,27 @@ CRITICAL REQUIREMENTS (the reference images cannot show these — follow them ex
 the CYCLE block with:
 
 ```text
-THE CYCLE (frames top to bottom) — ONE COMPLETE WINGBEAT, down and back up:
-1. Wings at their HIGHEST, fully raised above the body, about to sweep down.
-2. Wings sweeping down, roughly halfway, still above the body.
-3. Wings level with the body, at full span, mid-stroke.
-4. Wings at their LOWEST, fully swept down beneath the body — the power stroke.
-5. Wings lifting again, roughly halfway back up.
-6. Wings nearly back to the top, feathers/membrane relaxed on the recovery.
+THE CYCLE — TWELVE frames, top to bottom, ONE COMPLETE WINGBEAT down and back up:
+1.  Wings at their HIGHEST, fully raised above the body, about to sweep down.
+2.  Wings starting down, still well above the body.
+3.  Wings roughly halfway down, above the shoulders.
+4.  Wings level with the body, at full span, mid-stroke.
+5.  Wings below the body, driving down, membrane taut.
+6.  Wings at their LOWEST, fully swept down beneath the body — the power stroke.
+7.  Wings starting back up, membrane slackening.
+8.  Wings roughly halfway back up, below the shoulders.
+9.  Wings level with the body again, on the recovery.
+10. Wings above the shoulders, folding slightly on the way up.
+11. Wings nearly at the top.
+12. Wings almost fully raised, one step short of frame 1 — so 12 leads straight back into 1.
 
 The body stays nearly still — do NOT move the creature up and down between frames; the game
 does that. Only the wings travel. The head, torso and tail keep the same posture throughout.
 ```
 
-Everything else in the template stands, except the "DRAW THE HEIGHT CHANGE" paragraph, which
-is the exact opposite of what a flyer needs — drop it.
+Everything else in the template stands, including SPACE THE FRAMES EVENLY, AND CLOSE THE
+LOOP — a wingbeat that hitches once a beat is as obvious as a stride that does. Drop only the
+"DRAW THE HEIGHT CHANGE" paragraph, which is the exact opposite of what a flyer needs.
 
 ## Why each constraint is there
 
@@ -159,9 +188,20 @@ Each of these is a defect the game measured or a stage of the pipeline, not a st
 - **No shadow.** The game draws a flat ellipse for a walker and a breathing circle for a
   flyer, both keyed to its own state. A painted-in shadow rides along and reads as dirt.
 
+## If the generator refuses a 1:6 canvas
+
+Twelve frames in one column is a very tall image and some generators cap the aspect ratio.
+Do **not** solve it by laying the frames out in a grid — the cutter numbers a cycle by rows,
+and a grid would need the two halves aligned against each other, which is exactly the
+alignment the shared window exists to guarantee. Generate two sheets of six instead, attaching
+the first to the request for the second and saying that these are frames 7-12 of that cycle —
+then say so, because the cutter needs a small change to take one cycle from two files and put
+both halves in the same window.
+
 ## After the sheet arrives
 
-1. Cut it: `python tools/cut_sprites.py <sheet> godottowerdefense/assets/art/enemies <name> 220`
+1. Cut it, and CHECK THE ROW COUNT it prints — it must say 12:
+   `python tools/cut_sprites.py <sheet> godottowerdefense/assets/art/enemies <name> 150 4`
 2. Keep the sheet as `_source_<name>_run.png` beside the frames.
 3. Delete the superseded frames for that archetype (a six-frame set replaces a two-frame one;
    leaving `<name>.png` behind is harmless but leaving a stale `<name>_2.png` is not).
