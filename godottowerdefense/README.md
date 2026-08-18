@@ -486,17 +486,26 @@ element.
   screen pixel, which is what made the flames sparkle. Mipmaps are on, and every node that
   draws a texture asks for `TEXTURE_FILTER_LINEAR_WITH_MIPMAPS` — the 2D default is plain
   linear and ignores a mip chain entirely.
-- **Not yet painted**: all fifteen duals, and every enemy — though the enemy path is built
-  and waiting: drop `assets/art/enemies/<archetype>.png` (named for its `Game.WAVE_TYPES`
-  key) and `enemy.gd` draws it instead of the blob, hung by the same ground anchor, mirrored
-  to face the way it walks, with the armour element moved to a ring on the ground beneath it
-  so a painted creature never has to be tinted. They
-  draw the code art below, and `sprites.gd` returning `null` is what selects it — so a new
-  set is added by dropping files in, with no code change.
+- **All nine creep archetypes**, `assets/art/enemies/<archetype>.png`, named for its
+  `Game.WAVE_TYPES` key. `enemy.gd` draws one instead of the blob, hung by the same ground
+  anchor as a tower, mirrored to face the way it walks, with the armour element moved to a
+  ring on the ground beneath it so a painted creature never has to be tinted. The five
+  ground archetypes carry two poses (`normal_1.png` / `normal_2.png`) and step between them
+  on a walk phase driven by the creep's own speed, so a slowed one plods and a swarmling
+  scurries; the four special ones (`air`, `immune`, `regen`, `split`) are a single pose.
+  Anything that marks the creature rather than the ground — health bar, boss crown, the
+  slow / poison / stun / immune rings, the regen "+" — is placed off the DRAWN figure
+  (`_head_y()`, `_ring_center()`), not off `radius`, which on a figure standing on its feet
+  is a hoop round its ankles.
+- **Not yet painted**: all fifteen duals. They draw the code art below, and `sprites.gd`
+  returning `null` is what selects it — so a new set is added by dropping files in, with no
+  code change.
 
 **Drawn in code** — every visual not listed above:
-- Enemies (colored blobs with eyes + health bar; flyers add wings + a shadow;
-  status rings for slow/poison; a white pop on impact): `enemy.gd` `_draw()`.
+- Everything an enemy wears over its sprite, and the whole enemy where none is painted
+  (coloured blob with eyes; health bar; status rings for slow/poison/stun/immune; a white
+  pop on impact): `enemy.gd` `_draw()`. Flyers add a shadow and a flapping pair of wings —
+  except the Air archetype, which is painted mid-flight and already has its own.
 - Towers with no sprite yet (element-coloured orb, muzzle flash), plus the level pips,
   upgrade chevron and red sell × that every tower carries painted or not; the shaded
   no-build overlay (`grid.gd`), projectiles, the drag ghost and the palette: their

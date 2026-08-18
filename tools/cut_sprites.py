@@ -38,16 +38,24 @@ ALPHA_FLOOR = 40      # below this a pixel counts as background
 MIN_RUN = 40          # ignore specks narrower than this when splitting columns
 
 
-def columns(img: Png, y0: int = 0, y1: int = -1) -> list[tuple[int, int]]:
+def columns(img: Png, y0: int = 0, y1: int = -1, gap_tol: int = 0) -> list[tuple[int, int]]:
+    """Column runs holding a sprite each.
+
+    `gap_tol` is how many opaque samples a column may still contain and count as background.
+    Zero — a column must be completely empty — is right for a sheet whose subjects keep to
+    themselves, and wrong for one where a wingspan reaches over the gap into its neighbour:
+    there the split points carry a dozen pixels of wing tip and every subject after the
+    first merges into one enormous sprite.
+    """
     if y1 < 0:
         y1 = img.height
     runs, start = [], None
     for x in range(img.width):
-        used = False
+        ink = 0
         for y in range(y0, y1, 3):
             if img.rgba(x, y)[3] > ALPHA_FLOOR:
-                used = True
-                break
+                ink += 1
+        used = ink > gap_tol
         if used and start is None:
             start = x
         elif not used and start is not None:
@@ -153,6 +161,7 @@ def main() -> int:
         return 1
     sheet, out_dir, prefix = sys.argv[1], sys.argv[2], sys.argv[3]
     max_height = int(sys.argv[4]) if len(sys.argv) > 4 else 0
+    gap_tol = int(sys.argv[5]) if len(sys.argv) > 5 else 0
     names = [n for n in prefix.split(",") if n] if "," in prefix else []
     img = Png(sheet)
     os.makedirs(out_dir, exist_ok=True)
@@ -162,7 +171,7 @@ def main() -> int:
     # pose — see below.
     pieces: dict = {}
     for r, (y0, y1) in enumerate(bands, start=1):
-        runs = columns(img, y0, y1)
+        runs = columns(img, y0, y1, gap_tol)
         if names and len(runs) != len(names):
             print(f"    ! row {r} has {len(runs)} sprites but {len(names)} names were given")
         for i, (x0, x1) in enumerate(runs, start=1):

@@ -52,7 +52,12 @@ lifted), `--fill-board` (a tower on every cell at max level, 8x speed,
 auto-picks upgrades, prints each wave and the run-over line), `--show-choice` (pops the
 choice screen so its `_draw` can be exercised), `--shot` (saves one drawn frame to
 `user://shot.png` and prints the path — the only harness that shows you the board rather
-than describing it, so **drop `--headless` for this one**), `--go-back` (rewinds the
+than describing it, so **drop `--headless` for this one**; `--shot:20` waits 20s first and
+lands in `shot_20.png`, and several may be passed at once to watch a run across waves),
+`--auto-pick` (answers the choice screen — **any unattended run that must reach wave 3
+needs this**: the choice screen pauses the tree, which stops the SceneTree timers every
+delayed `--shot` waits on, so without it the run silently stops and the later shots never
+fire), `--go-back` (rewinds the
 last-seen stamp 4h so the next launch collects an offline reward), `--wipe-save` (clears
 `user://save.json`).
 
@@ -205,7 +210,7 @@ To add content, add a **data row**, not a scene or script:
 | Tower behavior (beam/charge/…) | a `TowerBehavior` subclass + a case in `Tower._make_behavior` — but only if the CONTROL FLOW differs. An aura is data read by the neighbours; an on-kill payout is data read by the projectile. Of fifteen duals exactly one (Magic) needed a subclass |
 | Dual tower | a row in `Game.DUAL_RECIPES` + a `TOWER_DEFS` entry; it becomes buildable when `Run.element_level` reaches `DUAL_ELEMENT_LEVEL` in both its elements |
 | Sound effect | a block in `audio.gd`'s `_build_all()` |
-| Painted creep | `assets/art/enemies/<archetype>.png`, named for its `Game.WAVE_TYPES` key (`normal.png`, `tank.png`, …). **No code change** — `sprites.gd` `enemy()` finds it and `enemy.gd` prefers it over the blob. Art faces SCREEN-LEFT and is mirrored by `_facing`; a boss is an archetype wearing a crown, not its own file |
+| Painted creep | `assets/art/enemies/<archetype>.png`, named for its `Game.WAVE_TYPES` key (`normal.png`, `tank.png`, …). **No code change** — `sprites.gd` `enemy()` finds it and `enemy.gd` prefers it over the blob. Art faces SCREEN-LEFT and is mirrored by `_facing`; a boss is an archetype wearing a crown, not its own file. Two poses (`normal_1.png`/`normal_2.png`) give it a walk cycle; one file alone is a still. An archetype whose art is painted mid-flight sets `"air"` in its `WAVE_TYPES` row and gets no code wings on top — the 15% of GROUND creeps that fly still do |
 | Painted tower set | `assets/art/towers/<element>_1..5.png`, cut from one generated sheet by `python tools/cut_sprites.py <sheet.png> <out_dir> <element> 220`. **No code change** — `sprites.gd` picks the files up by name and `tower.gd` prefers them over the code art. Keep the sheet as `_source_<element>.png` beside them, and generate it from the template in [docs/tower-art-prompt.md](godottowerdefense/docs/tower-art-prompt.md) — **attach `board_source.png` to the prompt**; every set generated from words alone had to be redone |
 
 ## Conventions

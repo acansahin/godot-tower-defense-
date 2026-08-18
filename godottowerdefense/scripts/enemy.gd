@@ -50,6 +50,10 @@ var armor_element: String = ""  ## Element matchup vs tower damage element ("" =
 ## Which WAVE_TYPES archetype this is ("normal", "fast", …). Set by WaveManager; the only
 ## thing that reads it is the painted sprite lookup, which is why an unset one is harmless.
 var kind: String = ""
+## True when this archetype is airborne BY NATURE (the Air wave), so its sprite is painted
+## with wings and must not be given the code-drawn pair as well. A ground creep that got
+## wings from the per-wave flyer roll leaves this false and keeps them.
+var has_own_wings: bool = false
 
 var _path: Array = []
 var _target_index: int = 1
@@ -332,7 +336,14 @@ func _escape() -> void:
 ## for a ground enemy (drawn once); repainted each frame only while flying, for the flap.
 func _draw() -> void:
 	if is_flying:
-		_draw_wings()
+		# The shadow is what says "this one is above the road", so every flyer keeps it.
+		draw_circle(Vector2(0, radius + 15.0), radius * 0.7, Color(0, 0, 0, 0.18))
+		if not (has_own_wings and Sprites.enemy(kind) != null):
+			# Across the middle of a painted creep; around the origin for a blob, which is
+			# where its body already is.
+			draw_set_transform(_ring_center(), 0.0, Vector2.ONE)
+			_draw_wings()
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	else:
 		# Flat ground shadow.
 		draw_set_transform(Vector2(0, radius * 0.85), 0.0, Vector2(1.0, 0.4))
@@ -437,35 +448,58 @@ func _visual_dx() -> float:
 	var scale := (radius * SPRITE_HEIGHT_PER_RADIUS) / size.y
 	return (size.x * 0.5 - Sprites.anchor(art).x) * scale * _facing
 
+## Middle of the drawn creature, which the status rings are struck around.
+##
+## Same mistake the health bar made, one layer down: the rings were centred on the node's
+## origin at `radius`, which is the blob's own outline and, on a painted creep, a hoop round
+## its ankles — the cc-immune ring came out threaded through the legs with half of it sunk
+## into the road. A ring says "this CREATURE is slowed / immune / burning", so it follows the
+## figure that is drawn, not the point that walks.
+func _ring_center() -> Vector2:
+	if Sprites.enemy(kind) == null:
+		return Vector2.ZERO
+	return Vector2(_visual_dx(), _head_y() * 0.5)
+
+## Radius those rings are struck at. A painted figure is far taller than it is wide, so this
+## is a fraction of its drawn height rather than half of it: half would hoop it at arm's
+## length and read as a spell effect on the ground rather than a mark on the creature.
+func _ring_radius() -> float:
+	if Sprites.enemy(kind) == null:
+		return radius
+	return radius * SPRITE_HEIGHT_PER_RADIUS * 0.32
+
 ## Top layer: status rings, archetype/regen markers, boss crown, and the health bar, drawn
 ## onto the `_overlay` canvas item `ci`. Sits over the body (rings hug just outside the body
 ## radius; crown + regen "+" sit over it).
 func _draw_overlay(ci: CanvasItem) -> void:
-	# Status rings: blue = slowed, green = poisoned.
+	# Status rings: blue = slowed, green = poisoned. Concentric, so several at once stay
+	# countable; see _ring_center for why they are not struck around the origin.
+	var mid := _ring_center()
+	var rr := _ring_radius()
 	if _slow_time > 0.0:
-		ci.draw_arc(Vector2.ZERO, radius + 4.0, 0.0, TAU, 22, Color(0.4, 0.7, 1.0, 0.85), 3.0, true)
+		ci.draw_arc(mid, rr + 4.0, 0.0, TAU, 22, Color(0.4, 0.7, 1.0, 0.85), 3.0, true)
 	if _poison_time > 0.0:
-		ci.draw_arc(Vector2.ZERO, radius + 9.0, 0.0, TAU, 22, Color(0.45, 0.9, 0.35, 0.8), 3.0, true)
+		ci.draw_arc(mid, rr + 9.0, 0.0, TAU, 22, Color(0.45, 0.9, 0.35, 0.8), 3.0, true)
 	if _stun_time > 0.0:
 		# Yellow ring with spinning "stunned" sparks.
-		ci.draw_arc(Vector2.ZERO, radius + 13.0, 0.0, TAU, 22, Color(1.0, 0.95, 0.3, 0.9), 3.0, true)
+		ci.draw_arc(mid, rr + 13.0, 0.0, TAU, 22, Color(1.0, 0.95, 0.3, 0.9), 3.0, true)
 		for i in range(3):
 			var a := _anim_phase * 4.0 + i * TAU / 3.0
-			ci.draw_circle(Vector2(cos(a), sin(a)) * (radius + 13.0), 3.9, Color(1.0, 0.95, 0.45))
+			ci.draw_circle(mid + Vector2(cos(a), sin(a)) * (rr + 13.0), 3.9, Color(1.0, 0.95, 0.45))
 	# Archetype markers so wave types read at a glance.
 	if cc_immune:
-		ci.draw_arc(Vector2.ZERO, radius + 3.0, 0.0, TAU, 26, Color(0.78, 0.82, 0.9, 0.9), 4.0, true)
+		ci.draw_arc(mid, rr + 3.0, 0.0, TAU, 26, Color(0.78, 0.82, 0.9, 0.9), 4.0, true)
 	if regen_dps > 0.0:
 		# Bright "+" and a pulsing ring only while it is actually healing; dim otherwise.
 		# This makes "my damage is stopping the heal" unmistakable at a glance.
 		var healing := _regen_block <= 0.0 and health < max_health
 		var g := Color(0.5, 1.0, 0.55, 1.0 if healing else 0.3)
-		var p := Vector2(radius * 0.55, -radius * 0.55)
+		var p := mid + Vector2(rr * 0.55, -rr * 0.55)
 		ci.draw_line(p + Vector2(-4.5, 0), p + Vector2(4.5, 0), g, 3.0)
 		ci.draw_line(p + Vector2(0, -4.5), p + Vector2(0, 4.5), g, 3.0)
 		if healing:
 			var pulse: float = 0.5 + 0.5 * sin(_anim_phase * 3.0)
-			ci.draw_arc(Vector2.ZERO, radius + 18.0 + pulse * 4.5, 0.0, TAU, 24,
+			ci.draw_arc(mid, rr + 18.0 + pulse * 4.5, 0.0, TAU, 24,
 					Color(0.45, 1.0, 0.5, 0.30 + 0.45 * pulse), 3.0, true)
 	if is_boss:
 		_draw_crown(ci)
@@ -499,9 +533,14 @@ func _draw_crown(ci: CanvasItem) -> void:
 		ci.draw_circle(Vector2(cx, y - 16.0), 3.3, Color(0.9, 0.2, 0.2))  # gem tip
 	ci.draw_rect(Rect2(dx - wd, y, wd * 2.0, 7.0), Color(0, 0, 0, 0.3), false, 1.5)
 
-## Flapping wings and a ground shadow, drawn behind the body for flyers.
+## Flapping wings, drawn behind the body for a flyer that has none of its own.
+##
+## The Air archetype's sprite is painted mid-flight with its wings spread, so it must not get
+## these too. Every OTHER archetype can also be made to fly — wave_manager gives 15% of
+## ground creeps wings from wave 3 — and a painted goblin with no wings, hanging in the air,
+## says nothing about why the ground towers are missing it. Those keep the code wings, drawn
+## across the middle of the sprite rather than around its feet.
 func _draw_wings() -> void:
-	draw_circle(Vector2(0, radius + 15.0), radius * 0.7, Color(0, 0, 0, 0.18))
 	var flap: float = sin(_wing_phase) * 9.0
 	var wing_col := Color(0.90, 0.93, 1.0, 0.9)
 	var left := PackedVector2Array([

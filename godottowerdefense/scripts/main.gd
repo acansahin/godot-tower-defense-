@@ -21,7 +21,7 @@ const SHAKE_DECAY := 26.0  ## Pixels of camera shake bled off per second.
 var _drag_kind: String = ""  ## Tower type being dragged from the palette ("" = none).
 var _hovered: Tower = null   ## Tower under the mouse, drawn with a clear range ring.
 var _shake: float = 0.0      ## Current camera shake magnitude in px; decays to 0.
-var _auto_pick: bool = false ## Harness only (--fill-board): auto-resolve upgrade choices.
+var _auto_pick: bool = false ## Harness only (--fill-board/--auto-pick): auto-resolve upgrade choices.
 
 func _ready() -> void:
 	get_tree().paused = false
@@ -80,6 +80,13 @@ func _ready() -> void:
 		_dump_tower_stats()
 	if OS.get_cmdline_user_args().has("--fill-board"):
 		_fill_board()
+	# TEMPORARY: answers the roguelite choice screen for you. Not decoration for --shot: the
+	# choice screen pauses the tree, and a paused tree stops the SceneTree timers every
+	# delayed harness waits on — so an unattended run simply stops at wave 3 and every later
+	# `--shot:N` silently never fires. --fill-board turns this on for itself; anything else
+	# that wants to watch a late wave has to ask.
+	if OS.get_cmdline_user_args().has("--auto-pick"):
+		_auto_pick = true
 	if OS.get_cmdline_user_args().has("--dump-waves"):
 		_dump_waves()
 	if OS.get_cmdline_user_args().has("--dump-mods"):
@@ -105,9 +112,14 @@ func _ready() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if String(arg).begins_with("--shot"):
 			# `--shot` grabs the opening board; `--shot:20` waits 20 seconds first, which is
-			# how you photograph a wave in flight rather than an empty map.
+			# how you photograph a wave in flight rather than an empty map. Several may be
+			# passed at once — each lands in its own file — which is how you watch a run
+			# through several waves without relaunching once per wave.
 			var parts := String(arg).split(":")
-			_save_screenshot(float(parts[1]) if parts.size() > 1 else 1.0)
+			if parts.size() > 1:
+				_save_screenshot(float(parts[1]), "shot_%s.png" % parts[1])
+			else:
+				_save_screenshot(1.0)
 
 ## TEMPORARY: saves one frame of the running game to `user://shot.png` and prints where it
 ## landed. Every other harness here prints numbers, and numbers cannot see a board — the
@@ -115,15 +127,15 @@ func _ready() -> void:
 ## at phone scale. `--headless` never calls _draw(), so this one must run WITHOUT it:
 ##
 ##   Godot.exe --path <project> res://scenes/Main.tscn --quit-after 150 -- --shot
-##   Godot.exe --path <project> res://scenes/Main.tscn --quit-after 4000 -- --shot:60
+##   Godot.exe --path <project> res://scenes/Main.tscn --quit-after 4000 -- --shot:60 --shot:120
 ##
 ## The wait is not decoration: the viewport texture is only complete after a frame has been
 ## drawn, and grabbing it in _ready gives back an empty image.
-func _save_screenshot(delay: float) -> void:
+func _save_screenshot(delay: float, file := "shot.png") -> void:
 	await get_tree().create_timer(delay).timeout
 	await RenderingServer.frame_post_draw
 	var image := get_viewport().get_texture().get_image()
-	var path := "user://shot.png"
+	var path := "user://" + file
 	var err := image.save_png(path)
 	if err != OK:
 		print("--- SHOT FAILED: ", error_string(err))

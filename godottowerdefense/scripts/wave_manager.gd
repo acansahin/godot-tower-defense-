@@ -139,6 +139,7 @@ func _spawn_one() -> void:
 	enemy.setup(_hp, _spd, _reward, _tint)
 	enemy.armor_element = _element
 	enemy.kind = _kind
+	enemy.has_own_wings = _type_def.get("air", false)
 	enemy.radius = Balance.ENEMY_BASE_RADIUS * float(_type_def.get("radius", 1.0))
 	enemy.cc_immune = _type_def.get("cc_immune", false)
 	var regen := float(_type_def.get("regen", 0.0))
@@ -166,6 +167,7 @@ func _spawn_child(pos: Vector2, progress: int, count: int, hp: float, spd: float
 		c.setup(hp, spd, Balance.SPLIT_CHILD_REWARD, tint)
 		c.armor_element = _element  # children share the wave's element
 		c.kind = _kind              # and its art: a splitter's halves are smaller splitters
+		c.has_own_wings = _type_def.get("air", false)
 		c.radius = r
 		c.removed.connect(_on_enemy_removed)
 		enemies_root.add_child(c)  # _ready puts it at PATH[0]; override below
@@ -212,6 +214,7 @@ func _spawn_boss() -> void:
 			_reward * Balance.BOSS_REWARD_MULT, Balance.BOSS_TINT)
 	boss.armor_element = _element
 	boss.kind = _kind  # a boss is an archetype wearing a crown, not a creature of its own
+	boss.has_own_wings = _type_def.get("air", false)
 	boss.radius = Balance.BOSS_RADIUS
 	boss.life_cost = Balance.BOSS_LIFE_COST
 	boss.is_boss = true
