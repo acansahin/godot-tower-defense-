@@ -19,10 +19,17 @@ Two attachments, and they do different jobs.
   light direction, its saturation ceiling, its edge softness. The tower sheets were generated
   twice because the first pass described the style in words and produced assets that were
   internally consistent and clearly from another game.
-- **The archetype's existing frame** (`assets/art/enemies/<archetype>_1.png`) — so the six new
-  frames are the SAME CREATURE. This is the harder half. Generating a cycle from a description
-  gives six creatures that each look fine and do not match, and that reads on the board as a
-  strobing flicker, not as a run.
+- **The archetype's existing frame** — so the six new frames are the SAME CREATURE. This is
+  the harder half. Generating a cycle from a description gives six creatures that each look
+  fine and do not match, and that reads on the board as a strobing flicker, not as a run.
+
+  Which file that is depends on how far the archetype has got. `<archetype>` throughout this
+  document is a key of `Game.WAVE_TYPES`, and there are nine:
+
+  | Archetype | Attach |
+  |---|---|
+  | `tutorial` `normal` `fast` `swarm` `tank` | `assets/art/enemies/<archetype>_1.png` |
+  | `air` `immune` `regen` `split` | `assets/art/enemies/<archetype>.png` — no `_1`, these four are single-pose |
 
 ## One sheet per creature. Six rows. One column.
 
@@ -45,7 +52,8 @@ the dragon's wingspan on a multi-COLUMN sheet and should not be needed here.
 ## The template
 
 ```text
-[Attach board_source.png AND <archetype>_1.png with this prompt.]
+[Attach board_source.png AND the archetype's existing frame with this prompt — see the
+table above for which file that is.]
 
 The first attached image is the game board this creature walks on. The second is the
 creature itself, already painted. Study both: the board's camera angle, light direction,
