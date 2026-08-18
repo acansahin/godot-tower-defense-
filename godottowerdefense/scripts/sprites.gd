@@ -18,6 +18,7 @@ const ENEMY_DIR := "res://assets/art/enemies/"
 
 static var _textures: Dictionary = {}  ## path -> Texture2D or null
 static var _anchors: Dictionary = {}   ## path -> Vector2 in texture pixels
+static var _cycle: Dictionary = {}     ## creep kind -> number of painted poses
 
 ## The sprite for an element at a level, or null if that one has not been painted yet.
 static func tower(element: String, level: int) -> Texture2D:
@@ -34,6 +35,31 @@ static func tower(element: String, level: int) -> Texture2D:
 static func enemy(kind: String, frame: int = 0) -> Texture2D:
 	var posed := _load(ENEMY_DIR + "%s_%d.png" % [kind, frame + 1])
 	return posed if posed != null else _load(ENEMY_DIR + kind + ".png")
+
+## The longest run of numbered poses this archetype was painted with: `<kind>_1.png` up to
+## `<kind>_N.png`, or 1 for a lone standing `<kind>.png`, or 0 for one with no art at all.
+##
+## The cycle length is READ OFF THE FOLDER rather than declared anywhere, which is what keeps
+## re-animating a creep a pure file copy: drop six frames next to a creature that had two and
+## it steps six, with nothing in the code to update. Nothing caps N but MAX_POSES, which only
+## exists to bound the probe.
+##
+## The animation also asks so it can LEAN ON THE ART WHERE THERE IS ART AND FAKE IT WHERE
+## THERE IS NOT — a one-pose flyer gets a wing sweep faked out of a scale pulse, and the more
+## real frames arrive the further that fake steps back instead of double-counting against
+## them. Free after the first call: `_load` caches its misses as well as its hits.
+const MAX_POSES := 12
+
+static func pose_count(kind: String) -> int:
+	if _cycle.has(kind):
+		return _cycle[kind]
+	var n := 0
+	while n < MAX_POSES and _load(ENEMY_DIR + "%s_%d.png" % [kind, n + 1]) != null:
+		n += 1
+	if n == 0 and _load(ENEMY_DIR + kind + ".png") != null:
+		n = 1
+	_cycle[kind] = n
+	return n
 
 ## Where the sprite meets the ground, in texture pixels: y is the bottom edge, x is the
 ## middle of the BAND of rows just above it.

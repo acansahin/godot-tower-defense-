@@ -211,31 +211,99 @@ func _process(delta: float) -> void:
 ##
 ## The blob keeps the breathing wobble it was designed around. A painted creep must NOT have
 ## it: squashing a standing figure vertically reads as inflating, not as breathing, which is
-## the one thing a ball never looked like. It gets a walk cycle instead — a hop at every
-## footfall, and a slow roll of the shoulders across the stride.
+## the one thing a ball never looked like. It gets a stride or a wingbeat instead.
 ##
-## This is deliberately not limb animation, which one image cannot have. It is the carrier
-## motion under the step, and it is what makes a two-pose sprite read as walking rather than
-## as a picture sliding along the road.
+## This is deliberately not limb animation, which one image cannot have. It is the CARRIER
+## motion under the pose, and it is what makes a two-pose sprite read as moving under its own
+## power rather than as a picture sliding along the road. It also has to hold up a creep with
+## only ONE pose, which is why each branch below carries a fake it can drop when a second pose
+## arrives.
 func _animate_body(delta: float) -> void:
 	if Sprites.enemy(kind) == null:
 		var br := sin(_anim_phase)
 		_body.scale = Vector2(_facing * (1.0 + 0.05 * br), 1.0 - 0.05 * br)
 		return
-	# Stride rate from the creep's own speed over its own size: a swarmling scurries, a tank
-	# plods, and anything slowed visibly labours. Bounded so a stun (speed 0 through
-	# _slow_factor) does not freeze mid-air and a late-wave sprinter does not blur.
+	if is_flying:
+		_animate_flight()
+	else:
+		_animate_walk(delta)
+
+## Wingbeat. Driven by `_wing_phase`, which ticks at a FIXED rate — a dragon does not beat its
+## wings slower because a frost tower slowed it, and it has no ground speed to derive a rhythm
+## from in the first place. That is the whole reason this is not the walk below.
+func _animate_flight() -> void:
+	var beat := _wing_phase
+	var poses := Sprites.pose_count(kind)
+	# ONE beat per TAU — wings up at 0, fully down at PI, back up at TAU. That matters beyond
+	# taste: _set_frame cuts the same TAU into however many frames were painted, so a six-frame
+	# sheet drawn as one down-and-up stroke lines up with this and nothing else does. (The walk
+	# below is the other case: TWO footfalls per TAU, which is why it uses abs().)
+	var stroke := 0.5 - 0.5 * cos(beat)  # 0 wings up, 1 wings down
+	# The creature climbs on the downstroke and settles between beats.
+	var lift: float = stroke * radius * 0.20
+	# Wing sweep, faked out of the silhouette: narrow and tall with the wings up, wide and flat
+	# with them down. On a ONE-POSE dragon this is the entire flap; it steps back as real
+	# frames arrive, because the art is then doing the work and leaving the fake at full
+	# strength makes the whole creature pump.
+	var sweep := (stroke - 0.5) * 2.0 / float(maxi(poses, 1))
+	var sx := 1.0 + 0.08 * sweep
+	var sy := 1.0 - 0.04 * sweep
+	# _body scales and rotates about its ORIGIN, which is the sprite's ground anchor — on a
+	# creature painted mid-flight that is its dangling feet, so scaling there swings the head
+	# around. Put the pivot back in the middle of the drawn figure, where a body pivots.
+	var pivot := _head_y() * 0.5
+	_body.position = Vector2(0.0, -lift + pivot * (1.0 - sy))
+	_body.rotation = sin(beat * 0.5) * 0.04 * _facing  # slow bank, so the beat is not a metronome
+	_body.scale = Vector2(_facing * sx, sy)
+	_set_frame(beat, poses)
+
+## Stride. Two footfalls per cycle, at a rate taken from the creep's own speed over its own
+## size: a swarmling scurries, a tank plods, and anything slowed visibly labours.
+##
+## The carrier is deliberately BIG here. The two ground poses differ only slightly — the legs
+## are not cleanly swapped — so the swap alone reads as a twitch; the hop, the lean and the
+## rock are what turn it into a run, and they cost nothing because they are all transform.
+func _animate_walk(delta: float) -> void:
+	# Bounded so a stun (speed 0 through _slow_factor) does not freeze the creep mid-air and a
+	# late-wave sprinter does not blur.
 	var walk_speed: float = speed * _slow_factor
 	if _stun_time > 0.0:
 		walk_speed = 0.0
-	_walk_phase += delta * clampf(walk_speed / maxf(radius, 1.0) * 1.6, 0.0, 14.0)
-	# abs(sin) — two footfalls per cycle, and the bounce never dips below the ground.
-	var hop: float = absf(sin(_walk_phase)) * radius * 0.10
+	var rate := clampf(walk_speed / maxf(radius, 1.0) * 1.6, 0.0, 14.0)
+	_walk_phase += delta * rate
+	# abs(sin) raised to <1 gives a snappier push-off and a longer hang than the bare curve —
+	# which is most of the difference between a walk and a run.
+	var bounce := pow(absf(sin(_walk_phase)), 0.7)
+	var hop: float = bounce * radius * 0.16
+	# A runner leans into the run, and how far is how hard it is running FOR ITS SIZE — so a
+	# tank stays upright and a swarmling pitches forward, off the same expression.
+	var lean: float = clampf(rate / 14.0, 0.0, 1.0) * 0.13
+	# `_facing` is +1 walking screen-left, the way the art is drawn. Node2D applies rotation
+	# outside the mirror scale, so without this factor the lean would point backwards on the
+	# return leg of the spiral.
+	_body.rotation = (sin(_walk_phase * 0.5) * 0.05 + sin(_walk_phase) * 0.03 - lean) * _facing
+	# Landing squash. The warning above — that squashing a standing figure reads as inflating —
+	# is about a CONTINUOUS wobble; this one is pinned to the bottom of the hop, so it lands
+	# with the foot and is gone by the top. Kept under 3% for the same reason.
+	var squash := (1.0 - bounce) * 0.03
 	_body.position = Vector2(0.0, -hop)
-	_body.rotation = sin(_walk_phase * 0.5) * 0.05 * _facing
-	_body.scale = Vector2(_facing, 1.0)
-	# Opposite leg forward on every footfall, if this archetype has been painted twice.
-	var f := int(_walk_phase / PI) % 2
+	_body.scale = Vector2(_facing * (1.0 + squash), 1.0 - squash)
+	_set_frame(_walk_phase, Sprites.pose_count(kind))
+
+## Picks the pose for a point in the cycle and swaps it if it changed. The one thing in either
+## cycle that costs a redraw — n times per cycle, against a transform every frame, which is
+## the right way round. A no-op on an archetype painted once, since Sprites.enemy() hands back
+## the same texture for every frame.
+##
+## The cycle is one TAU of `phase` however many frames there are, so the creature covers its
+## stride in the same time whether it was painted twice or six times — only the smoothness
+## changes. Both carriers are built on that: the walk's two footfalls are the two humps of
+## `abs(sin(phase))` across that same TAU, and the wingbeat's two strokes likewise, so frame 1
+## always lands on a footfall no matter how many frames sit between them.
+func _set_frame(phase: float, poses: int) -> void:
+	if poses < 2:
+		return
+	var f := int(fposmod(phase, TAU) / (TAU / float(poses)))
 	if f != _frame:
 		_frame = f
 		_repaint_body()
@@ -328,12 +396,18 @@ func _escape() -> void:
 	removed.emit()
 	queue_free()
 
-## Under-layer (this node): the flat ground shadow, or the flyer's wings + shadow. Static
-## for a ground enemy (drawn once); repainted each frame only while flying, for the flap.
+## Under-layer (this node): the flat ground shadow, or the flyer's shadow and — where there is
+## no art — its wings. Static for a ground enemy (drawn once); repainted each frame while
+## flying, which is what lets the shadow breathe with the wingbeat.
 func _draw() -> void:
 	if is_flying:
-		# The shadow is what says "this one is above the road", so every flyer keeps it.
-		draw_circle(Vector2(0, radius + 15.0), radius * 0.7, Color(0, 0, 0, 0.18))
+		# The shadow is what says "this one is above the road". It breathes against the beat:
+		# tight and faint at the top of the climb, wide and dark as the creature settles. That
+		# contrary motion is what reads as ALTITUDE — the lift alone could just as well be a
+		# creep drawn a bit higher up, and a still frame cannot tell the two apart.
+		var drop := 0.5 + 0.5 * cos(_wing_phase)  # 1 at the top of the stroke, when it flies lowest
+		draw_circle(Vector2(0, radius + 15.0), radius * (0.58 + 0.16 * drop),
+				Color(0, 0, 0, 0.12 + 0.09 * drop))
 		if Sprites.enemy(kind) == null:
 			_draw_wings()
 	else:

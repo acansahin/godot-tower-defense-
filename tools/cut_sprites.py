@@ -8,8 +8,8 @@ bounding box, and writes them out numbered.
 
 Usage::
 
-    python tools/cut_sprites.py <sheet.png> <out_dir> <prefix> [max_height]
-    python tools/cut_sprites.py <sheet.png> <out_dir> <name,name,...> [max_height]
+    python tools/cut_sprites.py <sheet.png> <out_dir> <prefix> [max_height] [gap_tol]
+    python tools/cut_sprites.py <sheet.png> <out_dir> <name,name,...> [max_height] [gap_tol]
 
 With a PREFIX, sprites are written ``<prefix>_<n>.png`` numbered left to right from 1, and
 each tier is capped a little taller than the last — which is what a tower upgrade ladder
@@ -18,9 +18,11 @@ wants.
 With a COMMA-SEPARATED NAME LIST, each column is written under its own name and every
 sprite gets the same height cap. Rows are detected too: a sheet with one row writes
 ``<name>.png``, and a sheet with several writes ``<name>_1.png``, ``<name>_2.png``, … one
-per row. That is how a walk cycle arrives — the same creature painted twice, opposite legs
-forward — and naming the columns here is what stops a five-creature sheet from being
-renamed by hand into the wrong archetypes afterwards.
+per row. That is how a walk cycle arrives — the same creature painted once per frame — and
+naming the columns here is what stops a five-creature sheet from being renamed by hand into
+the wrong archetypes afterwards. A cycle may be any length: the game reads how many frames
+exist off the folder. A SINGLE name on a multi-row sheet counts as a name list of one, so one
+creature's whole cycle can be generated on a sheet of its own.
 
 The tool prints the trimmed size and the ground anchor it measured (the horizontal centre
 of the bottom row of opaque pixels), which is what the game positions the sprite by.
@@ -162,9 +164,16 @@ def main() -> int:
     sheet, out_dir, prefix = sys.argv[1], sys.argv[2], sys.argv[3]
     max_height = int(sys.argv[4]) if len(sys.argv) > 4 else 0
     gap_tol = int(sys.argv[5]) if len(sys.argv) > 5 else 0
-    names = [n for n in prefix.split(",") if n] if "," in prefix else []
     img = Png(sheet)
     os.makedirs(out_dir, exist_ok=True)
+    # A PREFIX is an upgrade ladder and is always one row of tiers; a NAME LIST is a cast and
+    # may be stacked into a row per pose. So a lone name on a multi-row sheet is a name, not a
+    # prefix — which is what lets ONE creature's whole cycle be generated on its own sheet
+    # (the reliable way to get six frames that still look like the same creature) without
+    # writing `normal,` with a trailing comma to force it.
+    names = [n for n in prefix.split(",") if n] if "," in prefix else []
+    if not names and len(rows(img)) > 1:
+        names = [prefix]
     bands = rows(img) if names else [(0, img.height)]
     print(f"  {os.path.basename(sheet)}: {img.width}x{img.height}, {len(bands)} row(s)")
     # Cut everything first, then scale, because the cap for a column depends on its TALLEST

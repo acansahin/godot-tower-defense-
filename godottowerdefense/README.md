@@ -490,9 +490,15 @@ element.
   `Game.WAVE_TYPES` key. `enemy.gd` draws one instead of the blob, hung by the same ground
   anchor as a tower, mirrored to face the way it walks, with the armour element moved to a
   ring on the ground beneath it so a painted creature never has to be tinted. The five
-  ground archetypes carry two poses (`normal_1.png` / `normal_2.png`) and step between them
-  on a walk phase driven by the creep's own speed, so a slowed one plods and a swarmling
-  scurries; the four special ones (`air`, `immune`, `regen`, `split`) are a single pose.
+  archetypes are painted as numbered animation cycles (`normal_1.png` … `normal_6.png`) of
+  any length — `Sprites.pose_count()` counts the files and the animation divides one cycle by
+  that, so adding frames needs no code change. A GROUND creep steps on a walk phase driven by
+  its own speed, so a slowed one plods and a swarmling scurries; `air` runs a WINGBEAT instead,
+  at a fixed rate, because a dragon does not beat its wings slower for being slowed. Under
+  either, a carrier of pure `_body` transforms — hop, forward lean, per-stride rock and a
+  landing squash for a walker; lift, wing sweep and a bank for a flyer — does the work a
+  single still cannot, and costs no redraw. See
+  [docs/creep-art-prompt.md](docs/creep-art-prompt.md) for generating a cycle.
   Anything that marks the creature rather than the ground — health bar, boss crown, the
   slow / poison / stun / immune rings, the regen "+" — is placed off the DRAWN figure
   (`_head_y()`, `_ring_center()`), not off `radius`, which on a figure standing on its feet
@@ -504,9 +510,10 @@ element.
 **Drawn in code** — every visual not listed above:
 - Everything an enemy wears over its sprite, and the whole enemy where none is painted
   (coloured blob with eyes; health bar; status rings for slow/poison/stun/immune; a white
-  pop on impact): `enemy.gd` `_draw()`. Flyers add a shadow; the flapping pair of wings is
-  only for a flyer with no art, since Air — the one archetype that flies — is painted
-  mid-flight with its own.
+  pop on impact): `enemy.gd` `_draw()`. A flyer's shadow breathes against its wingbeat —
+  tight and faint at the top of the stroke, wide and dark as it settles — which is the cue
+  that reads as altitude. The flapping pair of drawn wings is only for a flyer with no art,
+  since Air is painted mid-flight with its own.
 - Towers with no sprite yet (element-coloured orb, muzzle flash), plus the level pips,
   upgrade chevron and red sell × that every tower carries painted or not; the shaded
   no-build overlay (`grid.gd`), projectiles, the drag ghost and the palette: their
