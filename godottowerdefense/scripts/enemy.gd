@@ -28,6 +28,12 @@ const Sprites := preload("res://scripts/sprites.gd")
 ## blob it replaces: a standing figure reads taller than the ball did at the same footprint.
 const SPRITE_HEIGHT_PER_RADIUS := 2.6
 
+## Carrier-motion amplitudes. Painted frames provide the limb poses; these transforms make
+## the motion readable at the game's small on-board scale, including on two-pose creatures.
+const WALK_HOP_PER_RADIUS := 0.16
+const WALK_SQUASH := 0.03
+const FLIGHT_LIFT_PER_RADIUS := 0.26
+
 signal removed  ## Emitted whenever the enemy leaves play (death OR escape).
 ## Emitted by a splitter when it dies so WaveManager can spawn its children.
 ## (position, path_progress, count, child_hp, child_speed, tint, child_radius)
@@ -239,21 +245,27 @@ func _animate_flight() -> void:
 	# sheet drawn as one down-and-up stroke lines up with this and nothing else does. (The walk
 	# below is the other case: TWO footfalls per TAU, which is why it uses abs().)
 	var stroke := 0.5 - 0.5 * cos(beat)  # 0 wings up, 1 wings down
-	# The creature climbs on the downstroke and settles between beats.
-	var lift: float = stroke * radius * 0.20
+	# The creature climbs on the downstroke and settles between beats. This starts at ZERO on
+	# purpose: `_overlay` is a SIBLING of `_body` and is never moved, so every pixel of lift is
+	# a pixel of drift between the creature and its own health bar, status rings and crown. A
+	# constant hover added to it is drift that never comes back.
+	var lift: float = stroke * radius * FLIGHT_LIFT_PER_RADIUS
 	# Wing sweep, faked out of the silhouette: narrow and tall with the wings up, wide and flat
 	# with them down. On a ONE-POSE dragon this is the entire flap; it steps back as real
 	# frames arrive, because the art is then doing the work and leaving the fake at full
 	# strength makes the whole creature pump.
 	var sweep := (stroke - 0.5) * 2.0 / float(maxi(poses, 1))
-	var sx := 1.0 + 0.08 * sweep
-	var sy := 1.0 - 0.04 * sweep
+	var sx := 1.0 + 0.10 * sweep
+	var sy := 1.0 - 0.05 * sweep
 	# _body scales and rotates about its ORIGIN, which is the sprite's ground anchor — on a
 	# creature painted mid-flight that is its dangling feet, so scaling there swings the head
 	# around. Put the pivot back in the middle of the drawn figure, where a body pivots.
 	var pivot := _head_y() * 0.5
-	_body.position = Vector2(0.0, -lift + pivot * (1.0 - sy))
-	_body.rotation = sin(beat * 0.5) * 0.04 * _facing  # slow bank, so the beat is not a metronome
+	# Quarter-cycle ahead of the bank below, so the sway and the roll do not peak together —
+	# in phase they read as one wobble rather than as a creature riding its own wingbeat.
+	var side_sway := cos(beat * 0.5) * radius * 0.03 * _facing
+	_body.position = Vector2(side_sway, -lift + pivot * (1.0 - sy))
+	_body.rotation = sin(beat * 0.5) * 0.05 * _facing  # slow bank, so the beat is not a metronome
 	_body.scale = Vector2(_facing * sx, sy)
 	_set_frame(beat, poses)
 
@@ -274,7 +286,7 @@ func _animate_walk(delta: float) -> void:
 	# abs(sin) raised to <1 gives a snappier push-off and a longer hang than the bare curve —
 	# which is most of the difference between a walk and a run.
 	var bounce := pow(absf(sin(_walk_phase)), 0.7)
-	var hop: float = bounce * radius * 0.16
+	var hop: float = bounce * radius * WALK_HOP_PER_RADIUS
 	# A runner leans into the run, and how far is how hard it is running FOR ITS SIZE — so a
 	# tank stays upright and a swarmling pitches forward, off the same expression.
 	var lean: float = clampf(rate / 14.0, 0.0, 1.0) * 0.13
@@ -285,7 +297,9 @@ func _animate_walk(delta: float) -> void:
 	# Landing squash. The warning above — that squashing a standing figure reads as inflating —
 	# is about a CONTINUOUS wobble; this one is pinned to the bottom of the hop, so it lands
 	# with the foot and is gone by the top. Kept under 3% for the same reason.
-	var squash := (1.0 - bounce) * 0.03
+	var squash := (1.0 - bounce) * WALK_SQUASH
+	# No lateral shift here: `_visual_dx()` centres the health bar off the TEXTURE anchor and
+	# cannot see a transform, so sliding the body sideways slides it out from under its bar.
 	_body.position = Vector2(0.0, -hop)
 	_body.scale = Vector2(_facing * (1.0 + squash), 1.0 - squash)
 	_set_frame(_walk_phase, Sprites.pose_count(kind))
@@ -406,8 +420,11 @@ func _draw() -> void:
 		# contrary motion is what reads as ALTITUDE — the lift alone could just as well be a
 		# creep drawn a bit higher up, and a still frame cannot tell the two apart.
 		var drop := 0.5 + 0.5 * cos(_wing_phase)  # 1 at the top of the stroke, when it flies lowest
-		draw_circle(Vector2(0, radius + 15.0), radius * (0.58 + 0.16 * drop),
+		draw_set_transform(Vector2(0, radius + 15.0), 0.0, Vector2(1.0, 0.32))
+		draw_circle(Vector2.ZERO, radius * (0.58 + 0.16 * drop),
 				Color(0, 0, 0, 0.12 + 0.09 * drop))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		_draw_flight_streaks(drop)
 		if Sprites.enemy(kind) == null:
 			_draw_wings()
 	else:
@@ -416,6 +433,40 @@ func _draw() -> void:
 		draw_circle(Vector2.ZERO, radius * 0.9, Color(0, 0, 0, 0.18))
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	_draw_element_ring()
+
+## Pale air strokes trailing BEHIND a flyer. The painted Air creature currently has one pose,
+## so its transform supplies the wingbeat; these arcs make that beat unmistakable at game zoom
+## without drawing a second pair of wings over the sprite.
+##
+## Three things here are not free choices:
+##
+##   * They hang at a fraction of `_head_y()`, not of `radius`. `radius` is the creep's SIZE
+##     and a painted figure stands 2.6 radii tall, so a streak placed off `radius` lands at its
+##     ankles — beside the feet of a creature whose wings are 30px higher up.
+##   * ONE side, mirrored by `_facing`. Drawn on both sides they are symmetric, and a symmetric
+##     speed line carries no direction at all: half of it sits in front of the creature it is
+##     supposed to be trailing. `_facing` is +1 while the creep moves screen-left (the way the
+##     art is drawn), so behind it is +x — and this is the parent canvas, which the `_body`
+##     mirror does NOT reach, so the flip has to be applied here by hand.
+##   * Nothing while stunned. `_wing_phase` ticks at a fixed rate no matter what, which is
+##     right for a wingbeat and wrong for a streak that claims the creature is moving.
+func _draw_flight_streaks(drop: float) -> void:
+	if _stun_time > 0.0:
+		return
+	# Measured at game zoom, not guessed: the 0.10-0.26 this arrived with is invisible against
+	# a sunlit board — the strokes had to be drawn in magenta at 0.85 to confirm they existed
+	# at all. This is the range that reads as moving air without competing with the creature.
+	var speed_alpha := 0.20 + absf(sin(_wing_phase)) * 0.18
+	var streak_color := Color(0.78, 0.90, 1.0, speed_alpha)
+	var span := radius * (1.25 + drop * 0.32)
+	# Bulge AWAY from the creature, so the stroke trails off rather than cupping it.
+	var base_angle: float = 0.0 if _facing > 0.0 else PI
+	for i in range(2):
+		var arc_radius := radius * (0.44 + float(i) * 0.22)
+		var y := _head_y() * (0.45 + float(i) * 0.22)
+		draw_arc(Vector2(span * _facing, y), arc_radius,
+				base_angle - PI * 0.45, base_angle + PI * 0.45,
+				8, streak_color, 2.0, true)
 
 ## The armour element, as a ring on the ground the creep stands in.
 ##
