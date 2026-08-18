@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dqcjaubkjl3je"
-path="res://.godot/imported/immune.png-ba8fa263aad7e524a59abdacf208d0da.ctex"
+uid="uid://dbpwylyfjfsq2"
+path="res://.godot/imported/immune_4.png-6bef7ebba9e15380d64ae5eaded51036.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/art/enemies/immune.png"
-dest_files=["res://.godot/imported/immune.png-ba8fa263aad7e524a59abdacf208d0da.ctex"]
+source_file="res://assets/art/enemies/immune_4.png"
+dest_files=["res://.godot/imported/immune_4.png-6bef7ebba9e15380d64ae5eaded51036.ctex"]
 
 [params]
 
