@@ -549,6 +549,10 @@ func _draw_overlay(ci: CanvasItem) -> void:
 	# countable; see _ring_center for why they are not struck around the origin.
 	var mid := _ring_center()
 	var rr := _ring_radius()
+	# Drawn FIRST of everything on this layer, so the status rings, the crown and the health
+	# bar all stay legible on top of it.
+	if cc_immune:
+		_draw_ward(ci, mid, rr)
 	if _slow_time > 0.0:
 		ci.draw_arc(mid, rr + 4.0, 0.0, TAU, 22, Color(0.4, 0.7, 1.0, 0.85), 3.0, true)
 	if _poison_time > 0.0:
@@ -559,9 +563,8 @@ func _draw_overlay(ci: CanvasItem) -> void:
 		for i in range(3):
 			var a := _anim_phase * 4.0 + i * TAU / 3.0
 			ci.draw_circle(mid + Vector2(cos(a), sin(a)) * (rr + 13.0), 3.9, Color(1.0, 0.95, 0.45))
-	# Archetype markers so wave types read at a glance.
-	if cc_immune:
-		ci.draw_arc(mid, rr + 3.0, 0.0, TAU, 26, Color(0.78, 0.82, 0.9, 0.9), 4.0, true)
+	# Archetype markers so wave types read at a glance. (The cc_immune ward is drawn at the
+	# top of this function, under everything else.)
 	if regen_dps > 0.0:
 		# Bright "+" and a pulsing ring only while it is actually healing; dim otherwise.
 		# This makes "my damage is stopping the heal" unmistakable at a glance.
@@ -605,6 +608,28 @@ func _draw_crown(ci: CanvasItem) -> void:
 		]), gold)
 		ci.draw_circle(Vector2(cx, y - 16.0), 3.3, Color(0.9, 0.2, 0.2))  # gem tip
 	ci.draw_rect(Rect2(dx - wd, y, wd * 2.0, 7.0), Color(0, 0, 0, 0.3), false, 1.5)
+
+## The cc-immune marker: a pale daylight sphere with the creep standing INSIDE it.
+##
+## It was a hard steel hoop struck around the body, which said "immune" clearly enough and
+## drew a 4px opaque line straight across the creature to do it. A ward is a thing you are
+## inside, so it is one here: barely-there glass, brightening towards its rim the way a glass
+## ball does, with the highlight up and to the left where the board's sun is. The creep is
+## read THROUGH it rather than across it, and at this alpha it never competes with the sprite.
+##
+## Sized off the creep's own drawn height, so a boss and a swarmling each get a ward that
+## contains them.
+func _draw_ward(ci: CanvasItem, mid: Vector2, rr: float) -> void:
+	var r := rr * 1.75  # comfortably past the head and the feet of a 2.6-radii figure
+	var glow := Color(1.0, 0.97, 0.86)
+	ci.draw_circle(mid, r, Color(glow.r, glow.g, glow.b, 0.07))
+	# Limb brightening: three arcs hugging the edge, each fainter as it moves inward. This is
+	# what separates a sphere from a flat disc without costing a shader or a texture.
+	for i in range(3):
+		var t := float(i) / 2.0
+		ci.draw_arc(mid, r - (1.0 - t) * r * 0.09, 0.0, TAU, 32,
+				Color(glow.r, glow.g, glow.b, 0.05 + 0.14 * t), 2.0, true)
+	ci.draw_circle(mid + Vector2(-r * 0.34, -r * 0.40), r * 0.20, Color(1, 1, 1, 0.09))
 
 ## Flapping wings, drawn behind the blob for a flyer that has no art yet.
 ##
