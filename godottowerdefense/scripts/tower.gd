@@ -83,6 +83,11 @@ var _was_upgrade_ready: bool = false  ## Last frame's _upgrade_ready(); the badg
 var _highlighted: bool = false      ## Hovered by the mouse: draw the range clearly.
 
 func _ready() -> void:
+	# Painted towers carry four to seven source pixels for every screen pixel they are drawn
+	# at, and plain linear filtering samples ONE of them — which is why the sprites looked
+	# crunchy rather than detailed. Mipmaps are generated on import; this is the half that
+	# asks for them.
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	# A card picked mid-run has to reach towers that are already standing. Re-resolving is
 	# safe at any moment because _recompute() rebuilds from the definition rather than
 	# editing the current values.
@@ -355,6 +360,17 @@ func fire_bolt(target: Enemy, damage_mult: float = 1.0) -> void:
 	p.gold_on_kill = gold_on_kill
 	p.life_on_kill_chance = life_on_kill_chance
 
+const Sprites := preload("res://scripts/sprites.gd")
+
+## How TALL the painted tower is drawn, per level, in board px.
+##
+## By height, not width, because these sprites get proportionally taller as they upgrade —
+## the fire set runs from 1.23 to 1.67 times as tall as it is wide, all of it flame plume.
+## Scaling by width let that compound: the top tier ended up 29% of the board's height, when
+## a tower on the reference art is at most 19%. Fixing the height fixes the silhouette and
+## leaves the widths where they belong, around 60-85px over a 60px footprint.
+const SPRITE_HEIGHT: Array = [78.0, 92.0, 106.0, 120.0, 138.0]
+
 func _draw() -> void:
 	# Range indicator in the element's colour: quiet by default so a full board stays
 	# readable, clear while hovered so the player can judge coverage.
@@ -364,6 +380,14 @@ func _draw() -> void:
 		draw_arc(Vector2.ZERO, tower_range, 0.0, TAU, 64, Color(ec.r, ec.g, ec.b, 0.50), 2.5, true)
 	else:
 		draw_arc(Vector2.ZERO, tower_range, 0.0, TAU, 48, Color(ec.r, ec.g, ec.b, 0.12), 2.0, true)
+	# Painted sprite if this element and tier have been drawn; the code art below is the
+	# fallback, and it is what the board still looks like everywhere the art has not landed.
+	var art := Sprites.tower(element, level)
+	if art != null:
+		_draw_sprite(art)
+		_draw_level_pips(element_color.lightened(0.35))
+		_draw_sell_button()
+		return
 	# Flat drop shadow under the base.
 	draw_set_transform(Vector2(0, 24), 0.0, Vector2(1.0, 0.45))
 	draw_circle(Vector2.ZERO, 27.0, Color(0, 0, 0, 0.20))
@@ -382,6 +406,26 @@ func _draw() -> void:
 	_draw_level_pips(element_color.lightened(0.35))
 	# Drawn last so it stays tappable even when the barrel swings over the corner.
 	_draw_sell_button()
+
+## Hangs the painted tower off its ground anchor, so the base sits on the spot the tower
+## occupies and the tower grows UPWARD as it is upgraded — which is where a tall sprite has
+## room, since the board is seen from slightly above.
+func _draw_sprite(art: Texture2D) -> void:
+	var size := art.get_size()
+	var anchor := Sprites.anchor(art)
+	var target: float = float(SPRITE_HEIGHT[clampi(level, 1, SPRITE_HEIGHT.size()) - 1])
+	var scale := target / size.y
+	# A soft contact shadow: the painting has none (it was asked for without one, so it can
+	# be lit by whatever board it lands on) and without one a tower floats.
+	draw_set_transform(Vector2(0, 6), 0.0, Vector2(1.0, 0.4))
+	draw_circle(Vector2.ZERO, size.x * scale * 0.34, Color(0, 0, 0, 0.28))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	var where := Rect2(Vector2(-anchor.x * scale, -anchor.y * scale), size * scale)
+	# Nudged down a little: the anchor is the sprite's lowest pixel, and letting the base
+	# overlap the ground point slightly is what makes it read as standing ON the board
+	# rather than behind it.
+	where.position.y += 10.0
+	draw_texture_rect(art, where, false)
 
 ## The classic turret: barrel + element orb, aimed at the target and kicked back while
 ## firing. Public because BoltBehavior draws it; kept here rather than in the behavior

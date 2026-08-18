@@ -37,6 +37,7 @@ var _reward: int = 0
 var _interval: float = 0.6
 var _tint: Color = Color.WHITE
 var _type_def: Dictionary = {}  ## The current wave's WAVE_TYPES entry.
+var _kind: String = ""          ## Which WAVE_TYPES key that is; picks the painted sprite.
 var _element: String = ""       ## The current wave's armor element ("" = neutral).
 var _lives_at_start: int = 0    ## Lives when the wave began (for the leak-free bonus).
 var _generator: WaveGenerator = null  ## Supplies every wave past the seed table.
@@ -97,7 +98,8 @@ func _start_wave() -> void:
 	_wave += 1
 	Game.wave_reached = _wave
 	var def: Dictionary = _wave_def(_wave)
-	_type_def = Game.WAVE_TYPES[def["type"]]
+	_kind = String(def["type"])
+	_type_def = Game.WAVE_TYPES[_kind]
 	# Base scaling (quadratic HP so towers must keep pace) x archetype multipliers.
 	# The curve itself lives in Balance; the archetype and per-wave multipliers below
 	# stack on top of it, so a single wave can be smoothed without rebalancing the whole
@@ -136,6 +138,7 @@ func _spawn_one() -> void:
 	var enemy := ENEMY.instantiate() as Enemy
 	enemy.setup(_hp, _spd, _reward, _tint)
 	enemy.armor_element = _element
+	enemy.kind = _kind
 	enemy.radius = Balance.ENEMY_BASE_RADIUS * float(_type_def.get("radius", 1.0))
 	enemy.cc_immune = _type_def.get("cc_immune", false)
 	var regen := float(_type_def.get("regen", 0.0))
@@ -143,8 +146,6 @@ func _spawn_one() -> void:
 		enemy.regen_dps = _hp * regen
 	enemy.split_into = int(_type_def.get("split", 0))
 	if _type_def.get("air", false):
-		enemy.make_flying()
-	elif _wave >= Balance.FLYER_START_WAVE and randf() < Balance.FLYER_CHANCE:
 		enemy.make_flying()
 	if enemy.split_into > 0:
 		enemy.split_requested.connect(_spawn_child)
@@ -162,6 +163,7 @@ func _spawn_child(pos: Vector2, progress: int, count: int, hp: float, spd: float
 		var c := ENEMY.instantiate() as Enemy
 		c.setup(hp, spd, Balance.SPLIT_CHILD_REWARD, tint)
 		c.armor_element = _element  # children share the wave's element
+		c.kind = _kind              # and its art: a splitter's halves are smaller splitters
 		c.radius = r
 		c.removed.connect(_on_enemy_removed)
 		enemies_root.add_child(c)  # _ready puts it at PATH[0]; override below
@@ -207,6 +209,7 @@ func _spawn_boss() -> void:
 	boss.setup(_hp * Balance.BOSS_HP_MULT, _spd * Balance.BOSS_SPEED_MULT,
 			_reward * Balance.BOSS_REWARD_MULT, Balance.BOSS_TINT)
 	boss.armor_element = _element
+	boss.kind = _kind  # a boss is an archetype wearing a crown, not a creature of its own
 	boss.radius = Balance.BOSS_RADIUS
 	boss.life_cost = Balance.BOSS_LIFE_COST
 	boss.is_boss = true

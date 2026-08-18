@@ -21,7 +21,7 @@ const SHAKE_DECAY := 26.0  ## Pixels of camera shake bled off per second.
 var _drag_kind: String = ""  ## Tower type being dragged from the palette ("" = none).
 var _hovered: Tower = null   ## Tower under the mouse, drawn with a clear range ring.
 var _shake: float = 0.0      ## Current camera shake magnitude in px; decays to 0.
-var _auto_pick: bool = false ## Harness only (--fill-board): auto-resolve upgrade choices.
+var _auto_pick: bool = false ## Harness only (--fill-board/--auto-pick): auto-resolve upgrade choices.
 
 func _ready() -> void:
 	get_tree().paused = false
@@ -80,6 +80,15 @@ func _ready() -> void:
 		_dump_tower_stats()
 	if OS.get_cmdline_user_args().has("--fill-board"):
 		_fill_board()
+	if OS.get_cmdline_user_args().has("--air-pose"):
+		_air_pose()
+	# TEMPORARY: answers the roguelite choice screen for you. Not decoration for --shot: the
+	# choice screen pauses the tree, and a paused tree stops the SceneTree timers every
+	# delayed harness waits on — so an unattended run simply stops at wave 3 and every later
+	# `--shot:N` silently never fires. --fill-board turns this on for itself; anything else
+	# that wants to watch a late wave has to ask.
+	if OS.get_cmdline_user_args().has("--auto-pick"):
+		_auto_pick = true
 	if OS.get_cmdline_user_args().has("--dump-waves"):
 		_dump_waves()
 	if OS.get_cmdline_user_args().has("--dump-mods"):
@@ -105,9 +114,14 @@ func _ready() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if String(arg).begins_with("--shot"):
 			# `--shot` grabs the opening board; `--shot:20` waits 20 seconds first, which is
-			# how you photograph a wave in flight rather than an empty map.
+			# how you photograph a wave in flight rather than an empty map. Several may be
+			# passed at once — each lands in its own file — which is how you watch a run
+			# through several waves without relaunching once per wave.
 			var parts := String(arg).split(":")
-			_save_screenshot(float(parts[1]) if parts.size() > 1 else 1.0)
+			if parts.size() > 1:
+				_save_screenshot(float(parts[1]), "shot_%s.png" % parts[1])
+			else:
+				_save_screenshot(1.0)
 
 ## TEMPORARY: saves one frame of the running game to `user://shot.png` and prints where it
 ## landed. Every other harness here prints numbers, and numbers cannot see a board — the
@@ -115,15 +129,15 @@ func _ready() -> void:
 ## at phone scale. `--headless` never calls _draw(), so this one must run WITHOUT it:
 ##
 ##   Godot.exe --path <project> res://scenes/Main.tscn --quit-after 150 -- --shot
-##   Godot.exe --path <project> res://scenes/Main.tscn --quit-after 4000 -- --shot:60
+##   Godot.exe --path <project> res://scenes/Main.tscn --quit-after 4000 -- --shot:60 --shot:120
 ##
 ## The wait is not decoration: the viewport texture is only complete after a frame has been
 ## drawn, and grabbing it in _ready gives back an empty image.
-func _save_screenshot(delay: float) -> void:
+func _save_screenshot(delay: float, file := "shot.png") -> void:
 	await get_tree().create_timer(delay).timeout
 	await RenderingServer.frame_post_draw
 	var image := get_viewport().get_texture().get_image()
-	var path := "user://shot.png"
+	var path := "user://" + file
 	var err := image.save_png(path)
 	if err != OK:
 		print("--- SHOT FAILED: ", error_string(err))
@@ -285,6 +299,39 @@ func _dump_waves() -> void:
 				String(def.get("element", "-")), flags])
 	print("--- WAVE DUMP END (impure generated waves: %d) ---" % impure)
 
+## TEMPORARY verification harness: parks a row of Air creeps along the road with an empty
+## board, so the flyer's own drawing can be photographed. `--fill-board` cannot do this — it
+## buries the road under towers and kills every creep at its spawn point — and a normal run
+## does not reach the Air wave (6) without leaking away all twenty lives first.
+##
+## What it is for is the half of enemy.gd that numbers cannot check: the wingbeat carrier,
+## the trailing air strokes, and whether the health bar still sits over the creature once the
+## body is lifted off its anchor. Pair it with --shot, and WITHOUT --headless:
+##   Godot.exe --path <project> res://scenes/Main.tscn -- --air-pose --shot:3
+## Delete this and its call above once the flyer art lands.
+func _air_pose() -> void:
+	wave_manager.set_process(false)
+	var enemy_scene: PackedScene = load("res://scenes/Enemy.tscn")
+	var def: Dictionary = Game.WAVE_TYPES["air"]
+	# Spread along the path so several headings are on screen at once — the sprite is drawn
+	# facing screen-left and mirrored for the other way, and the streaks mirror with it, so
+	# one heading proves nothing about the other.
+	for i in range(8):
+		var e := enemy_scene.instantiate() as Enemy
+		e.setup(400.0, 30.0, 5, Color(def["color"]))
+		e.kind = "air"
+		# The same expression WaveManager._spawn_one uses. Hardcoding the base radius made this
+		# harness lie about size the moment the archetype was given a multiplier.
+		e.radius = Balance.ENEMY_BASE_RADIUS * float(def.get("radius", 1.0))
+		e.make_flying()
+		enemies_root.add_child(e)
+		var step := int(float(Game.PATH.size() - 2) * float(i) / 8.0) + 1
+		e.set_progress(step)
+		e.global_position = Game.PATH[step]
+		# Half of them damaged, so the health bar is visible against the lifted body.
+		if i % 2 == 1:
+			e.take_damage(150.0)
+
 ## TEMPORARY verification harness: covers every buildable cell with towers, cycling the
 ## roster, so a headless run actually exercises targeting, firing, the projectile pool and
 ## the effect payloads. Without it a headless run has no towers and proves nothing about
@@ -306,19 +353,44 @@ func _fill_board() -> void:
 		print("--- RUN OVER: wave %d | best %d | essence %d | runs %d ---"
 				% [Game.wave_reached, Meta.best_wave, Meta.essence, Meta.total_runs]))
 	var i := 0
-	for cell in grid.cells:
+	# No cells to walk any more: sweep the play area on the tower spacing and take every
+	# spot the placement rule allows, which is the closest thing to "a full board" that free
+	# placement has.
+	for spot in _buildable_lattice():
 		var kind := String(Game.TOWER_ORDER[i % Game.TOWER_ORDER.size()])
 		var t := TOWER.instantiate() as Tower
 		t.setup_def(kind)
-		t.position = (cell as Rect2).get_center()
+		t.position = spot
 		towers_root.add_child(t)
 		# Max them out: Ice's area-slow (and the frost ring it spawns) only exists from
 		# Lv2, so a board of Lv1 towers would never touch that path.
 		while t.can_upgrade():
 			t.upgrade()
 		i += 1
-	print("--- FILL BOARD: placed %d towers over %d cells, all at max level ---"
-			% [i, grid.cells.size()])
+	print("--- FILL BOARD: placed %d towers, all at max level ---" % i)
+
+## Every position a tower could stand, swept on the tower spacing. Used by --fill-board and
+## by --dump-board, which need "the set of places you may build" now that the board no
+## longer keeps one.
+func _buildable_lattice(step := -1.0) -> Array:
+	var pitch: float = Game.TOWER_GAP if step <= 0.0 else step
+	var out: Array = []
+	var y := Game.PLAY_TOP + Game.TOWER_RADIUS
+	while y <= Game.WORLD_SIZE.y - Game.TOWER_RADIUS:
+		var x := Game.TOWER_RADIUS
+		while x <= Game.PLAY_RIGHT - Game.TOWER_RADIUS:
+			var at := Vector2(x, y)
+			if Game.can_build_at(at) and _far_enough(at, out):
+				out.append(at)
+			x += pitch * 0.5
+		y += pitch * 0.5
+	return out
+
+func _far_enough(at: Vector2, taken: Array) -> bool:
+	for other in taken:
+		if at.distance_to(other) < Game.TOWER_GAP:
+			return false
+	return true
 
 ## Measures the BOARD rather than the towers: how much of the road one tower can watch,
 ## and how many towers it takes to watch all of it.
@@ -355,9 +427,12 @@ func _dump_board() -> void:
 		var n := int(seg / STEP)
 		for k in n:
 			samples.append(a.lerp(b, float(k) / float(n)))
-	var cells: Array[Rect2] = grid.cells
+	# The candidate set is every legal STANDING SPOT, swept on the tower spacing — the board
+	# keeps no cell list any more. Coverage therefore answers the question free placement
+	# actually poses: how much road can one tower watch from the best place it may stand.
+	var spots: Array = _buildable_lattice()
 	print("  road length      : %.0f px over %d waypoints" % [total, path.size()])
-	print("  buildable cells  : %d" % cells.size())
+	print("  buildable spots  : %d (on a %.0fpx sweep)" % [spots.size(), Game.TOWER_GAP])
 	print("  road samples     : %d (every %.0f px)" % [samples.size(), STEP])
 	print("  %-10s %7s %8s %8s  %-12s %7s %8s"
 			% ["element", "range", "best 1", "median", "cover 95%", "raw", "raw best"])
@@ -370,9 +445,8 @@ func _dump_board() -> void:
 		var r_sq := r * r
 		# Which samples each cell can see. Built once, then reused for both statistics.
 		var seen: Array[PackedInt32Array] = []
-		for c in cells:
+		for centre in spots:
 			var hit := PackedInt32Array()
-			var centre := c.get_center()
 			for s in samples.size():
 				if centre.distance_squared_to(samples[s]) <= r_sq:
 					hit.append(s)
@@ -387,7 +461,7 @@ func _dump_board() -> void:
 		var covered := {}
 		var target := int(float(samples.size()) * 0.95)
 		var used := 0
-		while covered.size() < target and used < cells.size():
+		while covered.size() < target and used < spots.size():
 			var best_gain := 0
 			var best_i := -1
 			for i in seen.size():
@@ -409,16 +483,15 @@ func _dump_board() -> void:
 		print("  %-10s %7.0f %7.0f%% %7.0f%%  %-12s %7.0f %7.0f%%" % [tid, r,
 				100.0 * float(best) / float(samples.size()),
 				100.0 * float(median) / float(samples.size()), cover_txt,
-				raw, 100.0 * float(_best_seen(cells, samples, raw)) / float(samples.size())])
+				raw, 100.0 * float(_best_seen(spots, samples, raw)) / float(samples.size())])
 	print("--- BOARD DUMP END ---")
 
 ## Road samples visible from the single best cell at radius `r`. Used for the `raw` column,
 ## which repeats the "best 1" measurement with the cap lifted.
-func _best_seen(cells: Array[Rect2], samples: Array[Vector2], r: float) -> int:
+func _best_seen(spots: Array, samples: Array[Vector2], r: float) -> int:
 	var r_sq := r * r
 	var best := 0
-	for c in cells:
-		var centre := c.get_center()
+	for centre in spots:
 		var n := 0
 		for s in samples:
 			if centre.distance_squared_to(s) <= r_sq:
@@ -553,6 +626,7 @@ func _on_drag_started(kind: String) -> void:
 	if Game.is_over:
 		return
 	_drag_kind = kind
+	grid.set_showing(true)  # closed ground is only worth showing while something is being placed
 	_set_hovered(null)  # the drag preview takes over; don't compete with a hover ring
 	_update_ghost(get_global_mouse_position())
 
@@ -575,8 +649,7 @@ func _input(event: InputEvent) -> void:
 
 ## Highlights the tower under the cursor (if any) so its range reads clearly.
 func _update_hover(world_pos: Vector2) -> void:
-	var cell: Rect2 = grid.snap(world_pos)
-	_set_hovered(null if cell.size == Vector2.ZERO else _tower_on_cell(cell.get_center()))
+	_set_hovered(_tower_at(world_pos))
 
 ## Single place that swaps the highlight, guarding against a tower that has been
 ## sold (queue_free'd) while it was still the hovered one.
@@ -590,15 +663,15 @@ func _set_hovered(tower: Tower) -> void:
 		_hovered.set_highlighted(true)
 
 func _update_ghost(world_pos: Vector2) -> void:
-	var cell: Rect2 = grid.snap_forgiving(world_pos)
-	if cell.size == Vector2.ZERO:
-		preview.hide()
-		return
-	var center := cell.get_center()
 	var d: Dictionary = Game.TOWER_DEFS[_drag_kind]
+	# The ghost is shown even where a tower cannot go — in red. A ghost that vanishes over
+	# bad ground tells the player nothing about WHY, and the whole point of free placement
+	# is that the board answers "can I build here" continuously.
 	# TOWER_DEFS stores range in Warcraft III units — scale to pixels, exactly as
 	# tower.gd's _recompute does, or the ghost circle lies about the tower's reach.
-	preview.show_at(cell, _cell_is_free(center) and Game.gold >= _cost(_drag_kind),
+	preview.show_at(world_pos,
+			Game.can_build_at(world_pos, towers_root.get_children())
+					and Game.gold >= _cost(_drag_kind),
 			minf(d.get("range", 160.0) * Balance.WC3_RANGE_SCALE, Balance.MAX_TOWER_RANGE),
 			d.get("color", Color.WHITE))
 
@@ -606,12 +679,9 @@ func _drop(world_pos: Vector2) -> void:
 	var kind := _drag_kind
 	_drag_kind = ""
 	preview.hide()
-	# Forgiving: the ghost already showed the player this exact cell while they dragged.
-	var cell: Rect2 = grid.snap_forgiving(world_pos)
-	if cell.size == Vector2.ZERO:
-		return
-	var center := cell.get_center()
-	if not _cell_is_free(center):
+	grid.set_showing(false)
+	var center := world_pos
+	if not Game.can_build_at(center, towers_root.get_children()):
 		Audio.play("denied")
 		return
 	if not Game.spend_gold(_cost(kind)):
@@ -631,16 +701,20 @@ func _cost(kind: String) -> int:
 	return int(Game.TOWER_DEFS[kind]["cost"])
 
 ## True if no tower already sits on the cell centred at this point.
-func _cell_is_free(center: Vector2) -> bool:
-	return _tower_on_cell(center) == null
-
-## The tower placed on the cell centred at this point, or null if none.
-func _tower_on_cell(center: Vector2) -> Tower:
+## The tower under this point, or null. One radius does placement, hit-testing and the
+## drawn body, so what the player aims at is what they see.
+func _tower_at(world_pos: Vector2) -> Tower:
+	var best: Tower = null
+	var best_d := Game.TOWER_RADIUS
 	for c in towers_root.get_children():
 		var t := c as Tower
-		if t != null and t.position.distance_to(center) < 1.0:
-			return t
-	return null
+		if t == null:
+			continue
+		var d := t.position.distance_to(world_pos)
+		if d <= best_d:
+			best_d = d
+			best = t
+	return best
 
 # --- Click a tower: upgrade it, or sell it via the corner "×" -------------------
 
@@ -654,10 +728,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			and event.button_index == MOUSE_BUTTON_LEFT):
 		return
 	var world := get_global_mouse_position()
-	var cell: Rect2 = grid.snap(world)
-	if cell.size == Vector2.ZERO:
-		return
-	var tower := _tower_on_cell(cell.get_center())
+	var tower := _tower_at(world)
 	if tower == null:
 		return
 	if tower.is_sell_hit(world):

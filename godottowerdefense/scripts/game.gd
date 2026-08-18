@@ -35,49 +35,136 @@ const SCREEN_SIZE := Vector2(1280, 720)
 ## Balance.MAX_TOWER_RANGE. Geometry could not solve both; this is the half worth keeping.
 const WORLD_SIZE := Vector2(1536, 864)
 
-# Waypoints that define the road. Enemies walk these in order: the first point is
-# off-screen left, where they spawn, and the last is the base they leak into.
+# Waypoints of the painted road, TRACED OUT OF THE ARTWORK rather than authored. The board
+# is a hand-painted map now (assets/art/board_source.png) and the geometry has to follow the
+# picture, or enemies walk beside the road instead of on it.
 #
-# An inward SPIRAL, not a serpentine: in from the left, once around the outside, then
-# back along a middle lane that dead-ends at the heart of the board. There is no exit —
-# an enemy that walks to the end of the lane has reached the base, and leaks there.
+# Produced by tools/trace_road.py: it casts rays from the keep at the centre of the spiral
+# and follows the band of pale cobble across them. Both ends are extrapolated — the straight
+# run in from the left edge is not an arc the ray-walk can start on, and the last approach is
+# too close to the keep for a band to separate from the building — so this is a tracing
+# checked by eye against the painting (map.gd's `show_road` draws it back over the art), not
+# a proof.
 #
-# This is the shape the original uses, read out of its own pathing map with
-# `python tools/extract_w3x.py "<map>.w3x" pathing` — see docs/element-td-data.md.
-# Element TD's arena is a rectangular spiral wound inward four times, with the buildable
-# ground in THICK blocks between the arms rather than in thin strips beside a lane. A
-# tower there sits with road on two or three sides of it, which is what makes range worth
-# paying for, and the run ends at the centre rather than off the far edge.
-#
-# We only get one turn of that spiral, because the original's arena is TALL: 2560x3776
-# units, which at WC3_RANGE_SCALE is 896x1321px against our 1536x864 world. We have the
-# width and two thirds of the height, and each further turn costs a lane plus the two
-# rows of grass beside it (80 + 176 = 256px of it).
-#
-# One turn still reproduces the original's coverage profile — `--dump-board` prints a
-# `raw` column measuring the uncapped ported ranges, which is the like-for-like against
-# the `pathing` dump: ours 12% / 28% / 98%, the original's 14% / 25% / 94% of the road
-# watched from the best single cell by Fire / the 750-unit elements / Light. Note what
-# that does NOT say: a spiral does not make a 700px tower reasonable, on our board or on
-# the original's. Balance.MAX_TOWER_RANGE is what does that, and it still has to.
-#
-# Geometry is bounded on the right by PLAY_RIGHT, not by WORLD_SIZE.x: the tower palette
-# is drawn over the last 240px of the world, so the road stays out of it too — a leg
-# behind the panel is a leg you watch enemies walk down through a menu.
-#
-# Every coordinate here is placed against the CELL TILING, which is anchored at the world
-# origin and steps by 96 — so a leg only earns cells on its outer side if a column centre
-# lands at least ROAD_CLEARANCE from it. The right leg is at 1112 rather than 1160 for
-# exactly that reason: at 1160 the column at 1200 sat 40px from the stone, was dropped, and
-# the strip between the road and the palette was 96px of grass nobody could build on. Eight
-# cells, invisible in a screenshot and obvious in --dump-board.
+# It replaces the spiral ported from Element TD's own pathing map. That geometry was measured
+# and this one is drawn; the trade was made deliberately when the art moved to a painted
+# board. The coverage table in docs/element-td-data.md describes the old board — --dump-board
+# reports this one.
 const PATH: Array = [
-	Vector2(-144, 120),
-	Vector2(1112, 120),
-	Vector2(1112, 744),
-	Vector2(136, 744),
-	Vector2(136, 392),
-	Vector2(920, 392),
+	Vector2(-144, 321),
+	Vector2(51, 326),
+	Vector2(66, 306),
+	Vector2(81, 330),
+	Vector2(110, 306),
+	Vector2(125, 325),
+	Vector2(140, 306),
+	Vector2(198, 309),
+	Vector2(213, 316),
+	Vector2(228, 334),
+	Vector2(243, 337),
+	Vector2(257, 333),
+	Vector2(272, 322),
+	Vector2(287, 340),
+	Vector2(346, 306),
+	Vector2(412, 247),
+	Vector2(452, 189),
+	Vector2(523, 154),
+	Vector2(588, 129),
+	Vector2(658, 121),
+	Vector2(720, 122),
+	Vector2(775, 131),
+	Vector2(827, 154),
+	Vector2(865, 164),
+	Vector2(898, 174),
+	Vector2(927, 178),
+	Vector2(959, 169),
+	Vector2(985, 188),
+	Vector2(1016, 206),
+	Vector2(1058, 194),
+	Vector2(1088, 209),
+	Vector2(1101, 242),
+	Vector2(1125, 272),
+	Vector2(1134, 302),
+	Vector2(1162, 326),
+	Vector2(1168, 358),
+	Vector2(1185, 391),
+	Vector2(1177, 425),
+	Vector2(1174, 459),
+	Vector2(1158, 489),
+	Vector2(1167, 539),
+	Vector2(1117, 549),
+	Vector2(1098, 574),
+	Vector2(1076, 599),
+	Vector2(1040, 615),
+	Vector2(1013, 653),
+	Vector2(983, 679),
+	Vector2(946, 683),
+	Vector2(910, 677),
+	Vector2(871, 694),
+	Vector2(834, 683),
+	Vector2(800, 664),
+	Vector2(762, 654),
+	Vector2(718, 647),
+	Vector2(675, 630),
+	Vector2(635, 605),
+	Vector2(589, 578),
+	Vector2(548, 541),
+	Vector2(501, 499),
+	Vector2(479, 444),
+	Vector2(493, 387),
+	Vector2(557, 341),
+	Vector2(596, 303),
+	Vector2(640, 274),
+	Vector2(709, 270),
+	Vector2(740, 254),
+	Vector2(788, 253),
+	Vector2(826, 263),
+	Vector2(845, 253),
+	Vector2(872, 264),
+	Vector2(892, 267),
+	Vector2(910, 271),
+	Vector2(927, 288),
+	Vector2(938, 306),
+	Vector2(948, 316),
+	Vector2(957, 325),
+	Vector2(969, 327),
+	Vector2(974, 339),
+	Vector2(988, 341),
+	Vector2(990, 354),
+	Vector2(990, 367),
+	Vector2(996, 376),
+	Vector2(981, 390),
+	Vector2(1005, 398),
+	Vector2(1024, 411),
+	Vector2(1008, 422),
+	Vector2(1006, 434),
+	Vector2(987, 437),
+	Vector2(996, 456),
+	Vector2(992, 472),
+	Vector2(980, 478),
+	Vector2(962, 473),
+	Vector2(957, 487),
+	Vector2(947, 497),
+	Vector2(933, 493),
+	Vector2(921, 487),
+	Vector2(910, 489),
+	Vector2(895, 502),
+	Vector2(882, 497),
+	Vector2(867, 496),
+	Vector2(849, 498),
+	Vector2(829, 496),
+	Vector2(806, 492),
+	Vector2(791, 479),
+	Vector2(775, 465),
+	Vector2(756, 449),
+	Vector2(755, 427),
+	Vector2(739, 405),
+	Vector2(773, 385),
+	Vector2(805, 364),
+	Vector2(866, 360),
+	Vector2(892, 341),
+	Vector2(917, 349),
+	Vector2(920, 402),
 ]
 
 # Grid placement: towers snap to cells drawn faintly on the grass, flush against
@@ -113,11 +200,56 @@ const HUD_BAR_HEIGHT := 40.0
 ## PLAY_RIGHT.
 const PLAY_TOP := WORLD_SIZE.y * (HUD_BAR_HEIGHT / SCREEN_SIZE.y)  # 48
 
-# Build cells are TILED across the whole play area and kept wherever they clear the road
-# by ROAD_CLEARANCE — see grid.gd. The old design listed explicit horizontal rows, which
-# only described a board whose road ran in straight horizontal legs; a spiral has
-# buildable ground in blocks that no row table can express.
-const CELL_HEIGHT := 88.0        ## Row height (px); rows step by this.
+# --- Free placement ------------------------------------------------------------
+#
+# There is NO BUILD GRID. A tower goes wherever the ground is clear: off the road, off the
+# scenery, and not on top of another tower. The board used to be a tiling of 96x88 cells,
+# which is a fine rule for a board drawn in code and the wrong one for a board that is a
+# painted picture — a grid of pads over hand-painted terrain reads as a spreadsheet laid on
+# a landscape, and it forces the art to line up with a lattice nobody drew.
+#
+# What replaces it is three distances, all in board px, all measured from a tower's centre.
+
+## A tower's footprint. Placement, overlap and the click target all use this one radius, so
+## what you can build on, what you can hit and what you can see are the same disc.
+const TOWER_RADIUS := 30.0
+## Clear of the stone by the tower's own bulk: the road is 80px wide, so a tower may sit
+## with its edge exactly against the kerb. Tighter than the old ROAD_CLEARANCE of 82, which
+## was not a design choice but an artefact of where a 96px cell could fall.
+const ROAD_KEEPOUT := ROAD_HALF + TOWER_RADIUS
+## Centre-to-centre spacing. Two towers at exactly 2*TOWER_RADIUS touch, which reads as one
+## blob at phone scale; a little air makes a row of towers countable.
+const TOWER_GAP := TOWER_RADIUS * 2.0 + 8.0
+
+## Scenery that BLOCKS building, as [centre, radius] in board px. FOUND IN THE PAINTING, not
+## invented: tools/trace_road.py's companion scan looks for teal water in the board art and
+## reports its clusters, and these are what it found — the lake in the lower left and the
+## pool the waterfall drops into.
+##
+## Only the water is listed. The trees and rocks the map is scattered with are small enough
+## that a tower standing among them reads as a tower in a wood, and every one of them added
+## here is a place the player is told "no" for a reason they cannot see at a glance.
+const OBSTACLES: Array = [
+	[Vector2(315, 715), 176.0],   # the lake and the pool the waterfall drops into
+]
+
+## True when a tower of TOWER_RADIUS may stand here. `others` is every tower already on the
+## board (main passes its Towers node's children); pass an empty array to ask only about
+## the terrain, which is what the coverage harness does.
+func can_build_at(pos: Vector2, others: Array = []) -> bool:
+	if pos.x - TOWER_RADIUS < 0.0 or pos.x + TOWER_RADIUS > PLAY_RIGHT:
+		return false
+	if pos.y - TOWER_RADIUS < PLAY_TOP or pos.y + TOWER_RADIUS > WORLD_SIZE.y:
+		return false
+	if dist_to_road(pos) < ROAD_KEEPOUT:
+		return false
+	for entry in OBSTACLES:
+		if pos.distance_to(entry[0]) < float(entry[1]) + TOWER_RADIUS:
+			return false
+	for other in others:
+		if other != null and pos.distance_to(other.position) < TOWER_GAP:
+			return false
+	return true
 
 # START_GOLD / START_LIVES moved to the Balance autoload with the rest of the economy —
 # see scripts/balance.gd. This file keeps the map geometry and the data tables.
@@ -377,7 +509,11 @@ const WAVE_TYPES := {
 	"tank":   {"name": "Tank",   "color": Color(0.45, 0.50, 0.55), "hp": 3.0, "spd": 0.6, "count": 0.4, "radius": 1.35},
 	"immune": {"name": "Immune", "color": Color(0.60, 0.62, 0.70), "hp": 1.15, "count": 0.85, "cc_immune": true},
 	"regen":  {"name": "Regen",  "color": Color(0.35, 0.75, 0.40), "hp": 1.0, "count": 0.8, "regen": 0.035},
-	"air":    {"name": "Air",    "color": Color(0.72, 0.78, 0.96), "air": true},
+	# 1.4 because a wingspan is not a height. Every other creep is a standing figure whose
+	# bounding box IS its body, so drawing that box 2.6 radii tall sizes the creature. The
+	# dragon's box is mostly wing — at 1.0 its body came out a third smaller than the single
+	# pose it replaced, and its health bar floated clear of it.
+	"air":    {"name": "Air",    "color": Color(0.72, 0.78, 0.96), "air": true, "radius": 1.4},
 	"split":  {"name": "Splitter","color": Color(0.85, 0.55, 0.25), "hp": 1.0, "count": 0.6, "split": 2, "radius": 1.15},
 }
 

@@ -73,11 +73,20 @@ const WC3_RANGE_SCALE := 0.35
 ## arrives through an element draw, one of 36 towers, deep into a run. Ours is on the
 ## palette at wave 1, so we cap: a tower you can place anywhere is not a placement.
 ##
-## 380 was chosen by measurement, not feel: it puts the longest towers at 44% of the road
-## and four towers to cover it, next to Fire's 12% and twelve. It also catches the
-## longest duals (Poison, Tech and Moon reach 481px uncapped), which face the same problem
-## for the same reason.
-const MAX_TOWER_RANGE := 380.0
+## 300 is measured, not felt. It was set on the first painted board, where it put the
+## longest towers at 41% of the road and four of them to cover 95% of it. The map has been
+## repainted since and the same cap now measures 51%, still four towers, against Fire's 18%
+## and twelve — the new spiral is longer (4023px against 3079) but its arms sit closer
+## together, which flatters a long reach. --dump-board is the check whenever the map changes.
+##
+## Two neighbouring values were measured and rejected. 380, the cap the generated board used,
+## let one Light tower watch 70% of the road and two cover the whole thing — no placement
+## decisions left. 260 drags Light down onto Water's 32%, and the longest range in the game
+## stops being a different tower.
+##
+## The cap also catches the longest duals (Poison, Tech and Moon reach 481px uncapped), which
+## have the same problem for the same reason.
+const MAX_TOWER_RANGE := 300.0
 
 ## Gold cost of upgrading a tower from `level` to `level + 1`.
 ## `build_cost` is ignored: in the map every element shares one cost ladder regardless
@@ -102,12 +111,10 @@ const INTEREST_RATE := 0.025
 const INTEREST_CAP := 400
 const LEAK_FREE_BONUS := 6        ## Bonus if no enemy reached the end this wave.
 
-## A few enemies still randomly fly on non-Air waves.
-const FLYER_START_WAVE := 3
-## Effective per-enemy chance. This used to be written `FLYER_CHANCE * 0.5` with
-## FLYER_CHANCE = 0.3 at the call site, so the named constant read as double the real
-## odds. Folded to the true value here; behaviour is unchanged.
-const FLYER_CHANCE := 0.15
+## Flying used to also be rolled per enemy on ground waves (15% from wave 3). That is gone:
+## the archetypes are painted now, and a painted goblin hung in the air is a goblin with a
+## drawing mistake, not a flyer. Air is the Air wave, and nothing else — which is also the
+## reading the map itself takes.
 
 ## Gold for calling a wave in early, by the wave number being skipped into.
 func early_call_bonus(wave: int) -> int:
