@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://coxcph6oshcc0"
-path="res://.godot/imported/split.png-cd8d8745ce368daf243279415cfc0ccb.ctex"
+uid="uid://8aa31of6l7xs"
+path="res://.godot/imported/split_7.png-2ab92519f070d37e7350ffca99310394.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/art/enemies/split.png"
-dest_files=["res://.godot/imported/split.png-cd8d8745ce368daf243279415cfc0ccb.ctex"]
+source_file="res://assets/art/enemies/split_7.png"
+dest_files=["res://.godot/imported/split_7.png-2ab92519f070d37e7350ffca99310394.ctex"]
 
 [params]
 
