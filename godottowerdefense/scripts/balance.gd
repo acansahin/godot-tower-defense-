@@ -111,12 +111,10 @@ const INTEREST_RATE := 0.025
 const INTEREST_CAP := 400
 const LEAK_FREE_BONUS := 6        ## Bonus if no enemy reached the end this wave.
 
-## A few enemies still randomly fly on non-Air waves.
-const FLYER_START_WAVE := 3
-## Effective per-enemy chance. This used to be written `FLYER_CHANCE * 0.5` with
-## FLYER_CHANCE = 0.3 at the call site, so the named constant read as double the real
-## odds. Folded to the true value here; behaviour is unchanged.
-const FLYER_CHANCE := 0.15
+## Flying used to also be rolled per enemy on ground waves (15% from wave 3). That is gone:
+## the archetypes are painted now, and a painted goblin hung in the air is a goblin with a
+## drawing mistake, not a flyer. Air is the Air wave, and nothing else — which is also the
+## reading the map itself takes.
 
 ## Gold for calling a wave in early, by the wave number being skipped into.
 func early_call_bonus(wave: int) -> int:

@@ -50,10 +50,6 @@ var armor_element: String = ""  ## Element matchup vs tower damage element ("" =
 ## Which WAVE_TYPES archetype this is ("normal", "fast", …). Set by WaveManager; the only
 ## thing that reads it is the painted sprite lookup, which is why an unset one is harmless.
 var kind: String = ""
-## True when this archetype is airborne BY NATURE (the Air wave), so its sprite is painted
-## with wings and must not be given the code-drawn pair as well. A ground creep that got
-## wings from the per-wave flyer roll leaves this false and keeps them.
-var has_own_wings: bool = false
 
 var _path: Array = []
 var _target_index: int = 1
@@ -338,12 +334,8 @@ func _draw() -> void:
 	if is_flying:
 		# The shadow is what says "this one is above the road", so every flyer keeps it.
 		draw_circle(Vector2(0, radius + 15.0), radius * 0.7, Color(0, 0, 0, 0.18))
-		if not (has_own_wings and Sprites.enemy(kind) != null):
-			# Across the middle of a painted creep; around the origin for a blob, which is
-			# where its body already is.
-			draw_set_transform(_ring_center(), 0.0, Vector2.ONE)
+		if Sprites.enemy(kind) == null:
 			_draw_wings()
-			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	else:
 		# Flat ground shadow.
 		draw_set_transform(Vector2(0, radius * 0.85), 0.0, Vector2(1.0, 0.4))
@@ -533,13 +525,12 @@ func _draw_crown(ci: CanvasItem) -> void:
 		ci.draw_circle(Vector2(cx, y - 16.0), 3.3, Color(0.9, 0.2, 0.2))  # gem tip
 	ci.draw_rect(Rect2(dx - wd, y, wd * 2.0, 7.0), Color(0, 0, 0, 0.3), false, 1.5)
 
-## Flapping wings, drawn behind the body for a flyer that has none of its own.
+## Flapping wings, drawn behind the blob for a flyer that has no art yet.
 ##
-## The Air archetype's sprite is painted mid-flight with its wings spread, so it must not get
-## these too. Every OTHER archetype can also be made to fly — wave_manager gives 15% of
-## ground creeps wings from wave 3 — and a painted goblin with no wings, hanging in the air,
-## says nothing about why the ground towers are missing it. Those keep the code wings, drawn
-## across the middle of the sprite rather than around its feet.
+## Only Air flies now, and the Air sprite is painted mid-flight with its wings spread — so on
+## a normal board these are never drawn. They are the fallback the whole art layer is built
+## on: delete `air.png` and the wave has to still read as flying, which a plain tinted circle
+## does not. Nothing else needs them, because nothing else leaves the ground.
 func _draw_wings() -> void:
 	var flap: float = sin(_wing_phase) * 9.0
 	var wing_col := Color(0.90, 0.93, 1.0, 0.9)

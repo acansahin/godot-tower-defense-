@@ -317,7 +317,7 @@ editing three files and hunting for un-named literals; it is now one file.
 - **`Enemy`** walks `Game.PATH`; on death it grants gold, on reaching the end it
   costs `life_cost` lives (1 normally, 10 for a boss). Both cases emit `removed`
   so the wave manager can count down. `make_flying()` marks it airborne
-  (squishier, faster, wings + shadow) — only towers with `can_hit_flying` can
+  (squishier, faster, shadow) — only towers with `can_hit_flying` can
   target it. `apply_slow()` / `apply_poison()` / `apply_stun()` drive the status
   effects (shown as blue / green / yellow rings); `armor_element` is the enemy's
   side of the element matchup (`Game.element_mult`) applied to incoming damage,
@@ -404,7 +404,7 @@ editing three files and hunting for un-named literals; it is now one file.
 | Enemy speed | `balance.gd` `BASE_SPEED_*` | `80 + 9·n` px/s, giving a ~45s wave-1 crossing. Tied to the ROAD LENGTH and nothing else reads it, so move these if the road changes |
 | Tower range cap | `balance.gd` `MAX_TOWER_RANGE` | 300px. **The only unfaithful number in the port.** Light and Darkness reach 2000 WC3 units (700px), which watches 99% of the road from one spot — as it does on the original's own arena, which is why this is a design choice and not a repair. Capped, they watch 51% and take four towers to cover 95% of the road, against Fire's 18% and twelve. The defs keep the real 2000; this caps what the board honours |
 | Wave scaling (`n` = wave) | `balance.gd` | HP `75 × 1.16^(n-1)` from the map. Count ramps `9 + 1.2·n` to the map's flat 28 — starting at 28 meant wave 1 spent 25s just spawning. Reward `3 + max(n/3, 1.10^(n-1))`; the flat 3 is ours, because the map's curve pays 1 gold a kill until wave 5, speed `60 + 6·n`, each × the archetype's multipliers |
-| Flyers (non-Air waves) | `wave_manager.gd` | from wave 3, 15% chance per enemy (halved on top of Air waves existing); `make_flying()` gives HP ×0.65, speed ×1.25 |
+| Flyers | `wave_manager.gd` | **the Air archetype only** — there is no per-enemy roll on ground waves any more; `make_flying()` gives HP ×0.65, speed ×1.25 |
 | Bosses | `game.gd` `WAVES` (`"boss": true` per entry) | HP ×6, speed ×0.6, reward ×10, costs 10 lives |
 | Economy: interest | `balance.gd` `INTEREST_RATE`/`INTEREST_CAP` | 2.5% of banked gold per wave cleared, capped at 400. The map pays 2.5% every 15s and has no cap; the cap is ours, so that hoarding gold never beats building |
 | Economy: leak-free bonus | `wave_manager.gd` `LEAK_FREE_BONUS` | +6 gold if no enemy reached the end that wave |
@@ -504,8 +504,9 @@ element.
 **Drawn in code** — every visual not listed above:
 - Everything an enemy wears over its sprite, and the whole enemy where none is painted
   (coloured blob with eyes; health bar; status rings for slow/poison/stun/immune; a white
-  pop on impact): `enemy.gd` `_draw()`. Flyers add a shadow and a flapping pair of wings —
-  except the Air archetype, which is painted mid-flight and already has its own.
+  pop on impact): `enemy.gd` `_draw()`. Flyers add a shadow; the flapping pair of wings is
+  only for a flyer with no art, since Air — the one archetype that flies — is painted
+  mid-flight with its own.
 - Towers with no sprite yet (element-coloured orb, muzzle flash), plus the level pips,
   upgrade chevron and red sell × that every tower carries painted or not; the shaded
   no-build overlay (`grid.gd`), projectiles, the drag ghost and the palette: their
