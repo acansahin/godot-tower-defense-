@@ -50,7 +50,10 @@ cell count, and per element how much of the road one tower watches and how many 
 takes to watch 95% of it — plus a `raw` column measuring the same with the range cap
 lifted), `--fill-board` (a tower on every cell at max level, 8x speed,
 auto-picks upgrades, prints each wave and the run-over line), `--show-choice` (pops the
-choice screen so its `_draw` can be exercised), `--shot` (saves one drawn frame to
+choice screen so its `_draw` can be exercised), `--air-pose` (parks eight Air creeps along
+the road on an EMPTY board so the flyer's drawing can be photographed — `--fill-board`
+buries the road and kills them at the spawn point, and a normal run never reaches the Air
+wave without leaking away all twenty lives first), `--shot` (saves one drawn frame to
 `user://shot.png` and prints the path — the only harness that shows you the board rather
 than describing it, so **drop `--headless` for this one**; `--shot:20` waits 20s first and
 lands in `shot_20.png`, and several may be passed at once to watch a run across waves),
@@ -291,14 +294,31 @@ python tools/extract_w3x.py "<map>.w3x" waves     # the 60-level HP curve + cree
 python tools/extract_w3x.py "<map>.w3x" pathing  # the arena: spiral shape, size, coverage
 ```
 
-`tools/` holds three more scripts, all built on the same rule — **no third-party
+`tools/` holds the rest of the pipeline, all built on the same rule — **no third-party
 dependency**, which is why `tools/png_reader.py` is a 100-line stdlib PNG decoder/encoder
 rather than Pillow:
 
 ```
 python tools/trace_road.py                        # re-derive Game.PATH + OBSTACLES from the board art
-python tools/cut_sprites.py <sheet> <dir> <name> <max_h>   # split a generated tier sheet into sprites
+python tools/cut_sprites.py <sheet> <dir> <name> <max_h>   # split a generated sheet into sprites
+python tools/key_white.py <in> <out>              # restore alpha to a sheet flattened onto white
+python tools/stitch_sheets.py <out> <a> <b>       # one cycle split across two files -> one sheet
+python tools/respace_frames.py <in> <out> --frames N   # separate frames that touch, by connectivity
 ```
+
+The last three exist because a generated sheet does not always arrive in the shape the cutter
+needs, and each failure is silent rather than loud:
+
+- **`key_white`** — a sheet saved without an alpha channel (PNG colour type 2) has no empty
+  scanlines at all, so the cutter returns the whole image as one frame. Check with the colour
+  type, not by eye: flattened white looks identical to transparent in most viewers.
+- **`stitch_sheets`** — twelve frames is a 1:6 canvas and generators refuse it, so a cycle
+  arrives as two sheets of six. Cutting them separately gives each half its OWN shared window,
+  and the creature changes size halfway through its cycle. Stitch first, then cut once.
+- **`respace_frames`** — when two frames overlap vertically the cutter silently returns one
+  fewer frame than was drawn. Raising `gap_tol` splits them and shears the thin extremities off
+  every other frame (on the Air cycle it cropped frame 1 from 322px to 267px, cutting the tips
+  off the raised wings). Re-spacing by connected component separates them with nothing cropped.
 
 The extracted result is written up in
 [docs/element-td-data.md](godottowerdefense/docs/element-td-data.md). **Change a ported

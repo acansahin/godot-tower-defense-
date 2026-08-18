@@ -80,6 +80,8 @@ func _ready() -> void:
 		_dump_tower_stats()
 	if OS.get_cmdline_user_args().has("--fill-board"):
 		_fill_board()
+	if OS.get_cmdline_user_args().has("--air-pose"):
+		_air_pose()
 	# TEMPORARY: answers the roguelite choice screen for you. Not decoration for --shot: the
 	# choice screen pauses the tree, and a paused tree stops the SceneTree timers every
 	# delayed harness waits on — so an unattended run simply stops at wave 3 and every later
@@ -296,6 +298,39 @@ func _dump_waves() -> void:
 		print("w%02d [%s] %-8s el=%-6s%s" % [n, src, String(def["type"]),
 				String(def.get("element", "-")), flags])
 	print("--- WAVE DUMP END (impure generated waves: %d) ---" % impure)
+
+## TEMPORARY verification harness: parks a row of Air creeps along the road with an empty
+## board, so the flyer's own drawing can be photographed. `--fill-board` cannot do this — it
+## buries the road under towers and kills every creep at its spawn point — and a normal run
+## does not reach the Air wave (6) without leaking away all twenty lives first.
+##
+## What it is for is the half of enemy.gd that numbers cannot check: the wingbeat carrier,
+## the trailing air strokes, and whether the health bar still sits over the creature once the
+## body is lifted off its anchor. Pair it with --shot, and WITHOUT --headless:
+##   Godot.exe --path <project> res://scenes/Main.tscn -- --air-pose --shot:3
+## Delete this and its call above once the flyer art lands.
+func _air_pose() -> void:
+	wave_manager.set_process(false)
+	var enemy_scene: PackedScene = load("res://scenes/Enemy.tscn")
+	var def: Dictionary = Game.WAVE_TYPES["air"]
+	# Spread along the path so several headings are on screen at once — the sprite is drawn
+	# facing screen-left and mirrored for the other way, and the streaks mirror with it, so
+	# one heading proves nothing about the other.
+	for i in range(8):
+		var e := enemy_scene.instantiate() as Enemy
+		e.setup(400.0, 30.0, 5, Color(def["color"]))
+		e.kind = "air"
+		# The same expression WaveManager._spawn_one uses. Hardcoding the base radius made this
+		# harness lie about size the moment the archetype was given a multiplier.
+		e.radius = Balance.ENEMY_BASE_RADIUS * float(def.get("radius", 1.0))
+		e.make_flying()
+		enemies_root.add_child(e)
+		var step := int(float(Game.PATH.size() - 2) * float(i) / 8.0) + 1
+		e.set_progress(step)
+		e.global_position = Game.PATH[step]
+		# Half of them damaged, so the health bar is visible against the lifted body.
+		if i % 2 == 1:
+			e.take_damage(150.0)
 
 ## TEMPORARY verification harness: covers every buildable cell with towers, cycling the
 ## roster, so a headless run actually exercises targeting, firing, the projectile pool and

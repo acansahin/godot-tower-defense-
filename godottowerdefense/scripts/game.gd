@@ -509,7 +509,11 @@ const WAVE_TYPES := {
 	"tank":   {"name": "Tank",   "color": Color(0.45, 0.50, 0.55), "hp": 3.0, "spd": 0.6, "count": 0.4, "radius": 1.35},
 	"immune": {"name": "Immune", "color": Color(0.60, 0.62, 0.70), "hp": 1.15, "count": 0.85, "cc_immune": true},
 	"regen":  {"name": "Regen",  "color": Color(0.35, 0.75, 0.40), "hp": 1.0, "count": 0.8, "regen": 0.035},
-	"air":    {"name": "Air",    "color": Color(0.72, 0.78, 0.96), "air": true},
+	# 1.4 because a wingspan is not a height. Every other creep is a standing figure whose
+	# bounding box IS its body, so drawing that box 2.6 radii tall sizes the creature. The
+	# dragon's box is mostly wing — at 1.0 its body came out a third smaller than the single
+	# pose it replaced, and its health bar floated clear of it.
+	"air":    {"name": "Air",    "color": Color(0.72, 0.78, 0.96), "air": true, "radius": 1.4},
 	"split":  {"name": "Splitter","color": Color(0.85, 0.55, 0.25), "hp": 1.0, "count": 0.6, "split": 2, "radius": 1.15},
 }
 

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://3q47n27on2d6"
-path="res://.godot/imported/air.png-673ad86abe6cb213dc9d01d491ce7020.ctex"
+uid="uid://clo73xr71n5va"
+path="res://.godot/imported/air_12.png-e9c7e28084bd4451f234092b2d4c51fd.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/art/enemies/air.png"
-dest_files=["res://.godot/imported/air.png-673ad86abe6cb213dc9d01d491ce7020.ctex"]
+source_file="res://assets/art/enemies/air_12.png"
+dest_files=["res://.godot/imported/air_12.png-e9c7e28084bd4451f234092b2d4c51fd.ctex"]
 
 [params]
 

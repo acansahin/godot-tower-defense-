@@ -25,8 +25,8 @@ Two attachments, and they do different jobs.
   light direction, its saturation ceiling, its edge softness. The tower sheets were generated
   twice because the first pass described the style in words and produced assets that were
   internally consistent and clearly from another game.
-- **The archetype's existing frame** — so the six new frames are the SAME CREATURE. This is
-  the harder half. Generating a cycle from a description gives six creatures that each look
+- **The archetype's existing frame** — so the twelve new frames are the SAME CREATURE. This
+  is the harder half. Generating a cycle from a description gives twelve creatures that look
   fine and do not match, and that reads on the board as a strobing flicker, not as a run.
 
   Which file that is depends on how far the archetype has got. `<archetype>` throughout this
@@ -51,7 +51,7 @@ python tools/cut_sprites.py <sheet.png> godottowerdefense/assets/art/enemies nor
 ```
 
 A single name on a multi-row sheet is taken as a name (not as a tier prefix), so this writes
-`normal_1.png` … `normal_6.png`, top row to bottom row.
+`normal_1.png` … `normal_12.png`, top row to bottom row.
 
 **Expect to need the fifth argument, `gap_tol`.** It is how many opaque samples a scanline
 may still carry and count as background. The first six-frame goblin came out as FIVE frames
@@ -78,10 +78,10 @@ creature itself, already painted. Study both: the board's camera angle, light di
 saturation and edge softness; and the creature's exact anatomy, armour, palette, weapon and
 proportions.
 
-Paint a game-asset sheet: SIX FRAMES OF A RUN CYCLE of THE CREATURE IN THE SECOND IMAGE,
-stacked as six rows, one frame per row, on a fully TRANSPARENT background.
+Paint a game-asset sheet: TWELVE FRAMES OF A RUN CYCLE of THE CREATURE IN THE SECOND
+IMAGE, stacked as twelve rows, one frame per row, on a fully TRANSPARENT background.
 
-IT MUST BE THE SAME CREATURE IN ALL SIX FRAMES. Same silhouette, same armour pieces in the
+IT MUST BE THE SAME CREATURE IN ALL TWELVE FRAMES. Same silhouette, same armour pieces in the
 same places, same colours, same weapon in the same hand, same size. Only the POSE changes.
 Treat the second image as the character sheet, not as inspiration.
 
@@ -112,9 +112,9 @@ last sheet failed on precisely this: measured frame to frame, the poses moved 10
 oversized final step is a visible stumble once every stride, and no number of frames fixes
 it.
 
-DRAW THE HEIGHT CHANGE. The body really is lower in frames 1 and 4 than in 3 and 6 — that
+DRAW THE HEIGHT CHANGE. The body really is lower in frames 3 and 9 than in 5 and 11 — that
 rise and fall is the bounce of the run and the game preserves it rather than flattening it.
-Do not draw six poses all standing at the same height.
+Do not draw twelve poses all standing at the same height.
 
 CRITICAL REQUIREMENTS (the reference images cannot show these — follow them exactly):
 - The creature faces SCREEN-LEFT in every frame — it moves left across the canvas.
@@ -130,12 +130,28 @@ CRITICAL REQUIREMENTS (the reference images cannot show these — follow them ex
 - Canvas tall and narrow — roughly 700 x 4200 pixels.
 ```
 
-### The Air frame list is different
+### Air is a wingbeat, not a stride — use this prompt instead
 
-`air` is the one archetype that flies, and its cycle is a **wingbeat, not a stride**. Replace
-the CYCLE block with:
+`air` is the one archetype that flies, so its cycle is a **wingbeat** and its body must NOT
+rise and fall (see "Why each constraint is there" below). Rather than hand-merging two blocks,
+here is the whole Air prompt, ready to paste:
 
 ```text
+[Attach TWO images: assets/art/board_source.png first, then
+assets/art/enemies/air.png.]
+
+The first attached image is the game board this creature flies over. The second is the
+creature itself, already painted. Study both: the board's camera angle, light direction,
+saturation and edge softness; and the creature's exact anatomy, wings, horns, palette and
+proportions.
+
+Paint a game-asset sheet: TWELVE FRAMES OF A WINGBEAT CYCLE of THE CREATURE IN THE SECOND
+IMAGE, stacked as twelve rows, one frame per row, on a fully TRANSPARENT background.
+
+IT MUST BE THE SAME CREATURE IN ALL TWELVE FRAMES. Same silhouette, same horns, same
+markings, same colours, same size. Only the WINGS move. Treat the second image as the
+character sheet, not as inspiration.
+
 THE CYCLE — TWELVE frames, top to bottom, ONE COMPLETE WINGBEAT down and back up:
 1.  Wings at their HIGHEST, fully raised above the body, about to sweep down.
 2.  Wings starting down, still well above the body.
@@ -150,19 +166,40 @@ THE CYCLE — TWELVE frames, top to bottom, ONE COMPLETE WINGBEAT down and back 
 11. Wings nearly at the top.
 12. Wings almost fully raised, one step short of frame 1 — so 12 leads straight back into 1.
 
-The body stays nearly still — do NOT move the creature up and down between frames; the game
-does that. Only the wings travel. The head, torso and tail keep the same posture throughout.
+THE BODY STAYS NEARLY STILL. Do NOT move the creature up and down between frames; the game
+does that itself and art that also rises and falls doubles it into a pogo. The head, torso,
+legs and tail keep the same posture throughout — only the wings travel.
+
+SPACE THE FRAMES EVENLY, AND CLOSE THE LOOP. Frame 12 must lead straight back into frame 1
+as smoothly as 1 leads into 2 — the game plays this on repeat forever, with no pause and no
+reset. Each step from one frame to the next must move the wings about the SAME amount. A
+wingbeat that hitches once a beat is as obvious as a stride that does.
+
+CRITICAL REQUIREMENTS (the reference images cannot show these — follow them exactly):
+- The creature faces SCREEN-LEFT in every frame — it moves left across the canvas.
+- Transparent background (alpha). No ground plane, no scenery, no backdrop, no clouds.
+- NO drop shadow and no cast shadow — the game draws its own, and breathes it against the
+  beat to say how high the creature is.
+- NOTHING may hang below the lowest point of the creature in any frame: no trailing tail
+  tip below the feet, no dangling chain, no dust, no motion streaks. The game hangs the
+  sprite from the middle of its lowest pixels, so anything down there moves it off the road.
+  Note frames 5 and 6 sweep the wings BENEATH the body — the wingtips become the lowest
+  pixels there, and that is fine, but nothing else may join them.
+- At least 60 px of completely empty rows between frames, and the frames must not touch.
+- Do not re-centre the frames: the creature keeps the same position on every row.
+- No text, no numbers, no labels, no UI, no frame borders, no grid lines.
+- ONE COLUMN: all twelve frames in a single vertical stack, not a grid.
+- Canvas tall and narrow — roughly 700 x 4200 pixels.
 ```
 
-Everything else in the template stands, including SPACE THE FRAMES EVENLY, AND CLOSE THE
-LOOP — a wingbeat that hitches once a beat is as obvious as a stride that does. Drop only the
-"DRAW THE HEIGHT CHANGE" paragraph, which is the exact opposite of what a flyer needs.
+Note there is no "DRAW THE HEIGHT CHANGE" paragraph here. That instruction is in the run-cycle
+template and is the exact opposite of what a flyer needs.
 
 ## Why each constraint is there
 
 Each of these is a defect the game measured or a stage of the pipeline, not a style opinion.
 
-- **Same creature in all six frames.** The cycle is played by swapping textures; anything that
+- **Same creature in all twelve frames.** The cycle is played by swapping textures; anything that
   differs between frames and is not the pose reads as flicker. This is the single hardest
   thing to get out of a generator and the reason for one sheet per creature.
 - **Facing screen-left.** `enemy.gd` mirrors the sprite through `_body.scale.x` (`_facing`)
@@ -200,16 +237,41 @@ both halves in the same window.
 
 ## After the sheet arrives
 
-1. Cut it, and CHECK THE ROW COUNT it prints — it must say 12:
+The Air cycle needed every one of steps 1-3 below, so check for them before assuming the
+sheet is ready — each failure is silent, and two of them look like a good sheet in a viewer.
+
+1. **Does it have an alpha channel?** A sheet saved without one has no empty scanlines at
+   all, and the cutter returns the whole image as a single frame. Flattened white is
+   indistinguishable from transparent by eye, so read the colour type — 6 is RGBA, 2 is not:
+   ```bash
+   python -c "import struct,sys;d=open(sys.argv[1],'rb').read();print('colortype',d[25])" <sheet>
+   ```
+   Re-export with transparency if you can. If you cannot: `python tools/key_white.py <in> <out>`
+   lifts it off the white by flood-filling from the border and solving the one-pixel
+   anti-aliased edge, which is what keeps a white rim off the silhouette.
+2. **Two sheets of six?** Join them before cutting, never after — cutting each half separately
+   gives each its own shared window and the creature changes size mid-cycle:
+   `python tools/stitch_sheets.py <out> <frames_1_6> <frames_7_12>`
+3. **Cut it, and CHECK THE ROW COUNT — it must say 12:**
    `python tools/cut_sprites.py <sheet> godottowerdefense/assets/art/enemies <name> 150 4`
-2. Keep the sheet as `_source_<name>_run.png` beside the frames.
-3. Delete the superseded frames for that archetype (a six-frame set replaces a two-frame one;
-   leaving `<name>.png` behind is harmless but leaving a stale `<name>_2.png` is not).
-4. Re-import:
+   If it says 11, two frames overlap vertically. Do NOT fix that by raising `gap_tol`: the
+   tolerance that separates them also shears the thin extremities off every other frame (on
+   the Air sheet it cropped frame 1 from 322px to 267px, cutting the tips off the raised
+   wings). Separate them by connectivity instead, then cut again with `gap_tol 0`:
+   `python tools/respace_frames.py <sheet> <spaced.png> --frames 12`
+4. Keep the sheet as `_source_<name>_run.png` (or `_wingbeat`) beside the frames.
+5. Delete the superseded frames for that archetype — a twelve-frame set replaces a two-frame
+   one, and a stale `<name>_2.png` left behind is counted as part of the new cycle.
+6. Re-import:
    `"C:\Program Files\Godot\Godot.exe.exe" --headless --path godottowerdefense --import`
-5. **Check the mipmaps.** A newly added PNG imports with `mipmaps/generate=false` and arrives
+7. **Check the mipmaps.** A newly added PNG imports with `mipmaps/generate=false` and arrives
    looking worse than the files beside it for a reason nothing in the code shows:
    `grep mipmaps/generate assets/art/enemies/*.import` — flip the new ones to `true` and
    re-import.
-6. There is no code change. `Sprites.pose_count()` counts the files and both carriers divide
-   their cycle by whatever it returns.
+8. **Look at it**, with `--air-pose` for a flyer or a timed `--shot` for a walker. The cycle
+   can be geometrically perfect and still read wrong: the Air dragon came out a third smaller
+   than the single pose it replaced, because a shared window sized for a full wingspan makes
+   the BODY a small part of the height the game scales by. The fix was a `"radius"` entry in
+   that archetype's `Game.WAVE_TYPES` row, not new art.
+9. There is no other code change. `Sprites.pose_count()` counts the files and both carriers
+   divide their cycle by whatever it returns.
