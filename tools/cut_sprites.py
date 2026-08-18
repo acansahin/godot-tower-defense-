@@ -69,15 +69,22 @@ def columns(img: Png, y0: int = 0, y1: int = -1, gap_tol: int = 0) -> list[tuple
     return runs
 
 
-def rows(img: Png) -> list[tuple[int, int]]:
-    """Bands of non-empty scanlines, so a multi-row sheet splits into one row per pose."""
+def rows(img: Png, gap_tol: int = 0) -> list[tuple[int, int]]:
+    """Bands of non-empty scanlines, so a multi-row sheet splits into one row per pose.
+
+    `gap_tol` is the same allowance `columns` takes, in the other axis: how many opaque
+    samples a scanline may still carry and count as background. A run cycle is the case that
+    needs it — the frames are the same creature at slightly different heights, and a raised
+    axe or a trailing boot crosses into the gap by a few pixels. At zero tolerance the two
+    frames either side of that come out as one 690px sprite.
+    """
     runs, start = [], None
     for y in range(img.height):
-        used = False
+        ink = 0
         for x in range(0, img.width, 3):
             if img.rgba(x, y)[3] > ALPHA_FLOOR:
-                used = True
-                break
+                ink += 1
+        used = ink > gap_tol
         if used and start is None:
             start = y
         elif not used and start is not None:
@@ -89,8 +96,8 @@ def rows(img: Png) -> list[tuple[int, int]]:
     return runs
 
 
-def cut(img: Png, x0: int, x1: int, y0: int = 0, y1: int = -1):
-    """Trim the slice to its opaque bounds and return (w, h, pixels, anchor_x)."""
+def bbox(img: Png, x0: int, x1: int, y0: int = 0, y1: int = -1):
+    """The opaque bounds of a slice as (left, top, right, bottom), or None if it is empty."""
     if y1 < 0:
         y1 = img.height
     top, bottom, left, right = y1, -1, x1, -1
@@ -101,13 +108,32 @@ def cut(img: Png, x0: int, x1: int, y0: int = 0, y1: int = -1):
                 bottom = max(bottom, y)
                 left = min(left, x)
                 right = max(right, x)
-    if bottom < 0:
+    return None if bottom < 0 else (left, top, right, bottom)
+
+
+def cut(img: Png, x0: int, x1: int, y0: int = 0, y1: int = -1, box=None):
+    """Copy a slice out and return (w, h, pixels, anchor_x).
+
+    Trimmed to its own opaque bounds by default. Pass `box` — an explicit
+    (left, top, right, bottom) in sheet coordinates — to take a FIXED window instead, which
+    is what an animation cycle needs: see `shared_boxes`.
+    """
+    if y1 < 0:
+        y1 = img.height
+    found = box if box is not None else bbox(img, x0, x1, y0, y1)
+    if found is None:
         return None
+    left, top, right, bottom = found
     w, h = right - left + 1, bottom - top + 1
     out = bytearray(w * h * 4)
     for y in range(h):
+        sy = top + y
         for x in range(w):
-            r, g, b, a = img.rgba(left + x, top + y)
+            sx = left + x
+            if 0 <= sx < img.width and 0 <= sy < img.height:
+                r, g, b, a = img.rgba(sx, sy)
+            else:
+                r = g = b = a = 0  # a shared box may reach past the sheet; that part is empty
             i = (y * w + x) * 4
             out[i], out[i + 1], out[i + 2], out[i + 3] = r, g, b, a
     # Where the sprite meets the ground: the middle of the lowest opaque row.
@@ -157,6 +183,34 @@ def box_downscale(w, h, pixels, target_h):
     return tw, th, bytes(out)
 
 
+def shared_boxes(found: dict) -> dict:
+    """One window per creature, big enough for every frame of its cycle.
+
+    Cutting each frame to its OWN alpha bounds is right for a cast of separate creatures and
+    wrong for an animation, because the frames of a run do not have the same bounds — a
+    trailing leg reaches back and down, an axe swings forward. Trimmed independently, each
+    frame is then hung in the game by ITS OWN ground anchor and drawn at ITS OWN scale, and
+    the creature jumps forward and swells the moment that leg extends. The measured spread on
+    the first six-frame goblin was an anchor 89% of the way to the right on one frame against
+    45% on another, and a 26% range in height.
+
+    So a cycle is cut on one window instead: the union of the frames' widths, the tallest
+    frame's height, and each frame BOTTOM-ALIGNED inside it — the lowest pixel is the foot on
+    the ground, which is the one thing every frame of a run has in common. Every file comes
+    out the same size, so one anchor and one scale serve the whole cycle, and what still
+    differs between them — the lean, the reach, the rise of the body — is the animation.
+    """
+    out: dict = {}
+    for i in {col for _r, col in found}:
+        frames = {r: b for (r, col), b in found.items() if col == i}
+        left = min(b[0] for b in frames.values())
+        right = max(b[2] for b in frames.values())
+        height = max(b[3] - b[1] + 1 for b in frames.values())
+        for r, b in frames.items():
+            out[(r, i)] = (left, b[3] - height + 1, right, b[3])
+    return out
+
+
 def main() -> int:
     if len(sys.argv) < 4:
         print(__doc__)
@@ -172,26 +226,32 @@ def main() -> int:
     # (the reliable way to get six frames that still look like the same creature) without
     # writing `normal,` with a trailing comma to force it.
     names = [n for n in prefix.split(",") if n] if "," in prefix else []
-    if not names and len(rows(img)) > 1:
+    if not names and len(rows(img, gap_tol)) > 1:
         names = [prefix]
-    bands = rows(img) if names else [(0, img.height)]
+    bands = rows(img, gap_tol) if names else [(0, img.height)]
     print(f"  {os.path.basename(sheet)}: {img.width}x{img.height}, {len(bands)} row(s)")
-    # Cut everything first, then scale, because the cap for a column depends on its TALLEST
-    # pose — see below.
-    pieces: dict = {}
+    # Find every frame's own bounds first, then decide on ONE window per creature, then cut.
+    # The window is the point of the whole pass — see shared_boxes.
+    found: dict = {}
     for r, (y0, y1) in enumerate(bands, start=1):
         runs = columns(img, y0, y1, gap_tol)
         if names and len(runs) != len(names):
             print(f"    ! row {r} has {len(runs)} sprites but {len(names)} names were given")
         for i, (x0, x1) in enumerate(runs, start=1):
-            piece = cut(img, x0, x1, y0, y1)
-            if piece is not None:
-                pieces[(r, i)] = piece
-    # Every pose of ONE creature must come out at ONE scale. Their trimmed boxes differ —
-    # an extended leg makes a pose taller — so capping each to the same pixel height would
-    # shrink the taller pose back down, and the creature would visibly pulse with every
-    # step. Scaling a column by its own tallest pose keeps the difference, which is the
-    # bob of the walk itself.
+            b = bbox(img, x0, x1, y0, y1)
+            if b is not None:
+                found[(r, i)] = b
+    boxes = shared_boxes(found) if len(bands) > 1 else None
+    pieces: dict = {}
+    for key, b in found.items():
+        piece = cut(img, 0, img.width, 0, img.height,
+                    box=boxes[key] if boxes is not None else b)
+        if piece is not None:
+            pieces[key] = piece
+    # Scale every frame of ONE creature by the same number. With a shared window they are all
+    # the same size already, so this just applies the cap; on a single-row sheet (a tower tier
+    # ladder, or a cast of separate creatures) the boxes really do differ and scaling by the
+    # tallest is what keeps a pair of poses from pulsing.
     tallest: dict = {}
     for (r, i), (w, h, _px, _a) in pieces.items():
         tallest[i] = max(tallest.get(i, 0), h)

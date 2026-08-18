@@ -19,6 +19,7 @@ const ENEMY_DIR := "res://assets/art/enemies/"
 static var _textures: Dictionary = {}  ## path -> Texture2D or null
 static var _anchors: Dictionary = {}   ## path -> Vector2 in texture pixels
 static var _cycle: Dictionary = {}     ## creep kind -> number of painted poses
+static var _heights: Dictionary = {}   ## path -> standing height in texture pixels
 
 ## The sprite for an element at a level, or null if that one has not been painted yet.
 static func tower(element: String, level: int) -> Texture2D:
@@ -93,6 +94,28 @@ static func anchor(texture: Texture2D) -> Vector2:
 			else image.get_width() * 0.5
 	var found := Vector2(centre, y + 1)
 	_anchors[path] = found
+	return found
+
+## How tall the creature actually STANDS in this texture, in pixels: from its ground row up
+## to its highest ink, not the height of the file.
+##
+## Those were the same number while every sprite was trimmed to its own bounds. A run cycle
+## is not: its frames are cut on ONE window, tall enough for the frame where a leg reaches
+## furthest back, with the figure bottom-aligned inside it — that empty band above the head
+## IS the bounce of the run, and it is what a fixed window buys. Scaling by the file height
+## would therefore hand a fifth of the creep's drawn size to empty air, and the whole roster
+## would shrink the day it was animated. Unchanged for a single trimmed sprite, where the
+## first row already has ink.
+static func figure_height(texture: Texture2D) -> float:
+	var path := texture.resource_path
+	if _heights.has(path):
+		return _heights[path]
+	var image := texture.get_image()
+	var top := 0
+	while top < image.get_height() - 1 and not _row_has_ink(image, top):
+		top += 1
+	var found := float(anchor(texture).y - top)
+	_heights[path] = found
 	return found
 
 ## Horizontal middle of one row's opaque span, or -1 if the row is empty.

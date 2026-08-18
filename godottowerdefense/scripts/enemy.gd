@@ -470,12 +470,16 @@ func _draw_body(ci: CanvasItem) -> void:
 ## mud. The element instead reads from the ring drawn on the ground beneath it (see _draw).
 func _draw_sprite(ci: CanvasItem, art: Texture2D) -> void:
 	var size := art.get_size()
-	var anchor := Sprites.anchor(art)
-	# Scale from the FIRST pose's height, not this one's. The poses of a walk cycle differ
-	# in height — a leg reaching forward lowers the figure, which is the bob of the step —
-	# and fitting each pose to the same drawn height would cancel exactly that, leaving a
-	# creature that pulses in size instead of walking.
-	var scale := (radius * SPRITE_HEIGHT_PER_RADIUS) / Sprites.enemy(kind, 0).get_size().y
+	# Hung and scaled off the FIRST frame, not this one — one anchor and one scale for the
+	# whole cycle. A cycle is cut on a single window with its frames bottom-aligned inside it
+	# (cut_sprites.py `shared_boxes`), precisely so this is possible: measuring each frame
+	# separately hangs the creature by whatever happens to be lowest in it, which on the frame
+	# where the trailing leg reaches back is that boot, and the goblin jumps forward once per
+	# stride. `figure_height` rather than the file height, because the window is as tall as the
+	# LONGEST frame and the empty band above the head in the others is the bounce itself.
+	var first := Sprites.enemy(kind, 0)
+	var anchor := Sprites.anchor(first)
+	var scale := (radius * SPRITE_HEIGHT_PER_RADIUS) / Sprites.figure_height(first)
 	var where := Rect2(Vector2(-anchor.x * scale, -anchor.y * scale), size * scale)
 	# Feet a little below the walked point, so the creep stands ON the road rather than
 	# behind it — the towers get the same nudge, scaled here because creeps vary in size.
@@ -507,11 +511,14 @@ func _head_y() -> float:
 ## therefore hangs it off to one side of the creature it belongs to. Mirrored with the
 ## facing, since the lean mirrors with it.
 func _visual_dx() -> float:
-	var art := Sprites.enemy(kind)
+	var art := Sprites.enemy(kind, 0)
 	if art == null:
 		return 0.0
+	# Same anchor and same scale the sprite itself is drawn with — see _draw_sprite. On a
+	# cycle this is the middle of the shared window, which is the middle of everywhere the
+	# creature goes across its stride, and is what the overlay should sit over.
 	var size := art.get_size()
-	var scale := (radius * SPRITE_HEIGHT_PER_RADIUS) / size.y
+	var scale := (radius * SPRITE_HEIGHT_PER_RADIUS) / Sprites.figure_height(art)
 	return (size.x * 0.5 - Sprites.anchor(art).x) * scale * _facing
 
 ## Middle of the drawn creature, which the status rings are struck around.

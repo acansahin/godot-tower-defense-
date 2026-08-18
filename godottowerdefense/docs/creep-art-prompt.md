@@ -45,9 +45,21 @@ python tools/cut_sprites.py <sheet.png> godottowerdefense/assets/art/enemies nor
 ```
 
 A single name on a multi-row sheet is taken as a name (not as a tier prefix), so this writes
-`normal_1.png` … `normal_6.png`, top row to bottom row. Add a `gap_tol` argument (the fifth,
-e.g. `12`) only if the subject's silhouette reaches over the empty gap — that was needed for
-the dragon's wingspan on a multi-COLUMN sheet and should not be needed here.
+`normal_1.png` … `normal_6.png`, top row to bottom row.
+
+**Expect to need the fifth argument, `gap_tol`.** It is how many opaque samples a scanline
+may still carry and count as background. The first six-frame goblin came out as FIVE frames
+at zero tolerance: the raised axe of one frame crossed into the gap above it by a few pixels
+and welded two frames into one 690px sprite. `4` fixed it. Check the tool's own line — it
+prints how many rows it found — before looking at anything else:
+
+```
+python tools/cut_sprites.py <sheet.png> godottowerdefense/assets/art/enemies normal 150 4
+```
+
+The frames of a cycle are cut on ONE shared window, not trimmed individually, and they all
+come out the same pixel size. That is deliberate and it is what "Why each constraint is
+there" below means about the anchor.
 
 ## The template
 
@@ -131,10 +143,14 @@ Each of these is a defect the game measured or a stage of the pipeline, not a st
   ground from the median of its bottom 4% of rows. A trailing cape or a dragged blade puts
   that point under the cape, and the creature walks beside the road instead of on it. The
   towers had the same defect from asymmetric rubble; naming it in the prompt fixed it.
-- **Draw the height change.** `cut_sprites.py` scales every frame of one creature by that
-  creature's TALLEST frame, deliberately — capping each frame to the same pixel height would
-  squash the tall ones back down and cancel exactly the bounce being asked for. So a shorter
-  contact pose stays shorter, and the drawn height difference survives into the game.
+- **Draw the height change.** The frames of a cycle are cut on one shared window — as wide as
+  the widest frame, as tall as the tallest, with each frame bottom-aligned inside it — so the
+  files are identical in size and the game hangs the whole cycle by ONE anchor at ONE scale.
+  What still differs between the files is where the creature sits inside that window, and
+  that is the animation. Cutting each frame to its own bounds instead is what the first
+  six-frame goblin did, and it measured an anchor 89% of the way right on the frame where the
+  trailing leg reaches back against 45% on another: the creature jumps forward and swells
+  once per stride. So the rise and fall you draw is preserved exactly; draw it.
 - **The body stays still on the Air sheet.** `enemy.gd` `_animate_flight()` already lifts the
   creature on the downstroke and drops it between beats, and breathes the ground shadow
   against that motion. Art that also rises and falls doubles it and the dragon pogos.
