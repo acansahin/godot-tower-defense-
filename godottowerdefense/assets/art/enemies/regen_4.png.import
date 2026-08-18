@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cnrs0lfodud73"
-path="res://.godot/imported/regen.png-e4ff7c00bce8c7579c5742f9c1e52244.ctex"
+uid="uid://wcpk6gw5d3d5"
+path="res://.godot/imported/regen_4.png-eab42dfd6168a735f3339731369f39d1.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/art/enemies/regen.png"
-dest_files=["res://.godot/imported/regen.png-e4ff7c00bce8c7579c5742f9c1e52244.ctex"]
+source_file="res://assets/art/enemies/regen_4.png"
+dest_files=["res://.godot/imported/regen_4.png-eab42dfd6168a735f3339731369f39d1.ctex"]
 
 [params]
 
