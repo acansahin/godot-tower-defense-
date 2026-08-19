@@ -290,7 +290,7 @@ func _process(delta: float) -> void:
 	# without one gets its own say via wants_redraw().
 	var up_ready := _upgrade_ready()
 	if target != null or _recoil > 0.0 or up_ready or up_ready != _was_upgrade_ready \
-			or _behavior.wants_redraw():
+			or element == "fire" or _behavior.wants_redraw():
 		queue_redraw()
 	_was_upgrade_ready = up_ready
 	_behavior.tick(self, delta, target)
@@ -370,6 +370,13 @@ const Sprites := preload("res://scripts/sprites.gd")
 ## a tower on the reference art is at most 19%. Fixing the height fixes the silhouette and
 ## leaves the widths where they belong, around 60-85px over a 60px footprint.
 const SPRITE_HEIGHT: Array = [78.0, 92.0, 106.0, 120.0, 138.0]
+const FIRE_EFFECT_FRAMES := 12
+const FIRE_EFFECT_FPS := 12.0
+## Bottom of the central brazier flame in tower-local board pixels, measured from each
+## painted Fire tier. The fixed anchors keep the masonry perfectly still while only the
+## flame changes pose.
+const FIRE_FLAME_BASE_Y: Array = [-38.0, -52.0, -69.0, -80.0, -90.0]
+const FIRE_FLAME_HEIGHT: Array = [34.0, 34.0, 34.0, 36.0, 42.0]
 
 func _draw() -> void:
 	# Range indicator in the element's colour: quiet by default so a full board stays
@@ -385,6 +392,8 @@ func _draw() -> void:
 	var art := Sprites.tower(element, level)
 	if art != null:
 		_draw_sprite(art)
+		if element == "fire":
+			_draw_fire_flame()
 		_draw_level_pips(element_color.lightened(0.35))
 		_draw_sell_button()
 		return
@@ -426,6 +435,23 @@ func _draw_sprite(art: Texture2D) -> void:
 	# rather than behind it.
 	where.position.y += 10.0
 	draw_texture_rect(art, where, false)
+
+## Animated overlay for the Fire tower's central brazier. The source tower remains one
+## stable painted sprite; swapping only this small transparent layer avoids the base wobble
+## that full-tower animation frames would introduce at the ground anchor.
+func _draw_fire_flame() -> void:
+	var phase := float(get_instance_id() % FIRE_EFFECT_FRAMES)
+	var frame := int(floor(Time.get_ticks_msec() * 0.001 * FIRE_EFFECT_FPS + phase)) \
+			% FIRE_EFFECT_FRAMES
+	var flame := Sprites.effect("fire_flame", frame)
+	if flame == null:
+		return
+	var tier := clampi(level, 1, FIRE_FLAME_BASE_Y.size()) - 1
+	var height: float = FIRE_FLAME_HEIGHT[tier]
+	var width := height * flame.get_width() / flame.get_height()
+	var base_y: float = FIRE_FLAME_BASE_Y[tier]
+	var where := Rect2(Vector2(-width * 0.5, base_y - height), Vector2(width, height))
+	draw_texture_rect(flame, where, false, Color(1.0, 1.0, 1.0, 0.82))
 
 ## The classic turret: barrel + element orb, aimed at the target and kicked back while
 ## firing. Public because BoltBehavior draws it; kept here rather than in the behavior
