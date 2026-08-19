@@ -99,9 +99,9 @@ func upgrade_cost(_build_cost: int, level: int) -> int:
 # --- Wave pacing + economy (was wave_manager.gd:12-22) -------------------------
 
 const PREP_TIME := 4.0            ## Delay between waves.
-## Delay before wave 1 only. Longer than the rest: a first-time player has to read the
-## palette, understand that towers are dragged, and pick a cell — 4 seconds is not enough
-## to do that, and starting the tutorial wave before a single tower exists teaches nothing.
+## Delay before wave 1 only. Training teaches the controls, but the endless run opens on a
+## different board with all six towers visible; four seconds is still too short to read the
+## palette, choose a coverage spot and place the first defence.
 const FIRST_PREP_TIME := 12.0
 ## Banked gold earns this each wave. The map pays 2.5% every 15 seconds and lets you
 ## research the rate upward; a wave is roughly one interest tick there, so the rate

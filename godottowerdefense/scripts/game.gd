@@ -243,8 +243,19 @@ func can_build_at(pos: Vector2, others: Array = []) -> bool:
 		return false
 	if dist_to_road(pos) < ROAD_KEEPOUT:
 		return false
-	for entry in OBSTACLES:
+	for entry in active_obstacles:
 		if pos.distance_to(entry[0]) < float(entry[1]) + TOWER_RADIUS:
+			return false
+	# A board may expose only a few painted clearings. The main board leaves this empty and
+	# keeps free placement; the training board fills it so its dense forest really is closed
+	# ground instead of merely looking closed.
+	if not active_build_zones.is_empty():
+		var inside_zone := false
+		for entry in active_build_zones:
+			if pos.distance_to(entry[0]) <= float(entry[1]) - TOWER_RADIUS:
+				inside_zone = true
+				break
+		if not inside_zone:
 			return false
 	for other in others:
 		if other != null and pos.distance_to(other.position) < TOWER_GAP:
@@ -498,9 +509,8 @@ const DUAL_ELEMENT_LEVEL := 2
 #   name, color, hp, spd, count, radius, cc_immune, regen (frac of max hp/s),
 #   split (children on death), air (all flyers).
 const WAVE_TYPES := {
-	## Wave 1 only. Few, slow and soft enough that a single tower clears it comfortably —
-	## its job is to let the player watch a tower acquire, fire and kill without pressure
-	## while the tutorial hints run. Never picked by the generator.
+	## Training scene only. Few, slow and soft enough that a single tower clears it
+	## comfortably. Never used by the endless-wave table or generator.
 	"tutorial": {"name": "Scout", "color": Color(0.80, 0.55, 0.45),
 			"hp": 0.45, "spd": 0.7, "count": 0.5},
 	"normal": {"name": "Normal", "color": Color(0.85, 0.30, 0.30)},
@@ -522,14 +532,15 @@ const WAVE_TYPES := {
 ## These exist so the first minutes are *taught* rather than rolled: each new mechanic
 ## arrives on its own wave, in a deliberate order, instead of whenever the dice say.
 ##
-## Wave 1 is the tutorial. Then one idea at a time: speed, numbers, the element matchup,
-## flyers, CC immunity, regeneration, splitting — and the first boss on 10, which is the
-## cadence the generator keeps forever after.
+## The interactive tutorial now runs on its own map before Main. This table therefore starts
+## with a gentle REAL wave, then introduces one idea at a time: speed, numbers, the element
+## matchup, flyers, CC immunity, regeneration, splitting — and the first boss on 10, which
+## is the cadence the generator keeps forever after.
 ##
 ## "element" (optional) is the wave's armor element (empty/absent = neutral); early waves
 ## and all Air waves stay neutral so element colour doesn't clash with the archetype tint.
 const WAVES: Array = [
-	{"type": "tutorial"},                              # 1  — learn to build
+	{"type": "normal", "count": 0.65},              # 1  — first real wave, still gentle
 	{"type": "normal"},                                # 2  — a real wave, still gentle
 	{"type": "fast"},                                  # 3  — speed
 	{"type": "swarm"},                                 # 4  — numbers
@@ -735,31 +746,56 @@ var wave_reached: int = 0
 # The all-time best wave now lives in Meta, where it is persisted along with the rest of
 # the permanent progression — see Meta.best_wave.
 
-## Cumulative distance from PATH[0] to each waypoint, built once in _ready(). Towers
+## The active board profile. Main uses PATH/OBSTACLES; the training scene swaps in the
+## separate painted map's open road and its deliberately scarce build clearings. Keeping the
+## profile here means Enemy movement, targeting progress and placement all read ONE path.
+var active_path: Array = []
+var active_obstacles: Array = []
+var active_build_zones: Array = []
+
+## Cumulative distance from active_path[0] to each waypoint. Towers
 ## rank enemies by how far along the road they are (the First / Last targeting modes)
 ## off this table, so no enemy has to carry its own odometer.
 var _path_cum: PackedFloat32Array = PackedFloat32Array()
 
 func _ready() -> void:
-	_path_cum.resize(PATH.size())
-	for i in range(1, PATH.size()):
-		_path_cum[i] = _path_cum[i - 1] + (PATH[i] as Vector2).distance_to(PATH[i - 1])
+	use_main_board()
+
+## Restores the endless-run board. Called by Menu/Main as well as on leaving training, so a
+## scene reload can never inherit the short tutorial road from the scene before it.
+func use_main_board() -> void:
+	configure_board(PATH, OBSTACLES)
+
+## Installs one board's gameplay geometry. The painting itself belongs to that scene's Map
+## node; this is only the geometry every gameplay system must agree on.
+func configure_board(path: Array, obstacles: Array = [], build_zones: Array = []) -> void:
+	if path.size() < 2:
+		push_error("Game.configure_board needs at least two path points")
+		return
+	active_path = path.duplicate(true)
+	active_obstacles = obstacles.duplicate(true)
+	active_build_zones = build_zones.duplicate(true)
+	_path_cum = PackedFloat32Array()
+	_path_cum.resize(active_path.size())
+	for i in range(1, active_path.size()):
+		_path_cum[i] = _path_cum[i - 1] \
+				+ (active_path[i] as Vector2).distance_to(active_path[i - 1])
 
 ## How far along the road a walker is, in pixels — higher means closer to the exit.
 ## `target_index` is the waypoint it is currently heading for, `pos` where it is now.
 ## Since enemies walk each leg in a straight line, the distance back to the previous
 ## waypoint is exactly how far into that leg they are.
 func path_progress(target_index: int, pos: Vector2) -> float:
-	var i: int = clampi(target_index, 1, PATH.size() - 1)
-	return _path_cum[i - 1] + pos.distance_to(PATH[i - 1])
+	var i: int = clampi(target_index, 1, active_path.size() - 1)
+	return _path_cum[i - 1] + pos.distance_to(active_path[i - 1])
 
 ## Shortest distance from `p` to the road centre-line. Shared because two very
 ## different things need it: the build grid rejects cells that would sit on the
 ## stone, and the map scatters its flora only where the road is not.
 func dist_to_road(p: Vector2) -> float:
 	var best := INF
-	for i in range(PATH.size() - 1):
-		best = minf(best, _dist_point_segment(p, PATH[i], PATH[i + 1]))
+	for i in range(active_path.size() - 1):
+		best = minf(best, _dist_point_segment(p, active_path[i], active_path[i + 1]))
 	return best
 
 func _dist_point_segment(p: Vector2, a: Vector2, b: Vector2) -> float:

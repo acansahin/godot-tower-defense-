@@ -40,7 +40,7 @@ func _draw() -> void:
 		_draw_traced_road()
 
 func _draw_traced_road() -> void:
-	var path: Array = Game.PATH
+	var path: Array = Game.active_path
 	for i in range(path.size() - 1):
 		draw_line(path[i], path[i + 1], Color(1.0, 0.25, 0.25, 0.85), 3.0, true)
 	for p in path:
