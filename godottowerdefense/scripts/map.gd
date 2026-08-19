@@ -25,9 +25,9 @@ func _ready() -> void:
 	# still one that samples between pixels, so it gets the same filtering as the towers.
 	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	# The board is the only thing on screen that never redraws, which is what makes a shader
-	# the right tool for moving its water: the animation happens per pixel on the GPU and
-	# costs this node nothing per frame. Built here rather than saved into the scene so the
-	# mask and the board it was derived from stay next to each other in one file.
+	# the right tool for moving its water: layered surface currents and the waterfall happen
+	# per pixel on the GPU and cost this node nothing per frame. Built here rather than saved
+	# into the scene so the mask and the board it was derived from stay together.
 	var mat := ShaderMaterial.new()
 	mat.shader = WATER_SHADER
 	mat.set_shader_parameter("water_mask", WATER_MASK)
