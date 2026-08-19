@@ -343,7 +343,6 @@ func fire_bolt(target: Enemy, damage_mult: float = 1.0) -> void:
 	if not is_instance_valid(_proj_pool):
 		_proj_pool = get_tree().current_scene.get_node("Projectiles")
 	var p := _proj_pool.acquire() as Projectile
-	p.setup(global_position, target, damage * damage_mult)
 	p.color = element_color
 	p.element = element
 	p.hits_flying = can_hit_flying
@@ -359,6 +358,19 @@ func fire_bolt(target: Enemy, damage_mult: float = 1.0) -> void:
 	p.execute_chance = execute_chance
 	p.gold_on_kill = gold_on_kill
 	p.life_on_kill_chance = life_on_kill_chance
+	p.setup(_projectile_origin(), target, damage * damage_mult)
+
+## Painted Fire towers have no swivelling barrel: their visible emitter is the brazier at
+## the top. Launching from the Node2D origin made every fireball appear at the masonry's
+## feet. Other tower families retain their established origin until their own painted
+## sockets are measured.
+func _projectile_origin() -> Vector2:
+	if element == "fire" and Sprites.tower(element, level) != null:
+		var tier := clampi(level, 1, FIRE_FLAME_BASE_Y.size()) - 1
+		var socket := Vector2(0.0,
+				float(FIRE_FLAME_BASE_Y[tier]) - float(FIRE_FLAME_HEIGHT[tier]) * 0.42)
+		return to_global(socket)
+	return global_position
 
 const Sprites := preload("res://scripts/sprites.gd")
 
@@ -436,22 +448,32 @@ func _draw_sprite(art: Texture2D) -> void:
 	where.position.y += 10.0
 	draw_texture_rect(art, where, false)
 
-## Animated overlay for the Fire tower's central brazier. The source tower remains one
-## stable painted sprite; swapping only this small transparent layer avoids the base wobble
-## that full-tower animation frames would introduce at the ground anchor.
+## Animated overlay for the Fire tower's central brazier. Every pose keeps the shared canvas
+## produced by the cutter, so a wider flame remains wider instead of being squeezed into the
+## first frame's proportions. Lightweight procedural sparks bridge the discrete poses.
 func _draw_fire_flame() -> void:
-	var phase := float(get_instance_id() % FIRE_EFFECT_FRAMES)
-	var frame := int(floor(Time.get_ticks_msec() * 0.001 * FIRE_EFFECT_FPS + phase)) \
+	var tier := clampi(level, 1, FIRE_FLAME_BASE_Y.size()) - 1
+	var height: float = FIRE_FLAME_HEIGHT[tier]
+	var base_y: float = FIRE_FLAME_BASE_Y[tier]
+	var frame_phase := float(get_instance_id() % FIRE_EFFECT_FRAMES)
+	var frame := int(floor(Time.get_ticks_msec() * 0.001 * FIRE_EFFECT_FPS + frame_phase)) \
 			% FIRE_EFFECT_FRAMES
 	var flame := Sprites.effect("fire_flame", frame)
 	if flame == null:
 		return
-	var tier := clampi(level, 1, FIRE_FLAME_BASE_Y.size()) - 1
-	var height: float = FIRE_FLAME_HEIGHT[tier]
 	var width := height * flame.get_width() / flame.get_height()
-	var base_y: float = FIRE_FLAME_BASE_Y[tier]
 	var where := Rect2(Vector2(-width * 0.5, base_y - height), Vector2(width, height))
-	draw_texture_rect(flame, where, false, Color(1.0, 1.0, 1.0, 0.82))
+	draw_circle(Vector2(0.0, base_y - height * 0.26), height * 0.36,
+			Color(1.0, 0.22, 0.025, 0.10))
+	draw_texture_rect(flame, where, false, Color(1.0, 1.0, 1.0, 0.88))
+	var phase := float(get_instance_id() % 97) * 0.071
+	var t := Time.get_ticks_msec() * 0.001 + phase
+	for i in 3:
+		var spark_p := fposmod(t * (0.72 + i * 0.11) + phase + i * 0.31, 1.0)
+		var spark_x := sin(t * (4.2 + i) + i * 2.1) * height * (0.10 + spark_p * 0.10)
+		var spark_y := base_y - height * (0.42 + spark_p * 0.88)
+		draw_circle(Vector2(spark_x, spark_y), height * (0.038 - spark_p * 0.018),
+				Color(1.0, 0.62 + spark_p * 0.25, 0.12, 0.85 * (1.0 - spark_p)))
 
 ## The classic turret: barrel + element orb, aimed at the target and kicked back while
 ## firing. Public because BoltBehavior draws it; kept here rather than in the behavior

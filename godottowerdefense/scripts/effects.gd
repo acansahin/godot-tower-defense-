@@ -1,19 +1,22 @@
 extends Node2D
-## The $Effects container as an object pool for the two purely-drawn "particle" types —
-## floating damage/gold numbers and enemy death bursts. Both are short-lived and arrive in
+## The $Effects container as an object pool for the purely-drawn "particle" types —
+## floating damage/gold numbers, enemy death bursts and elemental impact rings. They are
+## short-lived and arrive in
 ## bursts (a splash kill can pop a dozen at once), so recycling them (hide + stop
 ## processing) instead of new()/queue_free() removes a lot of node churn on busy waves.
 ##
 ## FloatingText / DeathBurst have class_name, so they are built with their global
-## constructors here. FrostRing has none (it is preloaded), so it is typed loosely. All three
-## route their own spawn() helpers through this pool (see those files).
+## constructors here. FrostRing and FireImpact have none (they are preloaded), so they are
+## typed loosely. Every effect routes its own spawn() helper through this pool.
 
 const SOFT_CAP := 512  ## Idle instances kept per type; any freed past this are actually released.
 const FrostRing := preload("res://scripts/frost_ring.gd")
+const FireImpact := preload("res://scripts/fire_impact.gd")
 
 var _free_text: Array[FloatingText] = []
 var _free_burst: Array[DeathBurst] = []
 var _free_frost: Array = []  ## FrostRing has no class_name, so this stays untyped.
+var _free_fire_impact: Array = []  ## FireImpact is also preloaded, not globally named.
 
 func acquire_text() -> FloatingText:
 	var t: FloatingText
@@ -74,3 +77,23 @@ func recycle_frost(f) -> void:
 		f.queue_free()
 		return
 	_free_frost.append(f)
+
+func acquire_fire_impact():
+	var f
+	if _free_fire_impact.is_empty():
+		f = FireImpact.new()
+		f.pool = self
+		add_child(f)
+	else:
+		f = _free_fire_impact.pop_back()
+		f.visible = true
+		f.set_process(true)
+	return f
+
+func recycle_fire_impact(f) -> void:
+	f.set_process(false)
+	f.visible = false
+	if _free_fire_impact.size() >= SOFT_CAP:
+		f.queue_free()
+		return
+	_free_fire_impact.append(f)

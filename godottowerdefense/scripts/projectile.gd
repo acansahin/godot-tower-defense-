@@ -5,9 +5,12 @@ class_name Projectile
 ## slow / poison debuffs. Configured by the firing tower; drawn as a coloured bolt.
 
 const FrostRing := preload("res://scripts/frost_ring.gd")  ## Ice's area-slow impact visual.
+const FireImpact := preload("res://scripts/fire_impact.gd")
 const Sprites := preload("res://scripts/sprites.gd")
 const FIREBALL_FRAMES := 12
 const FIREBALL_FPS := 18.0
+const FIRE_ARC_HEIGHT := 22.0
+const FIRE_BIRTH_TIME := 0.09
 
 var speed: float = 630.0  ## px/s. Scales with tower range so flight *time* stays constant.
 var damage: float = 10.0
@@ -30,6 +33,8 @@ var stun_time: float = 0.0
 var _target: Enemy = null
 var pool: Node = null  ## The $Projectiles pool that owns this bolt (see projectiles.gd); null = unpooled.
 var _visual_time: float = 0.0
+var _flight_length: float = 1.0
+var _travelled: float = 0.0
 
 func _ready() -> void:
 	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
@@ -39,6 +44,8 @@ func setup(start: Vector2, target: Enemy, dmg: float) -> void:
 	_target = target
 	damage = dmg
 	_visual_time = 0.0
+	_travelled = 0.0
+	_flight_length = maxf(1.0, start.distance_to(target.global_position))
 	# A pooled bolt was already drawn once in its previous colour; the firing tower has just
 	# overwritten `color`, so ask for a repaint (a fresh instance would paint anyway).
 	queue_redraw()
@@ -67,6 +74,7 @@ func _process(delta: float) -> void:
 		_hit(_target)
 		return
 	global_position += to_target.normalized() * step
+	_travelled += step
 
 func _hit(target: Enemy) -> void:
 	var impact := target.global_position
@@ -79,6 +87,8 @@ func _hit(target: Enemy) -> void:
 	if slow_splash_radius > 0.0 and slow_time > 0.0:
 		_apply_slow_splash(target, impact)
 		FrostRing.spawn(self, impact, slow_splash_radius)  # show the frost field
+	if element == "fire":
+		FireImpact.spawn(self, impact)
 	_recycle()
 
 ## Applies damage (scaled by mult and the element matchup) plus any slow / poison.
@@ -164,11 +174,31 @@ func _apply_slow_splash(main_target: Enemy, center: Vector2) -> void:
 
 func _draw() -> void:
 	if element == "fire":
+		var progress := clampf(_travelled / _flight_length, 0.0, 1.0)
+		# Collision continues along the established homing path. Only the rendered fireball
+		# rises, so the arc cannot miss a fast target or change tower balance.
+		var arc_offset := Vector2(0.0, -sin(progress * PI) * FIRE_ARC_HEIGHT).rotated(-rotation)
+		var birth := clampf(_visual_time / FIRE_BIRTH_TIME, 0.0, 1.0)
+		draw_set_transform(arc_offset, 0.0, Vector2.ONE * birth)
+		# Continuous trail/core carry the silhouette between the discrete painted poses.
+		draw_colored_polygon(PackedVector2Array([
+			Vector2(-2.0, -7.0), Vector2(-2.0, 7.0), Vector2(-38.0, 0.0),
+		]), Color(1.0, 0.24, 0.025, 0.25))
+		for i in 4:
+			var trail_x := -10.0 - i * 7.5
+			var trail_y := sin(_visual_time * (13.0 + i) + i * 1.9) * (1.5 + i * 0.7)
+			draw_circle(Vector2(trail_x, trail_y), 4.2 - i * 0.62,
+					Color(1.0, 0.38 + i * 0.07, 0.04, 0.31 - i * 0.05))
 		var frame := int(floor(_visual_time * FIREBALL_FPS)) % FIREBALL_FRAMES
 		var fireball := Sprites.effect("fireball", frame)
 		if fireball != null:
-			draw_texture_rect(fireball, Rect2(-Vector2(25.0, 11.0), Vector2(50.0, 22.0)), false)
-			return
+			draw_texture_rect(fireball, Rect2(-Vector2(25.0, 11.0), Vector2(50.0, 22.0)),
+					false, Color(1.0, 1.0, 1.0, 0.78))
+		draw_circle(Vector2(2.0, 0.0), 10.0, Color(1.0, 0.18, 0.02, 0.20))
+		draw_circle(Vector2(2.0, 0.0), 6.2, Color(1.0, 0.48, 0.05, 0.82))
+		draw_circle(Vector2(0.8, -1.8), 2.8, Color(1.0, 1.0, 0.70, 0.88))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		return
 	# The node rotates toward its target, so local -x is "behind": draw a tapered
 	# trail there, a soft glow, then the bright coloured core.
 	draw_colored_polygon(PackedVector2Array([
