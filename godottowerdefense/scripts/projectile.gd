@@ -5,6 +5,9 @@ class_name Projectile
 ## slow / poison debuffs. Configured by the firing tower; drawn as a coloured bolt.
 
 const FrostRing := preload("res://scripts/frost_ring.gd")  ## Ice's area-slow impact visual.
+const Sprites := preload("res://scripts/sprites.gd")
+const FIREBALL_FRAMES := 12
+const FIREBALL_FPS := 18.0
 
 var speed: float = 630.0  ## px/s. Scales with tower range so flight *time* stays constant.
 var damage: float = 10.0
@@ -26,11 +29,16 @@ var stun_time: float = 0.0
 
 var _target: Enemy = null
 var pool: Node = null  ## The $Projectiles pool that owns this bolt (see projectiles.gd); null = unpooled.
+var _visual_time: float = 0.0
+
+func _ready() -> void:
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 
 func setup(start: Vector2, target: Enemy, dmg: float) -> void:
 	global_position = start
 	_target = target
 	damage = dmg
+	_visual_time = 0.0
 	# A pooled bolt was already drawn once in its previous colour; the firing tower has just
 	# overwritten `color`, so ask for a repaint (a fresh instance would paint anyway).
 	queue_redraw()
@@ -45,6 +53,9 @@ func _recycle() -> void:
 		queue_free()
 
 func _process(delta: float) -> void:
+	if element == "fire":
+		_visual_time += delta
+		queue_redraw()
 	# Target may have died mid-flight.
 	if not is_instance_valid(_target):
 		_recycle()
@@ -152,6 +163,12 @@ func _apply_slow_splash(main_target: Enemy, center: Vector2) -> void:
 			enemy.apply_slow(slow_factor, slow_time)
 
 func _draw() -> void:
+	if element == "fire":
+		var frame := int(floor(_visual_time * FIREBALL_FPS)) % FIREBALL_FRAMES
+		var fireball := Sprites.effect("fireball", frame)
+		if fireball != null:
+			draw_texture_rect(fireball, Rect2(-Vector2(25.0, 11.0), Vector2(50.0, 22.0)), false)
+			return
 	# The node rotates toward its target, so local -x is "behind": draw a tapered
 	# trail there, a soft glow, then the bright coloured core.
 	draw_colored_polygon(PackedVector2Array([

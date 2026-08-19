@@ -15,6 +15,7 @@ extends RefCounted
 
 const DIR := "res://assets/art/towers/"
 const ENEMY_DIR := "res://assets/art/enemies/"
+const EFFECT_DIR := "res://assets/art/effects/"
 
 static var _textures: Dictionary = {}  ## path -> Texture2D or null
 static var _anchors: Dictionary = {}   ## path -> Vector2 in texture pixels
@@ -24,6 +25,12 @@ static var _heights: Dictionary = {}   ## path -> standing height in texture pix
 ## The sprite for an element at a level, or null if that one has not been painted yet.
 static func tower(element: String, level: int) -> Texture2D:
 	return _load(DIR + "%s_%d.png" % [element, level])
+
+## One numbered frame from a painted visual-effect cycle, or null while that effect has
+## no art. Effects use the same cached loader as towers and creeps so pooled projectiles do
+## not touch the resource system every time they are fired.
+static func effect(kind: String, frame: int = 0) -> Texture2D:
+	return _load(EFFECT_DIR + "%s_%d.png" % [kind, frame + 1])
 
 ## The sprite for a creep archetype (the keys of Game.WAVE_TYPES: "normal", "fast", "tank",
 ## …), or null if that one has not been painted yet. Same deal as tower(): the caller falls
