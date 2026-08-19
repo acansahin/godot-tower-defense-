@@ -4,7 +4,10 @@ A tiny, fully-playable 2D tower-defense prototype inspired by the Warcraft III
 custom map **Element TD**. Built with typed GDScript, deliberately small and
 readable rather than production-architected.
 
-When you press **Play** you get: a hand-painted 1536x864 world shown whole on one screen,
+When you press **Play**, a short interactive training match first opens on its own close-up
+forest map: four build clearings, an upper-left entrance, an upper-right exit, Water placement
+and upgrading, then a Fire-vs-Nature element demonstration. It can always be skipped. The
+endless run then starts on a hand-painted 1536x864 world shown whole on one screen,
 a cobblestone road spiralling inward to the keep at its heart — **traced out of the
 painting**, not authored beside it — **free placement** of towers anywhere the ground is
 clear, and an **endless** run of enemies drawn from a data table
@@ -15,7 +18,7 @@ Warcraft III map (see [docs/element-td-data.md](docs/element-td-data.md)) — pl
 **element-matchup** system (each is strong and
 weak against another, so tower choice vs. an enemy's armor element matters),
 **tap-to-upgrade** towers each with a small **sell button**, **time controls** (pause and
-1x/2x/3x), a gold economy with interest and streak bonuses, lives, a **tutorial** opening,
+1x/2x/3x), a gold economy with interest and streak bonuses, lives, an interactive **tutorial**,
 and a **run summary** reporting how deep you got.
 
 A run has **no win condition and no last wave**. Waves 1–20 are hand-authored so each
@@ -116,7 +119,8 @@ godottowerdefense/
 │   └── element-td-data.md   # Every number extracted from the source maps
 ├── assets/
 │   └── art/                 # The project's only bitmap assets (icon.svg aside)
-│       ├── board_source.png # The painted board, 1672x941; Game.PATH is traced out of it
+│       ├── board_source.png # The endless-run board; Game.PATH is traced out of it
+│       ├── maps/            # Separate painted boards (the close tutorial map lives here)
 │       └── towers/          # <element>_1..5.png, cut from _source_<element>.png by
 │                            # tools/cut_sprites.py (at the repo root, not here)
 ├── web/
@@ -124,6 +128,7 @@ godottowerdefense/
 │                            # landscape lock (injected via the preset's head_include)
 ├── scenes/
 │   ├── Menu.tscn            # Title screen (main scene — what the game opens on)
+│   ├── Tutorial.tscn        # Action-gated training match on the close forest map
 │   ├── Main.tscn            # The level
 │   ├── Enemy.tscn           # A single enemy (also used for flyers / bosses)
 │   ├── Tower.tscn           # Generic tower (configured from Game.TOWER_DEFS)
@@ -140,7 +145,8 @@ godottowerdefense/
     ├── tower_mods.gd        # Folded modifier totals for one (tower id, element) pair
     ├── upgrade_choice.gd    # The 3-card between-waves reward screen
     ├── wave_generator.gd    # Endless wave definitions past the seed table
-    ├── tutorial.gd          # Opening hints; drives the HUD's hint line
+    ├── tutorial.gd          # Training flow: placement, two groups, upgrade, hand-off
+    ├── tutorial_map.gd      # Draws the separate close map + legal-clearings/road overlay
     ├── audio.gd             # "Audio" autoload: synthesized chiptune SFX + music
     ├── enemy_index.gd       # "EnemyIndex" autoload: per-frame spatial hash for targeting
     ├── menu.gd              # Title screen: play / how-to-play / sound / quit
@@ -365,6 +371,11 @@ editing three files and hunting for un-named literals; it is now one file.
   / `_sell_tower`). It also owns the `Camera2D` and applies the screen shake that
   `Game.shake_requested` broadcasts, so an `Enemy` can ask for a kick without knowing the
   camera exists.
+- **`Tutorial`** is a separate, finite level shown between Menu and Main. It installs its
+  own `Game.configure_board()` profile, restricts placement to four painted grass pockets,
+  reveals Water and Fire only when their lesson needs them, and spawns two tiny Scout groups
+  without touching `WaveManager` or permanent run rewards. Skip/completion restores the main
+  board profile, and Main resets gold, lives and run modifiers before the endless run.
 - **`FloatingText` / `DeathBurst`** are one-shot visuals parented to `Effects`. Both are
   built with `.new()` rather than from a `.tscn` — they are a bare `Node2D` plus a
   script, which also avoids a script preloading the very scene it is attached to.

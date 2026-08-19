@@ -64,6 +64,13 @@ fire), `--go-back` (rewinds the
 last-seen stamp 4h so the next launch collects an offline reward), `--wipe-save` (clears
 `user://save.json`).
 
+The separate `Tutorial.tscn` has its own harnesses: `--tutorial-auto` builds Water in the
+first clearing, clears the neutral group, upgrades it, builds Fire, clears the Nature-armour
+group and prints `TUTORIAL COMPLETE`; `--show-tutorial-road` draws its traced route over the
+painting; its `--shot` / `--shot:N` outputs are named `tutorial_shot*.png`, and
+`--tutorial-complete-shot` captures the completed lesson. Use the auto and road flags together
+in a rendered run to see enemies, legal build pockets and path alignment.
+
 **`--wipe-save` first when comparing against a stored baseline.** Workshop levels feed
 `Run.permanent`, which feeds every tower stat, so a `--dump-stats` taken against a save
 with purchases in it measures something different from one taken against a clean save.
@@ -121,6 +128,12 @@ predict, and the draw code breaks in ways the numbers do not show.
 same tool's scan found. Re-trace after any change to the art and check the result with
 `map.gd`'s `show_road` overlay — it draws the traced line back over the painting, which is
 the only check that catches enemies walking beside the road rather than on it.
+
+The tutorial is a second board, not a replacement for that one:
+`assets/art/maps/winding_forest_close_v1.png`, `Tutorial.TUTORIAL_PATH` and its four
+`BUILD_ZONES`. `Game.configure_board()` temporarily makes that geometry active for enemy
+movement, targeting and placement; Menu, Main and Tutorial's exit all call
+`Game.use_main_board()` so the endless run cannot inherit the training road.
 
 **There is also no build grid.** A tower stands wherever `Game.can_build_at()` allows: off
 the road by `ROAD_KEEPOUT`, out of `OBSTACLES`, inside `PLAY_TOP`/`PLAY_RIGHT`, and

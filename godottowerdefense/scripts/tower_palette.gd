@@ -27,6 +27,8 @@ const COLUMNS := 2
 const MIN_SCALE := 0.62
 
 var _gold: int = 0
+var _filter_enabled: bool = false
+var _allowed_ids: Array[String] = []
 
 func _ready() -> void:
 	# An unlock adds a slot mid-run, and the palette otherwise repaints only on a gold
@@ -36,6 +38,23 @@ func _ready() -> void:
 func set_gold(value: int) -> void:
 	_gold = value
 	queue_redraw()
+
+## Training reveals only the tower needed by the current lesson. Main never enables this
+## filter and continues to show Run's complete, dynamically unlocked roster.
+func set_allowed_towers(ids: Array) -> void:
+	_filter_enabled = true
+	_allowed_ids.clear()
+	for id in ids:
+		_allowed_ids.append(String(id))
+	queue_redraw()
+
+func clear_allowed_towers() -> void:
+	_filter_enabled = false
+	_allowed_ids.clear()
+	queue_redraw()
+
+func _visible_ids() -> Array:
+	return _allowed_ids if _filter_enabled else Run.buildable_towers()
 
 ## Vertical scale that fits `count` slots in the panel: 1.0 whenever they already fit.
 func _scale_for(count: int) -> float:
@@ -61,7 +80,7 @@ func _slot_rect(index: int, scale_y: float) -> Rect2:
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed \
 			and event.button_index == MOUSE_BUTTON_LEFT:
-		var ids: Array = Run.buildable_towers()
+		var ids: Array = _visible_ids()
 		var scale_y := _scale_for(ids.size())
 		for i in ids.size():
 			if _slot_rect(i, scale_y).has_point(event.position):
@@ -73,7 +92,7 @@ func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), Color(1, 1, 1, 0.18), false, 2.0)
 	var font := get_theme_default_font()
 	draw_string(font, Vector2(10, 26), "Towers", HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(1, 1, 1, 0.9))
-	var ids: Array = Run.buildable_towers()
+	var ids: Array = _visible_ids()
 	var scale_y := _scale_for(ids.size())
 	for i in ids.size():
 		_draw_slot(_slot_rect(i, scale_y), ids[i], font)

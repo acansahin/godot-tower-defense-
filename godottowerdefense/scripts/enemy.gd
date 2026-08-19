@@ -176,7 +176,7 @@ func make_flying() -> void:
 
 func _ready() -> void:
 	add_to_group("enemies")
-	_path = Game.PATH
+	_path = Game.active_path
 	global_position = _path[0]
 	# Mid + top draw layers. Added body-first so within this enemy they stack shadow (this
 	# node) -> body -> overlay, matching the old single-node draw order.

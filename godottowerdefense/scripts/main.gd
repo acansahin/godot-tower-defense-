@@ -10,7 +10,6 @@ const SHAKE_DECAY := 26.0  ## Pixels of camera shake bled off per second.
 @onready var enemies_root: Node2D = $Enemies
 @onready var towers_root: Node2D = $Towers
 @onready var wave_manager: WaveManager = $WaveManager
-@onready var tutorial: Tutorial = $Tutorial
 @onready var hud: HUD = $UI/HUD
 @onready var palette = $UI/TowerPalette
 @onready var end_screen: EndScreen = $UI/EndScreen
@@ -25,6 +24,7 @@ var _auto_pick: bool = false ## Harness only (--fill-board/--auto-pick): auto-re
 
 func _ready() -> void:
 	get_tree().paused = false
+	Game.use_main_board()
 	# One seed drives both the waves and the card offers, so a whole run — what it throws at
 	# you and what it lets you answer with — replays from a single number.
 	var run_seed := randi()
@@ -45,11 +45,6 @@ func _ready() -> void:
 	hud.send_pressed.connect(wave_manager.send_now)
 	palette.drag_started.connect(_on_drag_started)
 	Game.shake_requested.connect(_add_shake)
-
-	# Tutorial: it listens to the run and emits a line of text; the HUD just renders it.
-	tutorial.hint_changed.connect(hud.set_hint)
-	wave_manager.wave_started.connect(tutorial.on_wave_started)
-	hud.send_pressed.connect(tutorial.on_sent_early)
 
 	# Roguelite choice. Main owns the pause so there is exactly one place that decides
 	# whether the run is running — the choice screen itself only reports what was picked.
@@ -695,7 +690,6 @@ func _drop(world_pos: Vector2) -> void:
 	# whenever the set changes. Emitted after the add_child so the new tower is included.
 	Game.towers_changed.emit()
 	Audio.play("build")
-	tutorial.on_tower_built()
 
 func _cost(kind: String) -> int:
 	return int(Game.TOWER_DEFS[kind]["cost"])
@@ -747,7 +741,6 @@ func _upgrade_tower(tower: Tower) -> void:
 	# around it — not just the tower that was tapped.
 	Game.towers_changed.emit()
 	Audio.play("upgrade")
-	tutorial.on_tower_upgraded()
 
 ## Removes the tower and refunds half of the gold sunk into it.
 func _sell_tower(tower: Tower) -> void:
