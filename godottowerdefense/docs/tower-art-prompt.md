@@ -1,7 +1,9 @@
 # Generating a tower art sheet
 
 The six element towers were painted one set at a time, each from a single generated sheet of
-five tiers. This file is the recipe, kept because fifteen dual towers still draw the code
+five tiers. The first pass used tall, element-specific silhouettes; after the Water redesign
+all six were moved to the same broad, ground-hugging fortress language so they sit naturally
+on the board. This file is the recipe, kept because fifteen dual towers still draw the code
 art and will need it.
 
 The pipeline around it is in [CLAUDE.md](../../CLAUDE.md) ("Painted tower set"); this file is
@@ -49,8 +51,8 @@ MATCH THE REFERENCE ON:
 - Mass. A building of the same settlement as that keep, sitting IN the terrain.
 
 The tower itself: <one paragraph. Masonry, palette, what sits in the basin at the top, the
-banner sigil, the trim metal, the crystals. Name the SHAPE explicitly — see the silhouette
-table below.>
+banner sigil, the trim metal, the crystals. Keep the element identity in those materials and
+effects; the structural shape follows the shared fortress progression below.>
 
 <A CONTRAST OR CATEGORY NOTE, if this element has one — see "Per-element traps".>
 
@@ -59,17 +61,19 @@ the top QUARTER of the tower's height and must read as <contained in its basin>,
 <column / geyser / cloud / beam>. The building is the subject; the element is carried down
 the rest of it by <cracks / channels / roots / gilding>.
 
-Tier progression, growing in HEIGHT more than width, each tier the same building enlarged:
-1 <a low drum, one banner, a small effect> 2 <taller, stepped base, second banner>
-3 <two stages, doorway, side basins, lit window, first crystals> 4 <a fortress: crown,
-chains, flanking turrets, broad stair> 5 <the grandest: larger effect, full-height detail,
-a lit archway>
+Tier progression, broad and ground-hugging like the Water set, growing mainly in WIDTH,
+layers and structural complexity rather than becoming a tall column:
+1 <a low circular ring with one contained effect> 2 <a wider stepped bastion with channels>
+3 <a broad central keep with two low side basins or pylons> 4 <a compact radial citadel with
+flanking turrets and a broad stair> 5 <the grandest layered fortress, still squat, with a
+larger contained effect and a lit archway>
 
 CRITICAL REQUIREMENTS (the reference image cannot show these — follow them exactly):
 - Transparent background (alpha), no ground plane, no scenery, no backdrop, no grass under
   the towers.
 - NO drop shadow and no cast shadow — the game draws its own.
-- PROPORTION LIMIT: each tower's total width must be between <lo> and <hi> of its height.
+- PROPORTION LIMIT: each tower's total width must be roughly 0.95–1.55 of its height. The
+  building should feel broad, but must not become a horizontal platform.
 - THE BASE MUST BE SYMMETRICAL. Rubble, steps and ornament at the foot must hug the tower
   evenly on both sides and must not stick out sideways below it — the game hangs the sprite
   from the middle of its lowest pixels.
@@ -106,21 +110,20 @@ Two more that are about the board rather than the pipeline:
 - **60px gaps.** `cut_sprites.py` splits the sheet on empty columns (`MIN_RUN`). Towers that
   touch come out as one sprite.
 
-## Silhouette is a design channel
+## Shared silhouette, distinct identity
 
-Sprites are scaled by **height**, so width is free to carry meaning, and the six sets use it.
-Ask for the band; it is what the generator actually obeys.
+The Water redesign established the shape that works on the painted board: a low circular
+ring at tier 1, then wider stepped masonry, side structures, and finally a compact radial
+fortress. The other five element sets now use that same progression instead of growing into
+tall narrow columns. This shared mass makes the roster feel as if one culture built it and
+keeps the sprites visually planted in the terrain.
 
-| Element | Shape asked for | Why | Band asked | Drawn width |
-|---|---|---|---|---|
-| Light | slender spire | longest range in the game | 0.42–0.55 | 106–134px |
-| Darkness | heavy obelisk | nearly as long a reach, slowest and heaviest blow | 0.45–0.55 | 144–167px |
-| Nature | overgrown keep | mid range, poison | 0.55–0.70 | 147–170px |
-| Water | waterworks | mid range, fastest cadence | 0.55–0.70 | 160–169px |
-| Earth | quarried bastion | short range, splash, heaviest presence | 0.62–0.75 | 162–176px |
-| Fire | squat forge | shortest range, fast cadence | 0.60–0.75 | 176–195px |
-
-A tower's role should be legible before its range ring is drawn.
+Element recognition now comes from materials and contained effects rather than radically
+different height-to-width bands: Fire is dark forge stone and orange flame, Earth is cool
+quarried granite and amber crystal, Nature is roots and dark ivy, Light is pale stone with
+slate accents and a restrained gold core, Darkness is charcoal masonry with violet cracks,
+and Water is gray-tan waterworks with blue channels. Preserve those contrasts when making
+duals; do not return to the old spire/obelisk silhouettes.
 
 ## Per-element traps
 

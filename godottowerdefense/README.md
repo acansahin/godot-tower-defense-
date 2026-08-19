@@ -459,10 +459,10 @@ in pixels.
 ## 6. Where the art comes from
 
 The project began with **no asset files at all** — every visual drawn in `_draw()`, every
-sound synthesized at startup. That still holds for the audio and for most of the screen.
-It no longer holds for the board and for the fire tower, which are painted images, and the
-two kinds of art are meant to sit side by side while the repaint proceeds element by
-element.
+sound synthesized at startup. That still holds for the audio and part of the screen, while
+the board, all six element towers, the creep roster and selected effects are now painted
+images. The painted and code-drawn art paths still coexist so unfinished content can fall
+back safely.
 
 **Painted** (`assets/art/`, the project's only bitmap assets — `icon.svg` aside):
 - **The board**: `board_source.png`, 1672×941. `map.gd` stretches it to `Game.WORLD_SIZE`
@@ -474,11 +474,11 @@ element.
 - **All six element towers**, five tiers each: `towers/<element>_1..5.png`, cut from one
   generated sheet (`_source_<element>.png`) by `tools/cut_sprites.py` at `max_height` 220,
   which puts the tiers at ~2x their drawn size.
-  Because the sprite is scaled by HEIGHT, an element's silhouette is free to say something:
-  light reaches furthest in the game and is a slender spire at 106-134px wide, fire is the
-  shortest-ranged and is a squat forge at 176-195, and the rest sit between them — darkness
-  144-167, nature 147-170, water 160-169, earth 162-176. A tower's role is meant to be
-  legible before its range ring is drawn.
+  The Water redesign established the shared silhouette for the roster: low circular early
+  tiers grow mainly through wider stepped masonry, side structures and layered radial
+  fortresses instead of becoming tall narrow columns. Element identity comes from masonry,
+  banners and restrained contained effects, which keeps the six sets architecturally
+  coherent with the board while preserving their matchup colours.
   Sets are generated five-at-a-time on
   purpose — asked for one at a time, the tiers come back looking unrelated. The tool splits
   the sheet on its empty columns, trims each sprite to its alpha bounds, and box-downscales
