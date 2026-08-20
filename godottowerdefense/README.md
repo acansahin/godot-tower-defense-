@@ -5,9 +5,9 @@ custom map **Element TD**. Built with typed GDScript, deliberately small and
 readable rather than production-architected.
 
 When you press **Play**, a short interactive training match first opens on its own close-up
-forest map: four build clearings, an upper-left entrance, an upper-right exit, Water placement
-and upgrading, then a Fire-vs-Nature element demonstration. It can always be skipped. The
-endless run then starts on a hand-painted 1536x864 world shown whole on one screen,
+forest map: six teaching pads across four build clearings, an upper-left entrance, an
+upper-right exit, Water placement and upgrading, then one short counter-wave for every basic
+tower. It can always be skipped. The endless run then starts on a hand-painted 1536x864 world,
 a cobblestone road spiralling inward to the keep at its heart — **traced out of the
 painting**, not authored beside it — **free placement** of towers anywhere the ground is
 clear, and an **endless** run of enemies drawn from a data table
@@ -372,8 +372,8 @@ editing three files and hunting for un-named literals; it is now one file.
   `Game.shake_requested` broadcasts, so an `Enemy` can ask for a kick without knowing the
   camera exists.
 - **`Tutorial`** is a separate, finite level shown between Menu and Main. It installs its
-  own `Game.configure_board()` profile, restricts placement to four painted grass pockets,
-  reveals Water and Fire only when their lesson needs them, and spawns two tiny Scout groups
+  own `Game.configure_board()` profile, restricts placement to six pads in four painted grass
+  clearings, reveals one basic tower at a time, and spawns six tiny counter-armour Scout groups
   without touching `WaveManager` or permanent run rewards. Skip/completion restores the main
   board profile, and Main resets gold, lives and run modifiers before the endless run.
 - **`FloatingText` / `DeathBurst`** are one-shot visuals parented to `Effects`. Both are
