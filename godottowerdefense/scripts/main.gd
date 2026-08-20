@@ -92,6 +92,8 @@ func _ready() -> void:
 		_dump_duals()
 	if OS.get_cmdline_user_args().has("--dump-board"):
 		_dump_board()
+	if OS.get_cmdline_user_args().has("--test-sell-hit"):
+		call_deferred("_test_sell_hit")
 	# TEMPORARY: pops the choice screen immediately, so its _draw can be exercised in a
 	# rendered run without first playing three waves. Headless never calls _draw at all, so
 	# nothing else in the suite would catch a broken card layout.
@@ -710,6 +712,22 @@ func _tower_at(world_pos: Vector2) -> Tower:
 			best = t
 	return best
 
+## The red sell disc sits outside the 30px body radius, so it needs its own hit pass before
+## `_tower_at()`. Pick the nearest disc if two touch; tower spacing normally keeps them apart,
+## but nearest is deterministic at the boundary and avoids selling a neighbour by child order.
+func _sell_button_at(world_pos: Vector2) -> Tower:
+	var best: Tower = null
+	var best_d := INF
+	for child in towers_root.get_children():
+		var tower := child as Tower
+		if tower == null or not tower.is_sell_hit(world_pos):
+			continue
+		var distance := world_pos.distance_to(tower.global_position + Tower.SELL_BTN_POS)
+		if distance < best_d:
+			best = tower
+			best_d = distance
+	return best
+
 # --- Click a tower: upgrade it, or sell it via the corner "×" -------------------
 
 ## A left click / tap on a tower upgrades it — unless it landed on the tower's sell "×",
@@ -721,14 +739,19 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventMouseButton and event.pressed \
 			and event.button_index == MOUSE_BUTTON_LEFT):
 		return
-	var world := get_global_mouse_position()
-	var tower := _tower_at(world)
+	_handle_tower_click(get_global_mouse_position())
+
+func _handle_tower_click(world: Vector2) -> void:
+	# Sell discs extend beyond the tower body's click radius. Test them first or a click on
+	# the visible × is rejected as bare ground before `is_sell_hit()` ever gets a chance.
+	var tower := _sell_button_at(world)
+	if tower != null:
+		_sell_tower(tower)
+		return
+	tower = _tower_at(world)
 	if tower == null:
 		return
-	if tower.is_sell_hit(world):
-		_sell_tower(tower)
-	else:
-		_upgrade_tower(tower)
+	_upgrade_tower(tower)
 
 ## Upgrades the tower if another level exists and the gold is there; a denied buzz otherwise,
 ## so a mistap on a maxed / too-expensive tower gives feedback instead of doing nothing.
@@ -754,6 +777,38 @@ func _sell_tower(tower: Tower) -> void:
 	# from a tower that no longer exists.
 	towers_root.remove_child(tower)
 	Game.towers_changed.emit()
+
+## Harness for the exact regression: the sell centre is 41px from the tower centre and is
+## therefore intentionally outside `_tower_at()`'s 30px body. It must still resolve through
+## `_sell_button_at()`, refund the tower and detach it from the board.
+func _test_sell_hit() -> void:
+	var tower := TOWER.instantiate() as Tower
+	tower.setup_def("fire")
+	tower.position = Vector2(640, 360)
+	towers_root.add_child(tower)
+	var sell_point := tower.global_position + Tower.SELL_BTN_POS
+	if _tower_at(sell_point) != null or _sell_button_at(sell_point) != tower:
+		push_error("Sell hit harness: visible × did not resolve independently of tower body")
+		return
+	var gold_before := Game.gold
+	var expected_refund := tower.sell_value()
+	_handle_tower_click(sell_point)
+	if tower.get_parent() != null or Game.gold != gold_before + expected_refund:
+		push_error("Sell hit harness: sale did not detach tower and refund exact value")
+		return
+	var upgrade_target := TOWER.instantiate() as Tower
+	upgrade_target.setup_def("water")
+	upgrade_target.position = Vector2(740, 360)
+	towers_root.add_child(upgrade_target)
+	var upgrade_cost := upgrade_target.upgrade_cost()
+	gold_before = Game.gold
+	_handle_tower_click(upgrade_target.global_position)
+	if upgrade_target.level != 2 or Game.gold != gold_before - upgrade_cost:
+		push_error("Sell hit harness: body click no longer upgrades normally")
+		return
+	towers_root.remove_child(upgrade_target)
+	upgrade_target.queue_free()
+	print("--- SELL HIT OK: outside body, refund=%d, body upgrade=ok ---" % expected_refund)
 
 # --- Roguelite choice ----------------------------------------------------------
 

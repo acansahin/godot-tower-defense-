@@ -48,7 +48,9 @@ its provider's level, stops at its radius and unwinds EXACTLY when the provider 
 removed; plus each dual's payload and Magic's charge cycle), `--dump-board` (road length,
 cell count, and per element how much of the road one tower watches and how many towers it
 takes to watch 95% of it — plus a `raw` column measuring the same with the range cap
-lifted), `--fill-board` (a tower on every cell at max level, 8x speed,
+lifted), `--test-sell-hit` (the visible red × resolves outside the smaller tower-body hit
+radius, refunds exactly and detaches the tower), `--fill-board` (a tower on every cell at
+max level, 8x speed,
 auto-picks upgrades, prints each wave and the run-over line), `--show-choice` (pops the
 choice screen so its `_draw` can be exercised), `--air-pose` (parks eight Air creeps along
 the road on an EMPTY board so the flyer's drawing can be photographed — `--fill-board`
