@@ -1,19 +1,49 @@
 extends Node2D
 class_name Tutorial
-## A short, self-contained training match shown before every endless run.
+## A compact, self-contained six-tower training match shown before every endless run.
 ##
 ## Training has its own painting, open-ended road and scarce build clearings. It deliberately
 ## does NOT use WaveManager: the lesson advances on actions (build Water, watch it fire,
-## upgrade it, build Fire) and only spawns the tiny groups needed to demonstrate those
-## actions. Leaving this scene restores Game's main-board profile before Main starts fresh.
+## upgrade it, then try every element) and only spawns the tiny groups needed to demonstrate
+## those actions. Leaving this scene restores Game's main-board profile before Main starts.
 
 const GAME_SCENE := "res://scenes/Main.tscn"
 const TOWER := preload("res://scenes/Tower.tscn")
 const ENEMY := preload("res://scenes/Enemy.tscn")
 
-const START_GOLD := 300
+const START_GOLD := 500
 const START_LIVES := 10
 const SPAWN_INTERVAL := 0.85
+
+## One small lesson per basic element. Every tower fights the armour it counters, so the
+## complete sequence also walks once around the element circle. Values are deliberately
+## hand-tuned teaching encounters, not endless-wave balance data.
+const LESSONS: Array = [
+	{"tower": "water", "label": "Water: rapid slow", "armor": "fire",
+		"count": 4, "hp": 70.0, "speed": 88.0, "interval": 0.62,
+		"build": "Place Water in a glowing grass pocket. Its rapid bolts repeatedly slow targets.",
+		"combat": "Water beats Fire armour. Watch the blue slow effect and gold ×1.75 damage."},
+	{"tower": "fire", "label": "Fire: rapid damage", "armor": "nature",
+		"count": 4, "hp": 75.0, "speed": 96.0, "interval": 0.62,
+		"build": "Place Fire near a road bend. Its short reach rewards careful positioning.",
+		"combat": "Fire beats Nature armour and attacks rapidly, but has the shortest range."},
+	{"tower": "nature", "label": "Nature: poison", "armor": "earth",
+		"count": 4, "hp": 125.0, "speed": 86.0, "interval": 0.74,
+		"build": "Place Nature in another pocket. Poison keeps dealing damage after impact.",
+		"combat": "Nature beats Earth armour. The green poison continues ticking between shots."},
+	{"tower": "earth", "label": "Earth: splash", "armor": "light",
+		"count": 6, "hp": 90.0, "speed": 82.0, "interval": 0.24,
+		"build": "Place Earth beside a long road section. Earth hits clustered ground enemies.",
+		"combat": "Earth beats Light armour. This tight group demonstrates its splash damage."},
+	{"tower": "light", "label": "Light: long range", "armor": "darkness",
+		"count": 4, "hp": 85.0, "speed": 100.0, "interval": 0.72,
+		"build": "Place Light even if the road looks distant. It has the longest practical reach.",
+		"combat": "Light beats Darkness armour and can watch several separated road bends."},
+	{"tower": "darkness", "label": "Darkness: heavy hits", "armor": "water",
+		"count": 3, "hp": 250.0, "speed": 76.0, "interval": 1.05,
+		"build": "Place Darkness in the last free pocket. It fires slowly but hits extremely hard.",
+		"combat": "Darkness beats Water armour. Each slow shot delivers the largest basic hit."},
+]
 
 ## Traced by eye down the centre of winding_forest_close_v1.png. Both ends continue beyond
 ## the canvas: Scouts enter at the upper-left and leave at the upper-right, matching the art.
@@ -29,14 +59,16 @@ const TUTORIAL_PATH: Array = [
 	Vector2(1378, 101), Vector2(1424, 55), Vector2(1536, 18), Vector2(1620, -28),
 ]
 
-## The four grassy pockets intentionally left among the dense forest. `Game.can_build_at`
-## accepts tower centres only inside these circles, so the picture and placement rule agree.
+## Six teaching pads distributed across the four large grassy clearings. Splitting the two
+## widest clearings into paired pads guarantees room for all six towers even when a new
+## player drops the first one in the middle of a glow.
 const BUILD_ZONES: Array = [
-	[Vector2(330, 155), 94.0], [Vector2(855, 140), 92.0],
-	[Vector2(360, 455), 90.0], [Vector2(665, 600), 102.0],
+	[Vector2(288, 155), 66.0], [Vector2(376, 155), 66.0],
+	[Vector2(855, 140), 82.0], [Vector2(360, 455), 80.0],
+	[Vector2(620, 600), 72.0], [Vector2(710, 600), 72.0],
 ]
 
-enum Step { INTRO, BUILD_WATER, WATCH_WATER, UPGRADE_WATER, BUILD_FIRE, ELEMENT_WAVE, COMPLETE }
+enum Step { INTRO, BUILD, COMBAT, UPGRADE_WATER, COMPLETE }
 
 @onready var grid: Node2D = $Grid
 @onready var enemies_root: Node2D = $Enemies
@@ -57,15 +89,19 @@ enum Step { INTRO, BUILD_WATER, WATCH_WATER, UPGRADE_WATER, BUILD_FIRE, ELEMENT_
 @onready var play_button: Button = $UI/HUD/CompletePanel/Panel/VBox/PlayButton
 
 var _step: int = Step.INTRO
+var _lesson_index := 0
 var _drag_kind := ""
 var _hovered: Tower = null
 var _water_tower: Tower = null
+var _lesson_tower: Tower = null
 var _spawn_timer: Timer
 var _to_spawn := 0
 var _alive := 0
 var _group_hp := 0.0
 var _group_speed := 0.0
 var _group_armor := ""
+var _lesson_start_lives := START_LIVES
+var _last_lesson_leaks := 0
 
 func _ready() -> void:
 	get_tree().paused = false
@@ -73,7 +109,7 @@ func _ready() -> void:
 	Game.configure_board(TUTORIAL_PATH, [], BUILD_ZONES)
 	Game.reset()
 	Run.reset(0)
-	# Fixed teaching budget: Water + its first upgrade + Fire, with a little room left. Meta
+	# Fixed teaching budget: all six basics plus Water's first upgrade, with 25 left. Meta
 	# progression must not make the lesson's instructions and displayed numbers disagree.
 	Game.gold = START_GOLD
 	Game.lives = START_LIVES
@@ -130,10 +166,8 @@ func _begin_lesson() -> void:
 	intro_dim.hide()
 	intro_panel.hide()
 	palette.show()
-	_step = Step.BUILD_WATER
-	palette.set_allowed_towers(["water"])
-	stage_label.text = "Training 1/2 — Automatic fire"
-	hint_label.text = "Drag the Water tower from the right onto one of the glowing grass clearings."
+	_lesson_index = 0
+	_show_build_step()
 
 func _start_game() -> void:
 	Audio.play("build")
@@ -141,7 +175,7 @@ func _start_game() -> void:
 	get_tree().change_scene_to_file(GAME_SCENE)
 
 func _on_drag_started(kind: String) -> void:
-	if _step != Step.BUILD_WATER and _step != Step.BUILD_FIRE:
+	if _step != Step.BUILD or kind != _expected_tower():
 		return
 	_drag_kind = kind
 	grid.set_showing(true)
@@ -185,11 +219,31 @@ func _upgrade_water() -> bool:
 	_water_tower.upgrade()
 	Game.towers_changed.emit()
 	Audio.play("upgrade")
-	_step = Step.BUILD_FIRE
-	palette.set_allowed_towers(["fire"])
-	stage_label.text = "Training 2/2 — Element advantage"
-	hint_label.text = "Upgrades multiply a tower's power. Now drag a Fire tower onto another clearing."
+	_advance_lesson()
 	return true
+
+func _lesson() -> Dictionary:
+	return LESSONS[_lesson_index] as Dictionary
+
+func _expected_tower() -> String:
+	return String(_lesson()["tower"])
+
+func _show_build_step() -> void:
+	_step = Step.BUILD
+	var lesson := _lesson()
+	palette.set_allowed_towers([String(lesson["tower"])])
+	stage_label.text = "Training %d/%d — %s" % [
+		_lesson_index + 1, LESSONS.size(), String(lesson["label"])]
+	hint_label.text = String(lesson["build"])
+
+func _advance_lesson() -> void:
+	if is_instance_valid(_lesson_tower):
+		_lesson_tower.set_process(false)
+	_lesson_index += 1
+	if _lesson_index >= LESSONS.size():
+		_finish_lesson()
+		return
+	_show_build_step()
 
 func _update_hover(world_pos: Vector2) -> void:
 	_set_hovered(_tower_at(world_pos))
@@ -216,8 +270,8 @@ func _drop(world_pos: Vector2) -> void:
 	_drag_kind = ""
 	preview.hide()
 	grid.set_showing(false)
-	var expected := "water" if _step == Step.BUILD_WATER else "fire"
-	if kind != expected or not Game.can_build_at(world_pos, towers_root.get_children()):
+	if _step != Step.BUILD or kind != _expected_tower() \
+			or not Game.can_build_at(world_pos, towers_root.get_children()):
 		Audio.play("denied")
 		return
 	var cost := int(Game.TOWER_DEFS[kind]["cost"])
@@ -230,17 +284,21 @@ func _drop(world_pos: Vector2) -> void:
 	towers_root.add_child(tower)
 	Game.towers_changed.emit()
 	Audio.play("build")
-	if kind == "water":
+	_lesson_tower = tower
+	# Only the tower introduced by this step may fire. Earlier towers remain on the board as
+	# a six-element lineup but cannot steal the demonstration wave's kills.
+	for child in towers_root.get_children():
+		var built := child as Tower
+		if built != null:
+			built.set_process(built == _lesson_tower)
+	if _lesson_index == 0:
 		_water_tower = tower
-		_step = Step.WATCH_WATER
-		palette.set_allowed_towers([])
-		hint_label.text = "Towers aim and fire automatically. Enemies that reach the upper-right exit cost lives."
-		_start_group_after_delay(4, 42.0, 92.0, "")
-	else:
-		_step = Step.ELEMENT_WAVE
-		palette.set_allowed_towers([])
-		hint_label.text = "Fire beats Nature, so gold damage numbers show ×1.75 bonus damage."
-		_start_group_after_delay(5, 78.0, 100.0, "nature")
+	_step = Step.COMBAT
+	_lesson_start_lives = Game.lives
+	_last_lesson_leaks = 0
+	palette.set_allowed_towers([])
+	hint_label.text = String(_lesson()["combat"])
+	_start_group_after_delay()
 
 func _tower_at(world_pos: Vector2) -> Tower:
 	var best: Tower = null
@@ -255,14 +313,17 @@ func _tower_at(world_pos: Vector2) -> Tower:
 			best_d = distance
 	return best
 
-func _start_group_after_delay(count: int, hp: float, speed: float, armor: String) -> void:
+func _start_group_after_delay() -> void:
+	var expected_lesson := _lesson_index
 	await get_tree().create_timer(0.8).timeout
-	if _step != Step.WATCH_WATER and _step != Step.ELEMENT_WAVE:
+	if _step != Step.COMBAT or _lesson_index != expected_lesson:
 		return
-	_to_spawn = count
-	_group_hp = hp
-	_group_speed = speed
-	_group_armor = armor
+	var lesson := _lesson()
+	_to_spawn = int(lesson["count"])
+	_group_hp = float(lesson["hp"])
+	_group_speed = float(lesson["speed"])
+	_group_armor = String(lesson["armor"])
+	_spawn_timer.wait_time = float(lesson.get("interval", SPAWN_INTERVAL))
 	_spawn_one()
 	if _to_spawn > 0:
 		_spawn_timer.start()
@@ -290,12 +351,17 @@ func _on_enemy_removed() -> void:
 		call_deferred("_on_group_cleared")
 
 func _on_group_cleared() -> void:
-	if _step == Step.WATCH_WATER:
+	if _step != Step.COMBAT:
+		return
+	_last_lesson_leaks = _lesson_start_lives - Game.lives
+	if OS.get_cmdline_user_args().has("--tutorial-auto"):
+		print("  tutorial %s: leaks=%d" % [_expected_tower(), _last_lesson_leaks])
+	if _lesson_index == 0:
 		_step = Step.UPGRADE_WATER
-		stage_label.text = "Training 1/2 — Upgrade"
+		stage_label.text = "Training 1/6 — Water upgrade"
 		hint_label.text = "Tap the Water tower's body to upgrade it. The red × sells for half during real runs."
-	elif _step == Step.ELEMENT_WAVE:
-		_finish_lesson()
+	else:
+		_advance_lesson()
 
 func _finish_lesson() -> void:
 	_step = Step.COMPLETE
@@ -313,33 +379,60 @@ func _finish_lesson() -> void:
 		_save_screenshot(0.25, "tutorial_complete.png")
 
 ## Harness: completes the action-gated lesson without synthetic mouse events. It exercises
-## both combat groups, the upgrade, board-profile movement and the completion transition.
+## all six combat groups, Water's upgrade, board-profile movement and completion.
 func _run_auto_tutorial() -> void:
 	Engine.time_scale = 8.0
 	_begin_lesson()
 	await get_tree().process_frame
-	_drag_kind = "water"
-	_drop(BUILD_ZONES[0][0])
-	var frames := 0
-	while _step == Step.WATCH_WATER and frames < 3600:
-		await get_tree().process_frame
-		frames += 1
-	if _step != Step.UPGRADE_WATER or not _upgrade_water():
-		push_error("Tutorial harness failed before Water upgrade (step=%d)" % _step)
-		Engine.time_scale = 1.0
-		return
-	_drag_kind = "fire"
-	_drop(BUILD_ZONES[3][0])
-	frames = 0
-	while _step == Step.ELEMENT_WAVE and frames < 3600:
-		await get_tree().process_frame
-		frames += 1
+	for expected_lesson in range(LESSONS.size()):
+		if _step != Step.BUILD or _lesson_index != expected_lesson:
+			_harness_error("build step", expected_lesson)
+			return
+		var position := _find_auto_build_position()
+		if position.x < 0.0:
+			_harness_error("free build pad", expected_lesson)
+			return
+		_drag_kind = _expected_tower()
+		_drop(position)
+		var frames := 0
+		while _step == Step.COMBAT and frames < 3600:
+			await get_tree().process_frame
+			frames += 1
+		if _last_lesson_leaks > 0:
+			_harness_error("leak-free combat", expected_lesson)
+			return
+		if expected_lesson == 0:
+			if _step != Step.UPGRADE_WATER or not _upgrade_water():
+				_harness_error("Water upgrade", expected_lesson)
+				return
+		elif expected_lesson < LESSONS.size() - 1:
+			if _step != Step.BUILD or _lesson_index != expected_lesson + 1:
+				_harness_error("next lesson", expected_lesson)
+				return
 	if _step != Step.COMPLETE:
-		push_error("Tutorial harness failed before completion (step=%d)" % _step)
-		Engine.time_scale = 1.0
+		_harness_error("completion", _lesson_index)
 		return
 	Engine.time_scale = 1.0
-	print("--- TUTORIAL COMPLETE: water upgraded, fire counter wave cleared ---")
+	print("--- TUTORIAL COMPLETE: all six towers built and all counter waves cleared ---")
+
+func _find_auto_build_position() -> Vector2:
+	# Try the pad centre first, then small offsets. The same search is used after every build,
+	# so it proves that a legal six-tower layout exists rather than bypassing placement rules.
+	const OFFSETS: Array = [
+		Vector2.ZERO, Vector2(-32, 0), Vector2(32, 0), Vector2(0, -32), Vector2(0, 32),
+	]
+	for entry in BUILD_ZONES:
+		for offset in OFFSETS:
+			var candidate: Vector2 = entry[0] + offset
+			if Game.can_build_at(candidate, towers_root.get_children()):
+				return candidate
+	return Vector2(-1, -1)
+
+func _harness_error(point: String, lesson: int) -> void:
+	push_error("Tutorial harness failed at %s (lesson=%d, step=%d)" % [point, lesson, _step])
+	Engine.time_scale = 1.0
+	if OS.get_cmdline_user_args().has("--tutorial-complete-shot"):
+		get_tree().quit()
 
 func _save_screenshot(delay: float, file: String) -> void:
 	await get_tree().create_timer(delay).timeout
@@ -351,3 +444,6 @@ func _save_screenshot(delay: float, file: String) -> void:
 		push_error("Tutorial screenshot failed: %s" % error_string(err))
 		return
 	print("--- TUTORIAL SHOT: ", ProjectSettings.globalize_path(path))
+	if file == "tutorial_complete.png" \
+			and OS.get_cmdline_user_args().has("--tutorial-auto"):
+		get_tree().quit()
