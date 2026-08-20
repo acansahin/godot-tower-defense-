@@ -5,7 +5,7 @@ class_name Tutorial
 ## Training has its own painting, open-ended road and scarce build clearings. It deliberately
 ## does NOT use WaveManager: the lesson advances on actions (build Water, watch it fire,
 ## upgrade it, then try every element) and only spawns the tiny groups needed to demonstrate
-## those actions. Leaving this scene restores Game's main-board profile before Main starts.
+## those actions. Leaving this scene clears its profile; Main then selects the wave-1 board.
 
 const GAME_SCENE := "res://scenes/Main.tscn"
 const TOWER := preload("res://scenes/Tower.tscn")
@@ -43,29 +43,6 @@ const LESSONS: Array = [
 		"count": 3, "hp": 250.0, "speed": 76.0, "interval": 1.05,
 		"build": "Place Darkness in the last free pocket. It fires slowly but hits extremely hard.",
 		"combat": "Darkness beats Water armour. Each slow shot delivers the largest basic hit."},
-]
-
-## Traced by eye down the centre of winding_forest_close_v1.png. Both ends continue beyond
-## the canvas: Scouts enter at the upper-left and leave at the upper-right, matching the art.
-const TUTORIAL_PATH: Array = [
-	Vector2(86, -70), Vector2(96, 38), Vector2(165, 74), Vector2(202, 120),
-	Vector2(205, 205), Vector2(250, 276), Vector2(322, 322), Vector2(455, 337),
-	Vector2(551, 359), Vector2(598, 414), Vector2(570, 497), Vector2(505, 570),
-	Vector2(478, 643), Vector2(525, 716), Vector2(643, 758), Vector2(781, 758),
-	Vector2(900, 698), Vector2(965, 634), Vector2(974, 560), Vector2(937, 496),
-	Vector2(873, 459), Vector2(827, 395), Vector2(846, 331), Vector2(919, 276),
-	Vector2(1010, 286), Vector2(1102, 331), Vector2(1194, 386), Vector2(1304, 386),
-	Vector2(1378, 340), Vector2(1442, 276), Vector2(1415, 211), Vector2(1369, 156),
-	Vector2(1378, 101), Vector2(1424, 55), Vector2(1536, 18), Vector2(1620, -28),
-]
-
-## Six teaching pads distributed across the four large grassy clearings. Splitting the two
-## widest clearings into paired pads guarantees room for all six towers even when a new
-## player drops the first one in the middle of a glow.
-const BUILD_ZONES: Array = [
-	[Vector2(288, 155), 66.0], [Vector2(376, 155), 66.0],
-	[Vector2(855, 140), 82.0], [Vector2(360, 455), 80.0],
-	[Vector2(620, 600), 72.0], [Vector2(710, 600), 72.0],
 ]
 
 enum Step { INTRO, BUILD, COMBAT, UPGRADE_WATER, COMPLETE }
@@ -106,7 +83,7 @@ var _last_lesson_leaks := 0
 func _ready() -> void:
 	get_tree().paused = false
 	Engine.time_scale = 1.0
-	Game.configure_board(TUTORIAL_PATH, [], BUILD_ZONES)
+	Game.use_board("winding")
 	Game.reset()
 	Run.reset(0)
 	# Fixed teaching budget: all six basics plus Water's first upgrade, with 25 left. Meta
@@ -421,7 +398,7 @@ func _find_auto_build_position() -> Vector2:
 	const OFFSETS: Array = [
 		Vector2.ZERO, Vector2(-32, 0), Vector2(32, 0), Vector2(0, -32), Vector2(0, 32),
 	]
-	for entry in BUILD_ZONES:
+	for entry in Game.WINDING_BUILD_ZONES:
 		for offset in OFFSETS:
 			var candidate: Vector2 = entry[0] + offset
 			if Game.can_build_at(candidate, towers_root.get_children()):

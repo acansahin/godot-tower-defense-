@@ -13,18 +13,28 @@ uniform sampler2D water_mask : filter_linear, repeat_disable;
 uniform float lake_strength = 0.00135; // subtle surface motion, roughly two source pixels
 uniform float fall_strength = 0.0028;  // stronger motion inside the waterfall only
 uniform float motion_speed = 1.0;
+// centre x/y + half-width/half-height. Two regions cover boards with separated falls.
+uniform vec4 waterfall_region_a = vec4(0.095, 0.63, 0.05, 0.14);
+uniform vec4 waterfall_region_b = vec4(0.0);
+
+float region_mask(vec2 uv, vec4 region) {
+	if (region.z <= 0.0 || region.w <= 0.0) {
+		return 0.0;
+	}
+	float x = 1.0 - smoothstep(region.z * 0.65, region.z, abs(uv.x - region.x));
+	float y = 1.0 - smoothstep(region.w * 0.65, region.w, abs(uv.y - region.y));
+	return x * y;
+}
 
 void fragment() {
 	float m = texture(water_mask, UV).r;
 	if (m > 0.004) {
 		float t = TIME * motion_speed;
 
-		// The painted waterfall occupies this small part of the board. Smooth bounds prevent
-		// a rectangular transition; the water mask still decides the exact silhouette.
-		float fall_x = 1.0 - smoothstep(0.025, 0.075, abs(UV.x - 0.095));
-		float fall_y = smoothstep(0.49, 0.55, UV.y)
-				* (1.0 - smoothstep(0.70, 0.77, UV.y));
-		float waterfall = fall_x * fall_y;
+		// Per-board fall regions provide motion direction; the water mask still decides the
+		// exact silhouette, so these soft rectangles can never disturb grass or rock.
+		float waterfall = max(region_mask(UV, waterfall_region_a),
+				region_mask(UV, waterfall_region_b));
 		float lake = 1.0 - waterfall;
 
 		// Two oblique waves with unrelated periods keep the lake from moving as one sheet.

@@ -7,6 +7,7 @@ const TOWER := preload("res://scenes/Tower.tscn")
 const SHAKE_DECAY := 26.0  ## Pixels of camera shake bled off per second.
 
 @onready var grid = $Grid
+@onready var map = $Map
 @onready var enemies_root: Node2D = $Enemies
 @onready var towers_root: Node2D = $Towers
 @onready var wave_manager: WaveManager = $WaveManager
@@ -21,10 +22,18 @@ var _drag_kind: String = ""  ## Tower type being dragged from the palette ("" = 
 var _hovered: Tower = null   ## Tower under the mouse, drawn with a clear range ring.
 var _shake: float = 0.0      ## Current camera shake magnitude in px; decays to 0.
 var _auto_pick: bool = false ## Harness only (--fill-board/--auto-pick): auto-resolve upgrade choices.
+## Harness only (`--map:s`): holds one board for a focused playtest instead of rotating.
+var _board_override: String = ""
 
 func _ready() -> void:
 	get_tree().paused = false
-	Game.use_main_board()
+	for arg in OS.get_cmdline_user_args():
+		if String(arg).begins_with("--map:"):
+			_board_override = String(arg).trim_prefix("--map:")
+	if _board_override == "":
+		Game.use_board_for_wave(1)
+	else:
+		Game.use_board(_board_override)
 	# One seed drives both the waves and the card offers, so a whole run — what it throws at
 	# you and what it lets you answer with — replays from a single number.
 	var run_seed := randi()
@@ -39,6 +48,7 @@ func _ready() -> void:
 	Game.gold_changed.connect(palette.set_gold)
 	Game.lives_changed.connect(hud.set_lives)
 	Game.game_over.connect(_on_game_over)
+	wave_manager.wave_starting.connect(_on_wave_starting)
 	wave_manager.wave_started.connect(hud.set_wave)
 	wave_manager.wave_preview.connect(hud.set_next)
 	wave_manager.prep_started.connect(hud.enable_send)
@@ -61,6 +71,9 @@ func _ready() -> void:
 
 	wave_manager.enemies_root = enemies_root
 	wave_manager.start(run_seed)
+	if OS.get_cmdline_user_args().has("--show-road"):
+		map.show_road = true
+		map.queue_redraw()
 
 	# Must run BEFORE any dump. Meta's Workshop levels feed Run.permanent, which feeds every
 	# tower stat — so a --dump-stats taken against a save with purchases in it is measuring
@@ -119,6 +132,66 @@ func _ready() -> void:
 				_save_screenshot(float(parts[1]), "shot_%s.png" % parts[1])
 			else:
 				_save_screenshot(1.0)
+
+## WaveManager emits this before deriving stats or creating the first enemy, so a chapter
+## boundary installs the correct painting, path and board-specific balance together.
+func _on_wave_starting(number: int) -> void:
+	var previous_board := Game.active_board_id
+	if _board_override == "":
+		Game.use_board_for_wave(number)
+	else:
+		Game.use_board(_board_override)
+	grid.queue_redraw()
+	if previous_board == Game.active_board_id:
+		return
+	var moved := _relocate_towers_for_board()
+	Game.towers_changed.emit()
+	hud.set_hint("New map: %s%s" % [Game.active_board_id.capitalize(),
+			" — %d towers moved to clear ground" % moved if moved > 0 else ""])
+	_clear_map_hint_later()
+	if OS.get_cmdline_user_args().has("--fill-board"):
+		print("--- MAP CHANGE @ wave %d: %s (%d towers moved) ---"
+				% [number, Game.active_board_id, moved])
+
+## Keeps the player's investment through a chapter change without leaving a tower standing
+## in the new road, water or blocked scenery. Legal towers stay exactly where the player put
+## them; only invalid ones move to the nearest open position on a fine placement sweep.
+func _relocate_towers_for_board() -> int:
+	var occupied: Array = []
+	var displaced: Array[Tower] = []
+	for child in towers_root.get_children():
+		var tower := child as Tower
+		if tower == null:
+			continue
+		if Game.can_build_at(tower.position):
+			occupied.append(tower.position)
+		else:
+			displaced.append(tower)
+	var candidates := _buildable_lattice(Game.TOWER_GAP * 0.5)
+	var moved := 0
+	for tower in displaced:
+		var best := Vector2.ZERO
+		var best_distance := INF
+		var found := false
+		for candidate in candidates:
+			if not _far_enough(candidate, occupied):
+				continue
+			var distance := tower.position.distance_squared_to(candidate)
+			if distance < best_distance:
+				best = candidate
+				best_distance = distance
+				found = true
+		if not found:
+			push_warning("No legal relocation position for tower at %s" % tower.position)
+			continue
+		tower.position = best
+		occupied.append(best)
+		moved += 1
+	return moved
+
+func _clear_map_hint_later() -> void:
+	await get_tree().create_timer(4.0).timeout
+	hud.set_hint("")
 
 ## TEMPORARY: saves one frame of the running game to `user://shot.png` and prints where it
 ## landed. Every other harness here prints numbers, and numbers cannot see a board — the
@@ -322,9 +395,9 @@ func _air_pose() -> void:
 		e.radius = Balance.ENEMY_BASE_RADIUS * float(def.get("radius", 1.0))
 		e.make_flying()
 		enemies_root.add_child(e)
-		var step := int(float(Game.PATH.size() - 2) * float(i) / 8.0) + 1
+		var step := int(float(Game.active_path.size() - 2) * float(i) / 8.0) + 1
 		e.set_progress(step)
-		e.global_position = Game.PATH[step]
+		e.global_position = Game.active_path[step]
 		# Half of them damaged, so the health bar is visible against the lifted body.
 		if i % 2 == 1:
 			e.take_damage(150.0)
@@ -414,14 +487,16 @@ func _dump_board() -> void:
 	# sampling grain never decides the answer.
 	const STEP := 12.0
 	var samples: Array[Vector2] = []
-	var path: Array = Game.PATH
+	var path: Array = Game.active_path
 	var total := 0.0
 	for i in range(path.size() - 1):
 		var a: Vector2 = path[i]
 		var b: Vector2 = path[i + 1]
 		var seg := a.distance_to(b)
 		total += seg
-		var n := int(seg / STEP)
+		# A smoothed path has many segments shorter than STEP. Each still needs one sample;
+		# dropping them made a denser, better route look shorter to the coverage harness.
+		var n := maxi(1, ceili(seg / STEP))
 		for k in n:
 			samples.append(a.lerp(b, float(k) / float(n)))
 	# The candidate set is every legal STANDING SPOT, swept on the tower spacing — the board

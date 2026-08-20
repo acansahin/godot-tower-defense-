@@ -11,14 +11,20 @@ extends Node2D
 ## mistake that is obvious in a screenshot and invisible in a number.
 
 const BOARD := preload("res://assets/art/board_source.png")
+const WINDING_BOARD := preload("res://assets/art/maps/winding_forest_close_v1.png")
+const S_BOARD := preload("res://assets/art/maps/s_forest_v1.png")
 const WATER_SHADER := preload("res://shaders/water_flow.gdshader")
 ## Where the water is, found in the painting by tools/water_mask.py. Re-run that after any
 ## repaint; the shader ripples exactly what this file calls white.
 const WATER_MASK := preload("res://assets/art/board_water.png")
+const WINDING_WATER_MASK := preload("res://assets/art/maps/winding_forest_close_v1_water.png")
+const S_WATER_MASK := preload("res://assets/art/maps/s_forest_v1_water.png")
 
 ## Draws the traced Game.PATH over the painting. Turn on after re-tracing; the question it
 ## answers is whether the line sits down the middle of the cobbles all the way to the keep.
 @export var show_road: bool = false
+
+var _water_material: ShaderMaterial
 
 func _ready() -> void:
 	# The board is 1672px of painting shown across 1280px of screen: a mild downscale, but
@@ -28,14 +34,52 @@ func _ready() -> void:
 	# the right tool for moving its water: layered surface currents and the waterfall happen
 	# per pixel on the GPU and cost this node nothing per frame. Built here rather than saved
 	# into the scene so the mask and the board it was derived from stay together.
-	var mat := ShaderMaterial.new()
-	mat.shader = WATER_SHADER
-	mat.set_shader_parameter("water_mask", WATER_MASK)
-	material = mat
+	_water_material = ShaderMaterial.new()
+	_water_material.shader = WATER_SHADER
+	_water_material.set_shader_parameter("water_mask", WATER_MASK)
+	Game.board_changed.connect(_on_board_changed)
+	_on_board_changed(Game.active_board_id)
+
+func _on_board_changed(board_id: String) -> void:
+	# Each painting owns a separately derived mask; sharing one would ripple grass where a
+	# different board happened to have water. Fall regions only choose vertical flow inside
+	# that mask — black pixels remain perfectly still.
+	match board_id:
+		"winding":
+			_water_material.set_shader_parameter("water_mask", WINDING_WATER_MASK)
+			_water_material.set_shader_parameter("waterfall_region_a",
+					Vector4(0.045, 0.48, 0.055, 0.37))
+			_water_material.set_shader_parameter("waterfall_region_b", Vector4.ZERO)
+		"s":
+			_water_material.set_shader_parameter("water_mask", S_WATER_MASK)
+			_water_material.set_shader_parameter("waterfall_region_a",
+					Vector4(0.09, 0.12, 0.045, 0.09))
+			_water_material.set_shader_parameter("waterfall_region_b",
+					Vector4(0.07, 0.72, 0.06, 0.20))
+		_:
+			_water_material.set_shader_parameter("water_mask", WATER_MASK)
+			_water_material.set_shader_parameter("waterfall_region_a",
+					Vector4(0.095, 0.63, 0.05, 0.14))
+			_water_material.set_shader_parameter("waterfall_region_b", Vector4.ZERO)
+	material = _water_material
 	queue_redraw()
 
 func _draw() -> void:
-	draw_texture_rect(BOARD, Rect2(Vector2.ZERO, Game.WORLD_SIZE), false)
+	var board: Texture2D
+	match Game.active_board_id:
+		"winding":
+			board = WINDING_BOARD
+		"s":
+			board = S_BOARD
+		_:
+			board = BOARD
+	draw_texture_rect(board, Rect2(Vector2.ZERO, Game.WORLD_SIZE), false)
+	# The winding painting is intentionally dense, so its legal clearings need the same
+	# quiet cue they have in the lesson. Spiral uses free placement and draws no pads.
+	for entry in Game.active_build_zones:
+		draw_circle(entry[0], float(entry[1]), Color(0.35, 0.95, 0.48, 0.055))
+		draw_arc(entry[0], float(entry[1]), 0.0, TAU, 48,
+				Color(0.55, 1.0, 0.62, 0.32), 2.0, true)
 	if show_road:
 		_draw_traced_road()
 

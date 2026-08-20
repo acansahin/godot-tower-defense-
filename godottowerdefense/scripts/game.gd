@@ -16,6 +16,9 @@ signal shake_requested(amount: float)
 ## on which aura providers stand near it, so every tower re-pulls its neighbourhood when
 ## the set changes. Emitted by Main, which owns those three actions.
 signal towers_changed
+## The endless run moved to another 10-wave board. The Map node redraws the matching
+## painting from this signal; pathing and placement are already installed when it fires.
+signal board_changed(board_id: String)
 
 ## The design viewport — what the player can see at once. UI (the choice screen, the
 ## Workshop, the HUD and the tower palette) is drawn against this, in SCREEN space; the
@@ -166,6 +169,57 @@ const PATH: Array = [
 	Vector2(917, 349),
 	Vector2(920, 402),
 ]
+
+# The winding forest first used by the interactive lesson is also the opening endless-run
+# board. Both ends continue beyond the canvas, matching the painted road. Keeping this
+# geometry beside PATH makes each board a profile owned by Game rather than by one scene.
+const WINDING_PATH: Array = [
+	Vector2(86, -70), Vector2(96, 38), Vector2(165, 74), Vector2(202, 120),
+	Vector2(205, 205), Vector2(250, 276), Vector2(322, 322), Vector2(455, 337),
+	Vector2(551, 359), Vector2(598, 414), Vector2(570, 497), Vector2(505, 570),
+	Vector2(478, 643), Vector2(525, 716), Vector2(643, 758), Vector2(781, 758),
+	Vector2(900, 698), Vector2(965, 634), Vector2(974, 560), Vector2(937, 496),
+	Vector2(873, 459), Vector2(827, 395), Vector2(846, 331), Vector2(919, 276),
+	Vector2(1010, 286), Vector2(1102, 331), Vector2(1194, 386), Vector2(1304, 386),
+	Vector2(1378, 340), Vector2(1442, 276), Vector2(1415, 211), Vector2(1369, 156),
+	Vector2(1378, 101), Vector2(1424, 55), Vector2(1536, 18), Vector2(1620, -28),
+]
+
+## Legal clearings on the dense winding painting. The same six generous pockets teach the
+## player where building is possible and keep towers out of the painted cliffs and trees.
+const WINDING_BUILD_ZONES: Array = [
+	[Vector2(288, 155), 66.0], [Vector2(376, 155), 66.0],
+	[Vector2(855, 140), 82.0], [Vector2(360, 455), 80.0],
+	[Vector2(620, 600), 72.0], [Vector2(710, 600), 72.0],
+]
+
+## Control points for the generated S board (`assets/art/maps/s_forest_v1.png`). Coordinates
+## are traced down the pale cobbles after the 1672x941 painting is fitted to WORLD_SIZE.
+## use_board() samples a Catmull-Rom curve through them so walkers follow the painted bends
+## smoothly instead of turning across 32 visible straight chords.
+const S_PATH: Array = [
+	Vector2(-70, 227), Vector2(83, 227), Vector2(170, 252), Vector2(257, 275),
+	Vector2(354, 275), Vector2(432, 243), Vector2(492, 188), Vector2(560, 151),
+	Vector2(662, 144), Vector2(767, 147), Vector2(864, 170), Vector2(928, 211),
+	Vector2(969, 266), Vector2(974, 308), Vector2(946, 344), Vector2(891, 372),
+	Vector2(809, 386), Vector2(717, 381), Vector2(634, 376), Vector2(570, 395),
+	Vector2(524, 431), Vector2(505, 477), Vector2(510, 528), Vector2(538, 583),
+	Vector2(588, 624), Vector2(662, 652), Vector2(753, 666), Vector2(854, 670),
+	Vector2(956, 670), Vector2(1047, 670), Vector2(1121, 678), Vector2(1205, 670),
+]
+
+## Painted pools and waterfalls on the S board. Rocks and trees remain cosmetic, matching
+## the spiral profile; only unmistakable water rejects tower placement.
+const S_OBSTACLES: Array = [
+	[Vector2(133, 110), 55.0], [Vector2(74, 303), 55.0],
+	[Vector2(234, 569), 108.0], [Vector2(105, 708), 72.0],
+	[Vector2(1144, 170), 68.0],
+]
+
+## Endless maps advance in 10-wave chapters. Add Z and future profiles here after adding
+## their geometry to use_board(); the final available map remains active until then.
+const WAVES_PER_BOARD := 10
+const BOARD_SEQUENCE: Array = ["winding", "spiral", "s"]
 
 # Grid placement: towers snap to cells drawn faintly on the grass, flush against
 # the road. The whole board is sized for touch: on a landscape phone the 1280x720
@@ -539,8 +593,10 @@ const WAVE_TYPES := {
 ##
 ## "element" (optional) is the wave's armor element (empty/absent = neutral); early waves
 ## and all Air waves stay neutral so element colour doesn't clash with the archetype tint.
+## "art" / "name" may override only the painted creature and preview label while keeping
+## the `type` archetype's combat stats — wave 1 uses the familiar tutorial Scout this way.
 const WAVES: Array = [
-	{"type": "normal", "count": 0.65},              # 1  — first real wave, still gentle
+	{"type": "normal", "art": "tutorial", "name": "Scout", "count": 0.65}, # 1
 	{"type": "normal"},                                # 2  — a real wave, still gentle
 	{"type": "fast"},                                  # 3  — speed
 	{"type": "swarm"},                                 # 4  — numbers
@@ -752,6 +808,7 @@ var wave_reached: int = 0
 var active_path: Array = []
 var active_obstacles: Array = []
 var active_build_zones: Array = []
+var active_board_id: String = ""
 
 ## Cumulative distance from active_path[0] to each waypoint. Towers
 ## rank enemies by how far along the road they are (the First / Last targeting modes)
@@ -764,11 +821,33 @@ func _ready() -> void:
 ## Restores the endless-run board. Called by Menu/Main as well as on leaving training, so a
 ## scene reload can never inherit the short tutorial road from the scene before it.
 func use_main_board() -> void:
-	configure_board(PATH, OBSTACLES)
+	use_board("spiral")
+
+## Selects the endless board for `wave`. The last available profile remains active after its
+## chapter, so an unfinished map slot never sends a deep run back to an earlier layout.
+func use_board_for_wave(wave: int) -> void:
+	var chapter := floori(float(maxi(wave, 1) - 1) / float(WAVES_PER_BOARD))
+	use_board(String(BOARD_SEQUENCE[mini(chapter, BOARD_SEQUENCE.size() - 1)]))
+
+## Installs a named board profile. Towers and run economy deliberately survive the swap;
+## only the painting, road and future placement checks change between chapters.
+func use_board(board_id: String) -> void:
+	if active_board_id == board_id:
+		return
+	match board_id:
+		"winding":
+			configure_board(_smooth_path(WINDING_PATH, 4), [], WINDING_BUILD_ZONES, board_id)
+		"spiral":
+			configure_board(_smooth_path(PATH, 2), OBSTACLES, [], board_id)
+		"s":
+			configure_board(_smooth_path(S_PATH, 4), S_OBSTACLES, [], board_id)
+		_:
+			push_error("Game.use_board: unknown board '%s'" % board_id)
 
 ## Installs one board's gameplay geometry. The painting itself belongs to that scene's Map
 ## node; this is only the geometry every gameplay system must agree on.
-func configure_board(path: Array, obstacles: Array = [], build_zones: Array = []) -> void:
+func configure_board(path: Array, obstacles: Array = [], build_zones: Array = [],
+		board_id: String = "custom") -> void:
 	if path.size() < 2:
 		push_error("Game.configure_board needs at least two path points")
 		return
@@ -780,6 +859,30 @@ func configure_board(path: Array, obstacles: Array = [], build_zones: Array = []
 	for i in range(1, active_path.size()):
 		_path_cum[i] = _path_cum[i - 1] \
 				+ (active_path[i] as Vector2).distance_to(active_path[i - 1])
+	active_board_id = board_id
+	board_changed.emit(active_board_id)
+
+## Samples a smooth centre-line through a traced control polyline. Four subdivisions keep
+## adjacent waypoints close enough that Enemy's linear movement looks curved, without
+## bloating targeting/path-progress work on every frame.
+func _smooth_path(control: Array, subdivisions: int) -> Array:
+	if control.size() < 3 or subdivisions <= 1:
+		return control.duplicate(true)
+	var out: Array = []
+	for i in range(control.size() - 1):
+		var p0: Vector2 = control[maxi(i - 1, 0)]
+		var p1: Vector2 = control[i]
+		var p2: Vector2 = control[i + 1]
+		var p3: Vector2 = control[mini(i + 2, control.size() - 1)]
+		for step in subdivisions:
+			var t := float(step) / float(subdivisions)
+			var t2 := t * t
+			var t3 := t2 * t
+			out.append(0.5 * ((2.0 * p1) + (-p0 + p2) * t
+					+ (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2
+					+ (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3))
+	out.append(control[control.size() - 1])
+	return out
 
 ## How far along the road a walker is, in pixels — higher means closer to the exit.
 ## `target_index` is the waypoint it is currently heading for, `pos` where it is now.

@@ -134,7 +134,7 @@ const HP_GROWTH := 1.16
 ## Creeps spawn at a fraction of their baked hit points, chosen by the map's difficulty
 ## selector: 50% on the easiest setting, +12.5 points per step. We have no difficulty
 ## screen, so this is the dial that stands in for one.
-const CREEP_HP_PERCENT := 1.0
+const CREEP_HP_PERCENT := 1.20
 ## Enemy speed is tied to the LENGTH OF THE ROAD, not to anything in the source map, and
 ## nothing else in the game reads that length — so if the road changes, these move with it
 ## or the pacing breaks silently. `--dump-board` prints the length: it is 3992px, and
@@ -142,6 +142,9 @@ const CREEP_HP_PERCENT := 1.0
 ## tuned at over three road lengths now.
 const BASE_SPEED_FLAT := 80.0
 const BASE_SPEED_LINEAR := 9.0
+## Global movement reduction: enemies stay readable on every road. The matching 20% HP
+## increase above preserves combat pressure instead of making the longer exposure free.
+const CREEP_SPEED_PERCENT := 0.82
 ## Enemies per wave. The map spawns a FLAT `16 + difficulty * 3` and never grows it — all
 ## of its difficulty is in the hit-point curve. Faithful, and unplayable as an opening: 28
 ## enemies at 0.9s apart means wave 1 spends 25 seconds just spawning before anything can
@@ -182,7 +185,7 @@ func wave_hp(wave: int) -> float:
 	return BASE_HP_FLAT * pow(HP_GROWTH, wave - 1) * CREEP_HP_PERCENT
 
 func wave_speed(wave: int) -> float:
-	return BASE_SPEED_FLAT + wave * BASE_SPEED_LINEAR
+	return (BASE_SPEED_FLAT + wave * BASE_SPEED_LINEAR) * CREEP_SPEED_PERCENT
 
 func wave_count(wave: int) -> int:
 	return mini(BASE_COUNT_MAX, BASE_COUNT_FLAT + int(float(wave) * BASE_COUNT_LINEAR))
