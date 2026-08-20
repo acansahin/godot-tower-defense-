@@ -18,10 +18,11 @@ Two things make it more than a colour test:
 
 Usage::
 
-    python tools/water_mask.py
+    python tools/water_mask.py [board.png] [mask.png]
 
-Writes ``assets/art/board_water.png`` at 1/BLOCK the board's size — a few kilobytes, and
-sampled with linear filtering, so the coarseness never shows.
+With no arguments it preserves the original main-board behavior. Explicit paths let every
+painted chapter derive its own mask at 1/BLOCK the board's size — a few kilobytes, sampled
+with linear filtering so the coarseness never shows.
 """
 
 from __future__ import annotations
@@ -52,7 +53,9 @@ def is_water(r: int, g: int, b: int) -> bool:
 
 
 def main() -> int:
-    img = Png(BOARD)
+    board = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else BOARD
+    out_path = os.path.abspath(sys.argv[2]) if len(sys.argv) > 2 else OUT
+    img = Png(board)
     bw, bh = img.width // BLOCK, img.height // BLOCK
     grid = [0.0] * (bw * bh)
     for by in range(bh):
@@ -85,10 +88,10 @@ def main() -> int:
         level = max(0, min(255, int(round(v * 255.0))))
         out[i * 4] = out[i * 4 + 1] = out[i * 4 + 2] = level
         out[i * 4 + 3] = 255
-    write_rgba(OUT, bw, bh, bytes(out))
+    write_rgba(out_path, bw, bh, bytes(out))
     print(f"  board {img.width}x{img.height} -> mask {bw}x{bh} (block {BLOCK}px)")
     print(f"  {solid} blocks are water = {100.0 * solid / len(grid):.1f}% of the board")
-    print(f"  wrote {OUT}")
+    print(f"  wrote {out_path}")
     return 0
 
 

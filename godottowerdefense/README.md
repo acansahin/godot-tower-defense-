@@ -4,13 +4,16 @@ A tiny, fully-playable 2D tower-defense prototype inspired by the Warcraft III
 custom map **Element TD**. Built with typed GDScript, deliberately small and
 readable rather than production-architected.
 
-When you press **Play**, a short interactive training match first opens on its own close-up
-forest map: six teaching pads across four build clearings, an upper-left entrance, an
-upper-right exit, Water placement and upgrading, then one short counter-wave for every basic
-tower. It can always be skipped. The endless run then starts on a hand-painted 1536x864 world,
-a cobblestone road spiralling inward to the keep at its heart — **traced out of the
-painting**, not authored beside it — **free placement** of towers anywhere the ground is
-clear, and an **endless** run of enemies drawn from a data table
+When you press **Play**, a short interactive training match first opens on a close-up forest
+map: six teaching pads across four build clearings, an upper-left entrance, an upper-right
+exit, Water placement and upgrading, then one short counter-wave for every basic tower. It
+can always be skipped. The endless run reuses that winding forest for waves 1–10, changes to
+the inward spiral for waves 11–20, then uses the broad S road for waves 21–30. The run is
+structured as 10-wave map chapters so Z and later road shapes can be appended. Towers, gold
+and lives survive a chapter change; a tower
+that would land on the new road or blocked scenery is moved to the nearest clear ground. Both
+boards are hand-painted 1536x864 worlds whose gameplay roads are **traced out of their
+paintings**, not authored beside them. The run draws enemies from a data table
 of **creep archetypes** (including flyers, tanks, swarms, splitters, regenerators, periodic
 **bosses** and **elite** waves). The buildable roster is the six elements —
 **Light / Darkness / Water / Fire / Nature / Earth**, with the stats of the original
@@ -263,9 +266,10 @@ Both buttons clear `get_tree().paused` first — `show_result()` sets it, and it
 otherwise survive the scene change and leave the next screen frozen.
 
 The `Game` autoload (`scripts/game.gd`) is registered in `project.godot` and is
-globally accessible as `Game`. It holds the shared map layout (`PATH`, traced out of the
-board art), the placement rule (`TOWER_RADIUS`, `ROAD_HALF`, `ROAD_KEEPOUT`, `TOWER_GAP`,
-`OBSTACLES` and the `can_build_at()` that reads them) and the
+globally accessible as `Game`. It holds the board sequence and profiles (`WINDING_PATH`,
+`PATH`, build zones and obstacles), the active map layout, the placement rule
+(`TOWER_RADIUS`, `ROAD_HALF`, `ROAD_KEEPOUT`, `TOWER_GAP` and the `can_build_at()` that
+reads the active profile) and the
 bounds of the play area (`PLAY_RIGHT`, `PLAY_TOP` — derived from the screen-space UI that
 covers the board, not written down) plus the shared `dist_to_road()` helper, the
 costs, and the mutable `gold` / `lives` with signals. Four more autoloads sit beside it:
@@ -292,8 +296,9 @@ editing three files and hunting for un-named literals; it is now one file.
 
 - **`Game` (autoload)** owns gold & lives and broadcasts `gold_changed`,
   `lives_changed` and `game_over` — there is no `victory`, because waves are
-  endless. It also stores the road `PATH` and the placement rule so every script reads one
-  source of truth.
+  endless. It also stores the active road/profile and the placement rule so every script
+  reads one source of truth. `BOARD_SEQUENCE` assigns one profile to each 10-wave chapter;
+  until another profile is added, the last available board remains active.
 - **`Game.can_build_at(pos, others)`** *is* the placement rule, and the only one: inside
   the play area (`PLAY_TOP` … `PLAY_RIGHT`, so no tower is half under the HUD bar or under
   the palette, which also eats the click), at least `ROAD_KEEPOUT` from the road, clear of
@@ -320,7 +325,9 @@ editing three files and hunting for un-named literals; it is now one file.
   (+6 gold) if nothing got through, and the early-call bonus from the HUD's
   **Send Next** button. `wave_preview` emits the next wave's description/colour
   ahead of time for the HUD.
-- **`Enemy`** walks `Game.PATH`; on death it grants gold, on reaching the end it
+- **`Enemy`** captures `Game.active_path` when spawned and consumes its full per-frame
+  travel across multiple short curve segments, so smoothed roads and 1x–3x speeds do not
+  change its effective movement rate; on death it grants gold, on reaching the end it
   costs `life_cost` lives (1 normally, 10 for a boss). Both cases emit `removed`
   so the wave manager can count down. `make_flying()` marks it airborne
   (squishier, faster, shadow) — only towers with `can_hit_flying` can
@@ -370,7 +377,9 @@ editing three files and hunting for un-named literals; it is now one file.
   either upgrades it or, if it hit the corner ×, sells it (`_upgrade_tower`
   / `_sell_tower`). It also owns the `Camera2D` and applies the screen shake that
   `Game.shake_requested` broadcasts, so an `Enemy` can ask for a kick without knowing the
-  camera exists.
+  camera exists. It also applies `Game.use_board_for_wave()` before WaveManager spawns the
+  first enemy of a chapter, so painting, pathing and new placement checks change together;
+  towers invalid on the new terrain are relocated to the nearest legal open position.
 - **`Tutorial`** is a separate, finite level shown between Menu and Main. It installs its
   own `Game.configure_board()` profile, restricts placement to six pads in four painted grass
   clearings, reveals one basic tower at a time, and spawns six tiny counter-armour Scout groups
@@ -407,34 +416,40 @@ editing three files and hunting for un-named literals; it is now one file.
 | Screen shake | `main.gd` `SHAKE_DECAY`, `enemy.gd` | 7px on a boss death, 4px on a leak, bled off at 26 px/s |
 | Impact SFX cap | `audio.gd` `MAX_PER_FRAME` | 3 per effect per frame — a full board at 3x otherwise floods the 12-voice pool |
 | Element matchup | `game.gd` `ELEMENT_BEATS` | cycle light→darkness→water→fire→nature→earth→light; ×1.75 dmg if you beat the target's armor element, ×0.7 if it beats you, ×1 if either side is neutral (applies to direct, splash and poison damage) |
-| Waves | `game.gd` `WAVES` | 20 fixed entries (archetype + optional `boss`/`element`, plus an optional per-wave `hp`/`count` multiplier to smooth a single wave without touching the shared archetype) |
+| Waves | `game.gd` `WAVES` | 20 fixed entries (archetype + optional `boss`/`element`/visual override, plus optional per-wave multipliers); wave 1 keeps Normal stats but introduces the tutorial Scout art |
+| Map chapters | `game.gd` `BOARD_SEQUENCE` / `WAVES_PER_BOARD` | winding forest on waves 1–10, spiral on 11–20, S road from 21; each new profile added to the sequence receives the next 10-wave chapter |
 | Creep archetypes | `game.gd` `WAVE_TYPES` | normal, fast, swarm, tank, immune, regen, air (flyer), split (splits on death) — each is a set of HP/speed/count/radius multipliers and flags on top of the base scaling |
 | Immune archetype | `game.gd` `WAVE_TYPES` + `enemy.gd` `cc_immune` | ignores **slow and stun**, but **not poison** — poison is damage rather than crowd control, so Nature stays the answer to these waves instead of the whole roster going dead |
 | Regen archetype | `game.gd` `WAVE_TYPES` + `enemy.gd` `REGEN_DELAY` | heals 3.5% of max HP/s, but **paused for 2s after taking any damage** — so it only heals through gaps in your coverage instead of setting a hard DPS threshold. Its "+" marker dims while suppressed. Poison ticks count as damage, so a single Nature tower shuts the healing off entirely |
 | Prep time between waves | `wave_manager.gd` `PREP_TIME` | 4s (skippable via the HUD's Send Next button, for a small gold bonus) |
-| Enemy speed | `balance.gd` `BASE_SPEED_*` | `80 + 9·n` px/s, giving a ~45s wave-1 crossing. Tied to the ROAD LENGTH and nothing else reads it, so move these if the road changes |
+| Enemy speed / durability | `balance.gd` `CREEP_SPEED_PERCENT` / `CREEP_HP_PERCENT` | every board uses ×0.82 movement speed for clearer motion and ×1.20 HP to preserve combat pressure |
 | Tower range cap | `balance.gd` `MAX_TOWER_RANGE` | 300px. **The only unfaithful number in the port.** Light and Darkness reach 2000 WC3 units (700px), which watches 99% of the road from one spot — as it does on the original's own arena, which is why this is a design choice and not a repair. Capped, they watch 51% and take four towers to cover 95% of the road, against Fire's 18% and twelve. The defs keep the real 2000; this caps what the board honours |
 | Wave scaling (`n` = wave) | `balance.gd` | HP `75 × 1.16^(n-1)` from the map. Count ramps `9 + 1.2·n` to the map's flat 28 — starting at 28 meant wave 1 spent 25s just spawning. Reward `3 + max(n/3, 1.10^(n-1))`; the flat 3 is ours, because the map's curve pays 1 gold a kill until wave 5, speed `60 + 6·n`, each × the archetype's multipliers |
 | Flyers | `wave_manager.gd` | **the Air archetype only** — there is no per-enemy roll on ground waves any more; `make_flying()` gives HP ×0.65, speed ×1.25 |
 | Bosses | `game.gd` `WAVES` (`"boss": true` per entry) | HP ×6, speed ×0.6, reward ×10, costs 10 lives |
 | Economy: interest | `balance.gd` `INTEREST_RATE`/`INTEREST_CAP` | 2.5% of banked gold per wave cleared, capped at 400. The map pays 2.5% every 15s and has no cap; the cap is ours, so that hoarding gold never beats building |
 | Economy: leak-free bonus | `wave_manager.gd` `LEAK_FREE_BONUS` | +6 gold if no enemy reached the end that wave |
-| Road path | `game.gd` `PATH` | 114 waypoints **traced out of the board art** by `tools/trace_road.py`, 80px wide (`ROAD_HALF` 40), 4023px long, dead-ending at the keep |
-| Placement | `game.gd` `TOWER_RADIUS` / `ROAD_KEEPOUT` / `TOWER_GAP` | free — no grid. 30px footprint, 70px clear of the road centre-line (so a tower may sit with its edge against the kerb), 68px centre-to-centre between towers. `--dump-board` counts 101 legal standing spots on that spacing |
-| Blocked ground | `game.gd` `OBSTACLES` | one circle: the lake and the waterfall pool, found in the painting by the tracer's water scan. Trees and rocks deliberately don't block — a tower among them reads as a tower in a wood |
+| Road paths | `game.gd` `WINDING_PATH` / `PATH` / `S_PATH` | all three traced routes are sampled into smooth walking curves: winding uses 36 controls → 141 points for waves 1–10, spiral 114 → 227 for 11–20, and S 32 → 125 from wave 21 |
+| Placement | `game.gd` `TOWER_RADIUS` / `ROAD_KEEPOUT` / `TOWER_GAP` | 30px footprint, 70px clear of the active road centre-line, 68px centre-to-centre. Winding uses marked grass clearings; spiral uses free placement |
+| Blocked ground | active board profile | winding restricts new builds to its painted clearings; spiral and S block their painted water and otherwise allow clear off-road ground |
 | Tower ranges | `game.gd` `TOWER_DEFS` × `WC3_RANGE_SCALE`, capped | 175–300px |
 | Enemy size | `wave_manager.gd` | radius 24 × the archetype multiplier; boss 38 (must stay under the 80px road width) |
 | Board scale | see note below | everything is sized so a tower lands at ~60 CSS px across on a landscape phone |
 
-**The geometry follows the picture, not the other way round.** The board is a painted image
-(`assets/art/board_source.png`, 1672×941) and `Game.PATH` was traced out of it by
-`tools/trace_road.py`, which casts rays from the keep at the centre of the spiral and
-follows the band of pale cobble across them. The same tool's water scan produced
-`Game.OBSTACLES`. Everything else still follows `PATH`: enemy walking, the road keep-out,
-and the coverage the `--dump-board` harness measures. Re-trace after any change to the art,
-and check the result with `map.gd`'s `show_road` overlay, which draws the traced line back
-over the painting — the question it answers, whether the line sits down the middle of the
-cobbles all the way in, is obvious in a screenshot and invisible in a number.
+**The geometry follows the picture, not the other way round.** `WINDING_PATH` follows
+`assets/art/maps/winding_forest_close_v1.png`; `PATH` follows the spiral in
+`assets/art/board_source.png`; `S_PATH` follows `assets/art/maps/s_forest_v1.png`. The
+spiral was derived by `tools/trace_road.py`, whose water
+scan also produced `Game.OBSTACLES`; the winding route was checked against its painting by
+eye. Everything reads the selected profile: enemy walking, road keep-out, build zones and
+the coverage reported by `--dump-board`. Re-trace after any repaint and check it with
+`map.gd`'s `show_road` overlay. Whether a line sits down the middle of the cobbles is obvious
+in a screenshot and invisible in a number.
+
+Each painting also has its own small water mask (`board_water.png` or the matching
+`*_water.png` beside a chapter map), generated by `tools/water_mask.py`. `map.gd` selects
+that mask with the board profile, so the shared flow shader animates pools and waterfalls
+on every map while keeping roads, grass and rocks still.
 
 This costs the ported geometry. The old road was one inward turn of Element TD's own
 spiral, read out of its pathing map (see

@@ -8,6 +8,8 @@ class_name WaveManager
 ## and from WaveGenerator forever after. There is no last wave and no victory: a run ends
 ## only when the player runs out of lives, and how deep they got is the score.
 
+## Main swaps the board from this synchronous signal before this wave's stats are derived.
+signal wave_starting(number: int)
 signal wave_started(number: int)
 signal wave_preview(text: String, color: Color)  ## Describes the next wave for the HUD.
 signal prep_started                ## The between-waves gap began (send-early available).
@@ -38,6 +40,7 @@ var _interval: float = 0.6
 var _tint: Color = Color.WHITE
 var _type_def: Dictionary = {}  ## The current wave's WAVE_TYPES entry.
 var _kind: String = ""          ## Which WAVE_TYPES key that is; picks the painted sprite.
+var _art_kind: String = ""      ## Optional wave-level painted sprite override.
 var _element: String = ""       ## The current wave's armor element ("" = neutral).
 var _lives_at_start: int = 0    ## Lives when the wave began (for the leak-free bonus).
 var _generator: WaveGenerator = null  ## Supplies every wave past the seed table.
@@ -97,8 +100,10 @@ func send_now() -> void:
 func _start_wave() -> void:
 	_wave += 1
 	Game.wave_reached = _wave
+	wave_starting.emit(_wave)
 	var def: Dictionary = _wave_def(_wave)
 	_kind = String(def["type"])
+	_art_kind = String(def.get("art", _kind))
 	_type_def = Game.WAVE_TYPES[_kind]
 	# Base scaling (quadratic HP so towers must keep pace) x archetype multipliers.
 	# The curve itself lives in Balance; the archetype and per-wave multipliers below
@@ -119,9 +124,11 @@ func _start_wave() -> void:
 		_tint = _type_def.get("color", Color.WHITE)
 	_lives_at_start = Game.lives
 	if OS.get_cmdline_user_args().has("--fill-board"):
-		print("wave %d: %s el=%s%s  hp=%.0f count=%d" % [_wave, String(def["type"]),
+		var art_note := " art=%s" % _art_kind if _art_kind != _kind else ""
+		print("wave %d: %s%s el=%s%s  hp=%.0f spd=%.0f count=%d" % [_wave,
+				String(def["type"]), art_note,
 				String(def.get("element", "-")), "  BOSS" if def.get("boss", false) else "",
-				_hp, _to_spawn])
+				_hp, _spd, _to_spawn])
 	Audio.play("wave_start")
 	wave_started.emit(_wave)
 	wave_preview.emit(_preview_text(_wave + 1), _preview_color(_wave + 1))
@@ -138,7 +145,7 @@ func _spawn_one() -> void:
 	var enemy := ENEMY.instantiate() as Enemy
 	enemy.setup(_hp, _spd, _reward, _tint)
 	enemy.armor_element = _element
-	enemy.kind = _kind
+	enemy.kind = _art_kind
 	enemy.radius = Balance.ENEMY_BASE_RADIUS * float(_type_def.get("radius", 1.0))
 	enemy.cc_immune = _type_def.get("cc_immune", false)
 	var regen := float(_type_def.get("regen", 0.0))
@@ -163,7 +170,7 @@ func _spawn_child(pos: Vector2, progress: int, count: int, hp: float, spd: float
 		var c := ENEMY.instantiate() as Enemy
 		c.setup(hp, spd, Balance.SPLIT_CHILD_REWARD, tint)
 		c.armor_element = _element  # children share the wave's element
-		c.kind = _kind              # and its art: a splitter's halves are smaller splitters
+		c.kind = _art_kind          # and its art: a splitter's halves match their parent
 		c.radius = r
 		c.removed.connect(_on_enemy_removed)
 		enemies_root.add_child(c)  # _ready puts it at PATH[0]; override below
@@ -191,7 +198,8 @@ func _preview_text(n: int) -> String:
 	var elite := "  ELITE" if not def.get("boss", false) and float(def.get("hp", 1.0)) > 1.0 else ""
 	var elem := String(def.get("element", ""))
 	var epfx := (elem.capitalize() + " ") if elem != "" else ""
-	return "Next: %s%s x%d%s%s" % [epfx, str(t.get("name", def["type"])), cnt, boss, elite]
+	return "Next: %s%s x%d%s%s" % [epfx,
+			str(def.get("name", t.get("name", def["type"]))), cnt, boss, elite]
 
 ## Colour for the preview label: the wave's element, or a default gold if neutral.
 func _preview_color(n: int) -> Color:
@@ -209,7 +217,7 @@ func _spawn_boss() -> void:
 	boss.setup(_hp * Balance.BOSS_HP_MULT, _spd * Balance.BOSS_SPEED_MULT,
 			_reward * Balance.BOSS_REWARD_MULT, Balance.BOSS_TINT)
 	boss.armor_element = _element
-	boss.kind = _kind  # a boss is an archetype wearing a crown, not a creature of its own
+	boss.kind = _art_kind  # a boss is an archetype wearing a crown, not a creature of its own
 	boss.radius = Balance.BOSS_RADIUS
 	boss.life_cost = Balance.BOSS_LIFE_COST
 	boss.is_boss = true

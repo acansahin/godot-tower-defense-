@@ -62,7 +62,9 @@ lands in `shot_20.png`, and several may be passed at once to watch a run across 
 `--auto-pick` (answers the choice screen — **any unattended run that must reach wave 3
 needs this**: the choice screen pauses the tree, which stops the SceneTree timers every
 delayed `--shot` waits on, so without it the run silently stops and the later shots never
-fire), `--go-back` (rewinds the
+fire), `--map:s` (locks Main to the S board for a focused playtest instead of rotating),
+`--show-road` (draws the active board's traced centre-line; pair with `--map:s --shot`),
+`--go-back` (rewinds the
 last-seen stamp 4h so the next launch collects an offline reward), `--wipe-save` (clears
 `user://save.json`).
 
@@ -125,17 +127,27 @@ and `--shot` to actually look at the result; the numbers move in ways eyeballing
 predict, and the draw code breaks in ways the numbers do not show.
 
 **The board is a painting now, and the geometry is traced out of it.**
-`assets/art/board_source.png` is the terrain; `Game.PATH` is 114 waypoints that
+`assets/art/board_source.png` is the terrain; `Game.PATH` is 114 traced controls that
 `python tools/trace_road.py` read off the cobbles, and `Game.OBSTACLES` is the water the
-same tool's scan found. Re-trace after any change to the art and check the result with
+same tool's scan found. Every board profile samples its traced controls into a denser smooth
+walking curve at selection time. Re-trace after any change to the art and check the result with
 `map.gd`'s `show_road` overlay — it draws the traced line back over the painting, which is
 the only check that catches enemies walking beside the road rather than on it.
 
-The tutorial is a second board, not a replacement for that one:
-`assets/art/maps/winding_forest_close_v1.png`, `Tutorial.TUTORIAL_PATH` and its six teaching
-pads in `BUILD_ZONES`. `Game.configure_board()` temporarily makes that geometry active for
-enemy movement, targeting and placement; Menu, Main and Tutorial's exit all call
-`Game.use_main_board()` so the endless run cannot inherit the training road.
+Every painting has its own shader mask: `assets/art/board_water.png` for the spiral and a
+matching `*_water.png` beside each chapter map. Regenerate one with
+`python tools/water_mask.py <board.png> <mask.png>` after repainting. `map.gd` switches the
+mask and waterfall regions with the board profile so water moves on every map without
+warping grass, roads or rocks.
+
+The tutorial painting is also the first endless-run board:
+`assets/art/maps/winding_forest_close_v1.png`, `Game.WINDING_PATH` and its six teaching
+clearings in `WINDING_BUILD_ZONES`. `Game.use_board_for_wave()` selects winding for waves
+1–10, the spiral for waves 11–20, and the S board for waves 21–30; the last available
+profile remains active after that until Z and later 10-wave profiles are appended to
+`BOARD_SEQUENCE`. `Game.configure_board()`
+makes the selected geometry active for enemy movement, targeting and placement. Tutorial's
+exit clears its scene state, and Main explicitly selects the wave-1 profile.
 
 **There is also no build grid.** A tower stands wherever `Game.can_build_at()` allows: off
 the road by `ROAD_KEEPOUT`, out of `OBSTACLES`, inside `PLAY_TOP`/`PLAY_RIGHT`, and
@@ -181,7 +193,9 @@ columns of buildable ground under the panel. Keep the road out of that strip too
 
 Two constants are tied to the road length and nothing else reads it, so they move together
 or the pacing breaks silently: `Balance.BASE_SPEED_*` (at the wrong value a wave-1 enemy
-took 186 seconds to walk the road) and the count ramp `BASE_COUNT_*`.
+took 186 seconds to walk the road) and the count ramp `BASE_COUNT_*`. Every board currently
+applies `CREEP_SPEED_PERCENT = 0.82` and `CREEP_HP_PERCENT = 1.20`: slower motion for
+readability, with matching durability so the extra exposure does not make waves free.
 
 ## Architecture, and where to add things
 

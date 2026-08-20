@@ -30,7 +30,9 @@ const SPRITE_HEIGHT_PER_RADIUS := 2.6
 
 ## Carrier-motion amplitudes. Painted frames provide the limb poses; these transforms make
 ## the motion readable at the game's small on-board scale, including on two-pose creatures.
-const WALK_HOP_PER_RADIUS := 0.16
+## Kept low so the feet read as planted on the cobbles. At 0.16 the body lifted almost 4px
+## while its shadow stayed behind, which looked like hovering at the board's display scale.
+const WALK_HOP_PER_RADIUS := 0.06
 const WALK_SQUASH := 0.03
 const FLIGHT_LIFT_PER_RADIUS := 0.26
 
@@ -349,28 +351,29 @@ func _tick_status(delta: float) -> void:
 func _move(delta: float) -> void:
 	if _stun_time > 0.0:
 		return  # frozen in place
+	var remaining := speed * _slow_factor * delta
+	# A smoothed road has short adjacent legs. Consume the whole frame's travel across as
+	# many of them as necessary; stopping after one leg capped fast enemies to one waypoint
+	# per frame and made motion depend on frame rate / the 1x–3x speed setting.
+	while remaining > 0.0 and _target_index < _path.size():
+		var target: Vector2 = _path[_target_index]
+		var to_target := target - global_position
+		var distance := to_target.length()
+		# Turn to face the current leg, with a dead zone for nearly vertical traced steps.
+		if absf(to_target.x) > 2.0:
+			var face := -1.0 if to_target.x > 0.0 else 1.0
+			if face != _facing:
+				_facing = face
+				_repaint_overlay()
+		if distance <= remaining:
+			global_position = target
+			_target_index += 1
+			remaining -= distance
+		else:
+			global_position += to_target / distance * remaining
+			remaining = 0.0
 	if _target_index >= _path.size():
 		_escape()
-		return
-	var target: Vector2 = _path[_target_index]
-	var to_target := target - global_position
-	# Turn to face the way we are walking, with a dead zone: the traced road has plenty of
-	# near-vertical steps, and flipping on their pixel of horizontal drift makes a creep
-	# shimmy down the screen.
-	if absf(to_target.x) > 2.0:
-		var face := -1.0 if to_target.x > 0.0 else 1.0
-		if face != _facing:
-			_facing = face
-			# The overlay hangs off _visual_dx(), which mirrors with the facing, and it
-			# otherwise only repaints on a state change — so a creep that turned around
-			# would wear its health bar on the wrong side until something hit it.
-			_repaint_overlay()
-	var step := speed * _slow_factor * delta
-	if to_target.length() <= step:
-		global_position = target
-		_target_index += 1
-	else:
-		global_position += to_target.normalized() * step
 
 func take_damage(amount: float) -> void:
 	if _dead:
@@ -428,8 +431,11 @@ func _draw() -> void:
 		if Sprites.enemy(kind) == null:
 			_draw_wings()
 	else:
-		# Flat ground shadow.
-		draw_set_transform(Vector2(0, radius * 0.85), 0.0, Vector2(1.0, 0.4))
+		# Flat ground shadow. A painted figure is hung by its feet at radius*0.22 below the
+		# walked point; putting its shadow at the blob's old radius*0.85 left a visible gap
+		# and made every ground runner look airborne.
+		var ground_y := radius * 0.22 if Sprites.enemy(kind) != null else radius * 0.85
+		draw_set_transform(Vector2(0, ground_y), 0.0, Vector2(1.0, 0.4))
 		draw_circle(Vector2.ZERO, radius * 0.9, Color(0, 0, 0, 0.18))
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	_draw_element_ring()
