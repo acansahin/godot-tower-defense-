@@ -33,7 +33,7 @@ func _ready() -> void:
 	if _board_override == "":
 		Game.use_board_for_wave(1)
 	else:
-		Game.use_board(_board_override)
+		Game.use_board(_board_override, false)
 	# One seed drives both the waves and the card offers, so a whole run — what it throws at
 	# you and what it lets you answer with — replays from a single number.
 	var run_seed := randi()
@@ -140,7 +140,7 @@ func _on_wave_starting(number: int) -> void:
 	if _board_override == "":
 		Game.use_board_for_wave(number)
 	else:
-		Game.use_board(_board_override)
+		Game.use_board(_board_override, false)
 	grid.queue_redraw()
 	if previous_board == Game.active_board_id:
 		return
