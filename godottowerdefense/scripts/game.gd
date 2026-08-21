@@ -825,18 +825,24 @@ func use_main_board() -> void:
 
 ## Selects the endless board for `wave`. The last available profile remains active after its
 ## chapter, so an unfinished map slot never sends a deep run back to an earlier layout.
+## A real run always gets free placement — the scarce painted clearings are a lesson device,
+## not an endless-run rule — so this never passes the tutorial's WINDING_BUILD_ZONES on.
 func use_board_for_wave(wave: int) -> void:
 	var chapter := floori(float(maxi(wave, 1) - 1) / float(WAVES_PER_BOARD))
-	use_board(String(BOARD_SEQUENCE[mini(chapter, BOARD_SEQUENCE.size() - 1)]))
+	use_board(String(BOARD_SEQUENCE[mini(chapter, BOARD_SEQUENCE.size() - 1)]), false)
 
 ## Installs a named board profile. Towers and run economy deliberately survive the swap;
 ## only the painting, road and future placement checks change between chapters.
-func use_board(board_id: String) -> void:
+## `restrict_clearings` only matters for "winding": Tutorial calls this with the default
+## true to keep its scarce painted pockets closed ground; every endless-run caller passes
+## false so wave 1-10 plays that same painting with free placement like the other boards.
+func use_board(board_id: String, restrict_clearings: bool = true) -> void:
 	if active_board_id == board_id:
 		return
 	match board_id:
 		"winding":
-			configure_board(_smooth_path(WINDING_PATH, 4), [], WINDING_BUILD_ZONES, board_id)
+			configure_board(_smooth_path(WINDING_PATH, 4), [],
+					WINDING_BUILD_ZONES if restrict_clearings else [], board_id)
 		"spiral":
 			configure_board(_smooth_path(PATH, 2), OBSTACLES, [], board_id)
 		"s":

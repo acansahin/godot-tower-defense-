@@ -74,12 +74,10 @@ func _draw() -> void:
 		_:
 			board = BOARD
 	draw_texture_rect(board, Rect2(Vector2.ZERO, Game.WORLD_SIZE), false)
-	# The winding painting is intentionally dense, so its legal clearings need the same
-	# quiet cue they have in the lesson. Spiral uses free placement and draws no pads.
-	for entry in Game.active_build_zones:
-		draw_circle(entry[0], float(entry[1]), Color(0.35, 0.95, 0.48, 0.055))
-		draw_arc(entry[0], float(entry[1]), 0.0, TAU, 48,
-				Color(0.55, 1.0, 0.62, 0.32), 2.0, true)
+	# The winding painting's scarce clearings and their quiet ring are a lesson device only
+	# (tutorial_map.gd draws Game.active_build_zones there); Game.use_board_for_wave passes
+	# restrict_clearings=false, so a real run gets free placement here like the other boards
+	# and there is nothing of Game.active_build_zones left to paint.
 	if show_road:
 		_draw_traced_road()
 
