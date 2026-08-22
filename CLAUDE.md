@@ -43,17 +43,28 @@ Arg-gated harnesses currently in `main.gd`, none of which can fire in a normal s
 `--dump-stats` (every tower's stats at every level), `--dump-waves` (60 wave definitions
 plus a generator-purity check), `--dump-mods` (roguelite modifiers apply / stay in scope /
 unwind on reset), `--dump-meta` (essence curve, workshop costs, purchases reaching towers,
-settings round-trip), `--dump-duals` (the support duals: an aura applies, deepens with
-its provider's level, stops at its radius and unwinds EXACTLY when the provider is
-removed; plus each dual's payload and Magic's charge cycle), `--dump-board` (road length,
+settings round-trip), `--dump-board` (road length,
 cell count, and per element how much of the road one tower watches and how many towers it
 takes to watch 95% of it — plus a `raw` column measuring the same with the range cap
-lifted), `--fill-board` (a tower on every cell at max level, 8x speed,
-auto-picks upgrades, prints each wave and the run-over line), `--show-choice` (pops the
-choice screen so its `_draw` can be exercised), `--air-pose` (parks eight Air creeps along
+lifted), `--fill-board` (a tower on every cell at max level, 8x speed, auto-picks upgrades
+AND branches (alternating a/b so both get played — BUILD NEXT #5-#6), prints each wave and
+the run-over line with real WALL-CLOCK elapsed time — meaningless at 8x, but `--fill-board:1x`
+skips the speed-up for exactly this: BUILD NEXT #10 used it to measure a real Standard run at
+~4.7 minutes, though that is a maxed-board LOWER BOUND, not proof of the ~10.5 min target for
+an actual player's gradual build-up — nothing currently simulates that), `--tutorial-auto`
+(Tutorial.tscn only: clears all four element lessons and Water's upgrade without synthetic
+mouse events, printing leaks per lesson — the harness that caught BUILD NEXT #10's own
+tutorial numbers going stale against steps 5-6's damage rework), `--show-choice` (pops the
+choice screen so its `_draw` can be
+exercised), `--show-branch-choice` / `--show-branch-choice:water` (same, for the Lv3
+branch popup — Fire if no element named — without playing a tower to level 3 first),
+`--show-element-choice` (same, for Monoculture's element sub-choice popup, BUILD NEXT #9,
+without rolling it out of the card pool first), `--air-pose` (parks eight Air creeps along
 the road on an EMPTY board so the flyer's drawing can be photographed — `--fill-board`
 buries the road and kills them at the spawn point, and a normal run never reaches the Air
-wave without leaking away all twenty lives first), `--shot` (saves one drawn frame to
+wave without leaking away all twenty lives first), `--boss-pose` (stages both bosses' rules —
+control-immune and rotating-armor, BUILD NEXT #7 — on an empty board so the ward/ring/icon
+can be photographed without playing to wave 10 or 20 first), `--shot` (saves one drawn frame to
 `user://shot.png` and prints the path — the only harness that shows you the board rather
 than describing it, so **drop `--headless` for this one**; `--shot:20` waits 20s first and
 lands in `shot_20.png`, and several may be passed at once to watch a run across waves),

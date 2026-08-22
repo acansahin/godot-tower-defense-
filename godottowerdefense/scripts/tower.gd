@@ -40,17 +40,73 @@ var execute_chance: float = 0.0      ## chance (0..1) to kill outright on hit; n
 var gold_on_kill: int = 0            ## extra gold when THIS tower lands the killing blow (Money).
 var life_on_kill_chance: float = 0.0 ## chance (0..1) that a kill returns one life (Life).
 
+# --- Branch payload (BUILD NEXT #5-#6, GAME_STRATEGY_V2.md §4) -----------------------------
+# Fire's burn (Blaze/Wildfire): a separate DoT channel from `poison_dps`/`poison_time` above,
+# because burn STACKS and poison does not — see Enemy.apply_burn / apply_poison.
+var burn_dps: float = 0.0
+var burn_time: float = 0.0
+var burn_max_stacks: int = 1
+var burn_spread_radius: float = 0.0   ## Wildfire: also applies (at half power) within this radius.
+var burn_doubles_at_max: bool = false ## Cinderheart: burn ticks 2x once stacked to burn_max_stacks.
+var burn_spreads_on_death: bool = false  ## Firestorm (simplified — see TOWER_BRANCHES comment).
+var poison_ignores_matchup: bool = false ## Nature's THORN: poison bypasses Game.element_mult entirely.
+var poison_spreads_on_death: bool = false  ## Plague: poison passes to the nearest survivor on death.
+var crack_bonus: float = 0.0          ## Siege: +this fraction of damage taken from ALL sources.
+var crack_time: float = 0.0
+var crack_spread_radius: float = 0.0  ## Sunder: crack also spreads within this radius.
+var knockback_chance: float = 0.0     ## Undertow: chance per hit to push the target back.
+var knockback_distance: float = 0.0
+var knockback_chill_on_land: bool = false  ## Riptide: applies this tower's slow on landing.
+var chill_pulse_every: int = 0        ## Glacier: every Nth shot also chills everyone in range.
+var no_attack: bool = false           ## Grove: never acquires a target or fires.
+var _shots_fired: int = 0             ## Counts toward chill_pulse_every; never resets.
+## "a" or "b" once chosen at Lv3 (branch_choice.gd), "" before then. Persists for the rest of
+## the tower's life — there is no respec (GAME_STRATEGY_V2.md §4.6: "Kararı kararsızlaştırır").
+var branch: String = ""
+
+# --- Card payload (BUILD NEXT #9, GAME_STRATEGY_V2.md §6.3) --------------------------------
+# Everything below is folded from Run.mods_for() in _recompute(), same as damage/range/etc
+# above it — these just have no branch-data equivalent, since a card is run-wide rather than
+# a per-tower choice.
+var overclock_every: int = 0          ## Overclock: every Nth shot deals double damage.
+var groundwork: bool = false          ## Groundwork: Earth hits flying, splash halved.
+var target_lowest_hp: bool = false    ## Deadeye: targets lowest HP instead of furthest along.
+var burn_slow_factor: float = 1.0     ## Backdraft: burn also applies this slow (1.0 = off).
+var chill_burn_mult: float = 1.0      ## STEAM: this tower's burn vs a chilled target.
+var chill_hit_mult: float = 1.0       ## EROSION: this tower's direct hits vs a chilled target.
+var vs_flying_mult: float = 1.0       ## Spore: damage multiplier vs flying targets.
+
 ## The Game.TOWER_DEFS entry this tower was built from. Read-only (TOWER_DEFS is a const
 ## Dictionary, so Godot rejects writes to it) and re-read on every _recompute() — it is
-## the single source of truth for the tower's base stats.
+## the single source of truth for the tower's base stats. Fields below Lv3 come straight from
+## here; Lv3+ layers Game.TOWER_BRANCHES[element][branch] on top — see _recompute().
 var _def: Dictionary = {}
+## `_def` plus any branch overrides for the current level — see _recompute(). A real
+## Dictionary (not just the instance fields above) so a NEIGHBOUR's aura reach can read it
+## too, for a branch-granted aura (Grove) that has no equivalent in `_def` alone.
+var _eff: Dictionary = {}
+
+# BLOOM / BEDROOT (BUILD NEXT #9): both use the same 140px adjacency radius the branch
+# system's own cross-element cards (§4.3's aside on Grove) already established as legible at
+# board scale. BEDROOT's payload has no exact number in GAME_STRATEGY_V2.md — chosen as half
+# of Nature's own Lv1 base (12 dps / 3s) so Earth gains a real but secondary poison, not a
+# second Nature tower.
+const BLOOM_BEDROOT_RADIUS := 140.0
+const BLOOM_POISON_MULT := 1.3
+const BEDROOT_POISON_DPS := 6.0
+const BEDROOT_POISON_TIME := 2.0
 
 ## Upgrade state. `level` is the ONLY upgrade state that exists: every stat above is
 ## derived from _def + level by _recompute(), never accumulated in place. That is what
 ## lets a run modifier be removed as cleanly as it was added.
 var level: int = 1
 var build_cost: int = 0
-var total_spent: int = 0   ## Gold sunk into this tower (build + upgrades); half is refunded on sell.
+var total_spent: int = 0   ## Gold sunk into this tower (build + upgrades); see sell_value().
+## True once this tower has fired at least one shot. Drives the two-tier sell refund
+## (GAME_STRATEGY_V2.md §9, BUILD NEXT #3): a placement mistake caught before the tower ever
+## did anything is free to undo, one caught after is not. Set in fire_bolt(), never cleared —
+## a tower does not get to re-earn the free refund by going a while without a target.
+var has_fired: bool = false
 
 # The upgrade curve itself (max level, damage/range/speed growth, sell refund) lives in
 # the Balance autoload, not here — see scripts/balance.gd.
@@ -143,6 +199,28 @@ static func _make_behavior(kind: String) -> TowerBehavior:
 		"charge": return ChargeBehavior.new()
 		_: return BoltBehavior.new()
 
+## Commits this tower to branch "a" or "b" for the rest of its life (branch_choice.gd calls
+## this once the player picks; --fill-board's auto-pick calls it directly). Public, unlike
+## _recompute(), because setting `branch` without also refreshing stats would leave the
+## tower showing pre-branch numbers until its next unrelated recompute.
+func set_branch(branch_id: String) -> void:
+	branch = branch_id
+	_recompute()
+
+## True if a tower of `element` stands within `radius` of this one. Used by BLOOM/BEDROOT
+## (_recompute() above) rather than folded into the branch/dual aura loop — see the comment
+## there for why they stay separate.
+func _has_neighbour_of(parent: Node, want_element: String, radius: float) -> bool:
+	var radius_sq := radius * radius
+	for node in parent.get_children():
+		var other := node as Tower
+		if other == null or other == self or not is_instance_valid(other):
+			continue
+		if other.element == want_element \
+				and global_position.distance_squared_to(other.global_position) <= radius_sq:
+			return true
+	return false
+
 func can_upgrade() -> bool:
 	return level < Balance.MAX_LEVEL
 
@@ -150,10 +228,10 @@ func can_upgrade() -> bool:
 func _upgrade_ready() -> bool:
 	return can_upgrade() and Game.gold >= upgrade_cost()
 
-## Gold cost of the NEXT upgrade. One shared ladder for every element, straight from the
-## map: 175, 788, 3544, 24444 (Balance.TIER_COSTS).
+## Gold cost of the NEXT upgrade. One shared ladder for every element (Balance.TIER_COSTS:
+## 40/70/120/200 past the build cost), scaled by Foreman's -20% if taken (BUILD NEXT #9).
 func upgrade_cost() -> int:
-	return Balance.upgrade_cost(build_cost, level)
+	return int(round(float(Balance.upgrade_cost(build_cost, level)) * Run.upgrade_cost_mult()))
 
 func upgrade() -> void:
 	if not can_upgrade():
@@ -172,35 +250,68 @@ func upgrade() -> void:
 ## x5 steps (x10 into Pure) and multiplying step by step keeps the result byte-identical
 ## to the table in docs/element-td-data.md. It runs at most four times.
 func _recompute() -> void:
-	# --- base: straight from the definition ------------------------------------
-	damage = _def.get("damage", 8.0)
+	# --- effective def: base + branch overrides (BUILD NEXT #5) -----------------
+	# Lv1-2 (branch == "" or level < 3) is exactly _def. From Lv3 the chosen branch's `lv3`
+	# fields overwrite matching keys; `lv4`/`lv5` layer on top again as the tower keeps
+	# climbing — each a plain Dictionary.merge(overwrite=true), so a branch only has to name
+	# the fields it actually changes. Cached on the instance (_eff) so OTHER towers' aura
+	# reads (below) see this tower's branch-aware stats too, not just its bare _def.
+	_eff = _def.duplicate(true)
+	if branch != "" and level >= 3:
+		var bdata: Dictionary = Game.TOWER_BRANCHES.get(element, {}).get(branch, {})
+		_eff.merge(bdata.get("lv3", {}), true)
+		if level >= 4:
+			_eff.merge(bdata.get("lv4", {}), true)
+		if level >= 5:
+			_eff.merge(bdata.get("lv5", {}), true)
+	# --- base: straight from the effective definition ---------------------------
+	damage = _eff.get("damage", 8.0)
 	# TOWER_DEFS stores range in Warcraft III units; this is the one place (with main.gd's
 	# build preview) that turns them into board pixels.
-	tower_range = minf(_def.get("range", 160.0) * Balance.WC3_RANGE_SCALE,
+	tower_range = minf(_eff.get("range", 160.0) * Balance.WC3_RANGE_SCALE,
 			Balance.MAX_TOWER_RANGE)
-	fire_interval = _def.get("interval", 0.5)
-	poison_dps = _def.get("poison_dps", 0.0)
-	poison_time = _def.get("poison_time", 0.0)
-	splash_radius = _def.get("splash_radius", 0.0)
-	splash_factor = _def.get("splash_factor", 0.5)
-	slow_factor = _def.get("slow_factor", 1.0)
-	slow_time = _def.get("slow_time", 0.0)
-	stun_chance = _def.get("stun_chance", 0.0)
-	stun_time = _def.get("stun_time", 0.0)
-	execute_chance = _def.get("execute_chance", 0.0)
-	gold_on_kill = int(_def.get("gold_on_kill", 0))
-	life_on_kill_chance = _def.get("life_on_kill_chance", 0.0)
+	fire_interval = _eff.get("interval", 0.5)
+	poison_dps = _eff.get("poison_dps", 0.0)
+	poison_time = _eff.get("poison_time", 0.0)
+	poison_ignores_matchup = _eff.get("poison_ignores_matchup", false)
+	poison_spreads_on_death = _eff.get("poison_spreads_on_death", false)
+	burn_dps = _eff.get("burn_dps", 0.0)
+	burn_time = _eff.get("burn_time", 0.0)
+	burn_max_stacks = maxi(1, int(_eff.get("burn_max_stacks", 1)))
+	burn_spread_radius = _eff.get("burn_spread_radius", 0.0)
+	burn_doubles_at_max = _eff.get("burn_doubles_at_max", false)
+	burn_spreads_on_death = _eff.get("burn_spreads_on_death", false)
+	splash_radius = _eff.get("splash_radius", 0.0)
+	splash_factor = _eff.get("splash_factor", 0.5)
+	slow_factor = _eff.get("slow_factor", 1.0)
+	slow_time = _eff.get("slow_time", 0.0)
+	stun_chance = _eff.get("stun_chance", 0.0)
+	stun_time = _eff.get("stun_time", 0.0)
+	execute_chance = _eff.get("execute_chance", 0.0)
+	gold_on_kill = int(_eff.get("gold_on_kill", 0))
+	life_on_kill_chance = _eff.get("life_on_kill_chance", 0.0)
+	crack_bonus = _eff.get("crack_bonus", 0.0)
+	crack_time = _eff.get("crack_time", 0.0)
+	crack_spread_radius = _eff.get("crack_spread_radius", 0.0)
+	knockback_chance = _eff.get("knockback_chance", 0.0)
+	knockback_distance = _eff.get("knockback_distance", 0.0)
+	knockback_chill_on_land = _eff.get("knockback_chill_on_land", false)
+	chill_pulse_every = int(_eff.get("chill_pulse_every", 0))
+	no_attack = _eff.get("no_attack", false)
+	can_hit_flying = _eff.get("can_hit_flying", true)
 	# --- level growth ----------------------------------------------------------
 	# An upgrade multiplies damage and NOTHING else — range and fire interval are fixed
-	# per element for the whole run. That is the map's rule, and it is what keeps a Pure
-	# Fire recognisably Fire instead of converging on every other element.
+	# per element (or, from Lv3, per BRANCH — see above) for the rest of the run. That is
+	# the map's rule for range/interval, extended the same way GAME_STRATEGY_V2.md §2.3
+	# extends it: level always follows this same growth curve; only a branch may replace
+	# what a tower IS.
 	#
 	# A def with a `damage_tiers` table is read straight out of it; the growth constants
 	# are only the fallback for the locked duals, which have no ported table yet. Either
 	# way `growth` ends up as "how much stronger than tier 1 this is", which is what the
-	# damage-over-time payload rides.
+	# damage-over-time payloads ride.
 	var growth := 1.0
-	var tiers: Array = _def.get("damage_tiers", [])
+	var tiers: Array = _eff.get("damage_tiers", [])
 	if not tiers.is_empty():
 		damage = float(tiers[mini(level, tiers.size()) - 1])
 		growth = damage / float(tiers[0])
@@ -209,10 +320,17 @@ func _recompute() -> void:
 			growth *= float(Balance.TIER_DAMAGE_MULT[i])
 		damage *= growth
 	poison_dps *= growth  # DoT scales with the tower's damage growth
+	burn_dps *= growth
+	# A branch's own flat multiplier on top of the shared growth curve (Siege's +60%
+	# damage, Blight's +80% poison) — never on the growth curve itself, so every tower of
+	# an element still climbs the identical 1.0/1.8/3.2/5.6/10.0 ladder from step 3.
+	damage *= float(_eff.get("damage_mult", 1.0))
+	poison_dps *= float(_eff.get("poison_dps_mult", 1.0))
 	# Ice's area-slow: single-target below Lv2, then widening (was _update_slow_splash).
+	# Reused from Lv5 by Earth's Fissure ultimate (TOWER_BRANCHES "slow_splash").
 	slow_splash_radius = 0.0
 	if level >= 2:
-		slow_splash_radius = float(_def.get("slow_splash", 0.0)) \
+		slow_splash_radius = float(_eff.get("slow_splash", 0.0)) \
 				* (1.0 + Balance.SLOW_SPLASH_GROWTH * float(level - 2))
 	# --- aura from neighbouring towers -----------------------------------------
 	# PULLED, not pushed, for the same reason Run's modifiers are: an aura tower built or
@@ -220,33 +338,65 @@ func _recompute() -> void:
 	# the neighbour appeared would have no way to give it back when it went away. Main
 	# emits Game.towers_changed on build/sell/upgrade and every tower re-pulls from scratch.
 	#
+	# Reads `other._eff`, not `other._def`: the only aura left standing (Grove, Nature
+	# branch B) exists purely as a branch override, so a plain `_def` read would never see
+	# it. `other._eff` is guaranteed built by the time this runs — every Tower populates it
+	# in setup_def(), before it can appear as a neighbour at all.
+	#
 	# O(towers) per recompute and recompute is not per-frame, so a full 40-cell board costs
 	# 1600 distance checks on a build — once, not every tick.
 	var aura_damage := 1.0
 	var aura_speed := 1.0
+	var aura_gold_add := 0
+	var aura_life_chance_add := 0.0
 	var parent := get_parent()
 	if parent != null:
 		for node in parent.get_children():
 			var other := node as Tower
 			if other == null or other == self or not is_instance_valid(other):
 				continue
-			var stat := String(other._def.get("aura_stat", ""))
-			if stat == "":
-				continue
-			var radius: float = float(other._def.get("aura_radius", 0.0)) * Balance.WC3_RANGE_SCALE
-			if global_position.distance_squared_to(other.global_position) > radius * radius:
+			var radius: float = float(other._eff.get("aura_radius", 0.0))
+			if radius <= 0.0 or global_position.distance_squared_to(other.global_position) > radius * radius:
 				continue
 			# The provider's own level deepens the buff: one step per level past the first,
-			# so upgrading a Well is a real alternative to building a second one.
-			var step: float = float(other._def.get("aura_mult", 1.0)) - 1.0
-			var boost := 1.0 + step * float(other.level)
-			if stat == "damage":
-				aura_damage *= boost
-			elif stat == "attack_speed":
-				aura_speed *= boost
+			# so upgrading a Grove is a real alternative to building a second one.
+			var stat := String(other._eff.get("aura_stat", ""))
+			if stat != "":
+				var step: float = float(other._eff.get("aura_mult", 1.0)) - 1.0
+				var boost := 1.0 + step * float(other.level)
+				if stat == "damage":
+					aura_damage *= boost
+				elif stat == "attack_speed":
+					aura_speed *= boost
+			# Heartwood layers a SECOND aura stat (damage) on top of Grove's base
+			# attack_speed grant — kept as its own field rather than overloading `aura_stat`
+			# to a list, since Grove is still the only provider that needs more than one.
+			# No separate level check needed: `aura_damage_mult` only appears in `_eff` at
+			# all once the provider's OWN _recompute() merged its `lv5` slice in, i.e. once
+			# ITS level is >= 5 — the gating already happened when `other._eff` was built.
+			aura_damage *= float(other._eff.get("aura_damage_mult", 1.0))
+			aura_gold_add += int(other._eff.get("aura_gold_add", 0))
+			aura_life_chance_add += float(other._eff.get("aura_life_chance_add", 0.0))
 	damage *= aura_damage
 	poison_dps *= aura_damage
+	burn_dps *= aura_damage
 	fire_interval /= aura_speed
+	gold_on_kill += aura_gold_add
+	life_on_kill_chance = clampf(life_on_kill_chance + aura_life_chance_add, 0.0, 1.0)
+
+	# BLOOM / BEDROOT (BUILD NEXT #9, GAME_STRATEGY_V2.md §6.2): adjacency cards, run
+	# separately from the branch/dual aura loop above rather than folded into it — one is
+	# card-granted and keys off a SPECIFIC neighbour element, the other is branch-granted and
+	# applies to any neighbour, and a Nature tower can have Grove's aura AND be BEDROOT's
+	# beneficiary at once, so they cannot share one provider slot.
+	if parent != null:
+		if element == "nature" and Run.has_card("bloom") \
+				and _has_neighbour_of(parent, "water", BLOOM_BEDROOT_RADIUS):
+			poison_dps *= BLOOM_POISON_MULT
+		if element == "earth" and Run.has_card("bedroot") \
+				and _has_neighbour_of(parent, "nature", BLOOM_BEDROOT_RADIUS):
+			poison_dps = BEDROOT_POISON_DPS
+			poison_time = BEDROOT_POISON_TIME
 
 	# --- run modifiers ---------------------------------------------------------
 	# The payoff for rebuilding rather than accumulating: these are applied fresh every
@@ -256,9 +406,25 @@ func _recompute() -> void:
 	tower_range = (tower_range + m.range_add) * m.range_mult
 	# Divided, never multiplied by (1 - pct) — see TowerMods.attack_speed_mult.
 	fire_interval /= m.attack_speed_mult
-	# Poison rides the damage multiplier as well as its own, matching how it already rides
-	# the per-level damage growth.
+	# Poison (and burn, the same shape of payload) ride the damage multiplier as well as
+	# their own, matching how they already ride the per-level damage growth.
 	poison_dps = poison_dps * m.damage_mult * m.poison_mult
+	burn_dps = burn_dps * m.damage_mult * m.poison_mult
+	burn_time *= m.burn_time_mult          # Wick
+	if slow_time > 0.0:
+		slow_time += m.slow_time_add       # Permafrost
+	vs_flying_mult = m.vs_flying_mult      # Spore
+	burn_slow_factor = m.burn_slow_factor  # Backdraft
+	overclock_every = m.overclock_every    # Overclock
+	target_lowest_hp = m.target_lowest_hp  # Deadeye
+	chill_burn_mult = m.chill_burn_mult    # STEAM
+	chill_hit_mult = m.chill_hit_mult      # EROSION
+	# Groundwork (Earth only, its card `element` scope already guarantees this never fires
+	# for another element): ignores can_hit_flying and halves splash in the same stroke.
+	groundwork = m.groundwork
+	if groundwork:
+		can_hit_flying = true
+		splash_radius *= 0.5
 	splash_radius *= m.splash_mult
 	# Scales the SLOW, not the speed: doubling a 0.55 factor would make enemies faster.
 	slow_factor = clampf(1.0 - (1.0 - slow_factor) * m.slow_power, 0.05, 1.0)
@@ -268,14 +434,21 @@ func _recompute() -> void:
 	fire_interval = maxf(Balance.MIN_FIRE_INTERVAL, fire_interval)
 	_range_sq = tower_range * tower_range
 
-## Gold returned when this tower is sold (half of everything sunk into it).
+## Gold returned when this tower is sold: everything sunk into it if it never got a shot
+## off, most of it (Balance.SELL_REFUND) otherwise — or always everything, run-long, with
+## Salvage (GAME_STRATEGY_V2.md §6.3, BUILD NEXT #9). See has_fired.
 func sell_value() -> int:
-	return int(total_spent * Balance.SELL_REFUND)
+	var full := not has_fired or Run.has_card("salvage")
+	var refund := Balance.SELL_REFUND_UNFIRED if full else Balance.SELL_REFUND
+	return int(total_spent * refund)
 
 func _process(delta: float) -> void:
 	# A behavior with no notion of a target (an aura, an economy building) skips the scan
 	# entirely rather than paying for one and discarding it.
-	var target: Enemy = _find_target() if _behavior.wants_target() else null
+	# Grove (GAME_STRATEGY_V2.md §4.3, "SAVAŞMAZ, DESTEKLER") never acquires a target: it is
+	# pure aura, read by neighbours in _recompute() above, and firing is the one thing
+	# `no_attack` turns off rather than overrides.
+	var target: Enemy = _find_target() if (_behavior.wants_target() and not no_attack) else null
 	# Ease the barrel toward the target every frame (independent of the cooldown).
 	if target != null:
 		var to := target.global_position - global_position
@@ -313,8 +486,10 @@ func _find_target() -> Enemy:
 		var enemy := e as Enemy
 		if not _is_targetable(enemy):
 			continue
-		# "First": rank by how far along the path the enemy is — closest to the exit wins.
-		var score := enemy.progress()
+		# "First" (closest to the exit) unless Deadeye (GAME_STRATEGY_V2.md §6.3, BUILD
+		# NEXT #9) switched every tower to "Lowest" — negated health, so the SAME "highest
+		# score wins" comparison below still works for both modes.
+		var score := -enemy.health if target_lowest_hp else enemy.progress()
 		if score > best_score:
 			best_score = score
 			best = enemy
@@ -336,8 +511,25 @@ func _is_targetable(enemy: Enemy) -> bool:
 ## `damage_mult` lets a behavior vary one shot without touching the tower's stats — Magic's
 ## charged shot is the only caller that passes anything but 1.0.
 func fire_bolt(target: Enemy, damage_mult: float = 1.0) -> void:
+	has_fired = true
 	_recoil = 1.0
 	Audio.play_tower_fire(id, element)
+	_shots_fired += 1
+	# Glacier: every Nth shot ALSO chills everyone currently in range — a tower-triggered AoE
+	# pulse, not a projectile payload, since it fires alongside the normal bolt rather than
+	# instead of it and has no single point of impact to spread from.
+	if chill_pulse_every > 0 and _shots_fired % chill_pulse_every == 0 and slow_time > 0.0:
+		for e in EnemyIndex.query(global_position, tower_range):
+			var enemy := e as Enemy
+			if enemy != null and enemy.is_alive() \
+					and (not enemy.is_flying or can_hit_flying):
+				enemy.apply_slow(slow_factor, slow_time)
+	# Overclock (GAME_STRATEGY_V2.md §6.3, BUILD NEXT #9): every Nth shot deals double
+	# damage. Folded into `damage_mult` — the SAME parameter Magic's charge behavior already
+	# uses to vary one shot — rather than a separate field, so the two never need to agree on
+	# which wins if a future behavior someday wants both at once.
+	if overclock_every > 0 and _shots_fired % overclock_every == 0:
+		damage_mult *= 2.0
 	# Pull a bolt from the shared $Projectiles pool instead of instantiating one per shot;
 	# the pool keeps it parented off the tower so it flies independently (see projectiles.gd).
 	if not is_instance_valid(_proj_pool):
@@ -353,11 +545,29 @@ func fire_bolt(target: Enemy, damage_mult: float = 1.0) -> void:
 	p.slow_splash_radius = slow_splash_radius
 	p.poison_dps = poison_dps
 	p.poison_time = poison_time
+	p.poison_ignores_matchup = poison_ignores_matchup
+	p.poison_spreads_on_death = poison_spreads_on_death
+	p.burn_dps = burn_dps
+	p.burn_time = burn_time
+	p.burn_max_stacks = burn_max_stacks
+	p.burn_spread_radius = burn_spread_radius
+	p.burn_doubles_at_max = burn_doubles_at_max
+	p.burn_spreads_on_death = burn_spreads_on_death
+	p.crack_bonus = crack_bonus
+	p.crack_time = crack_time
+	p.crack_spread_radius = crack_spread_radius
+	p.knockback_chance = knockback_chance
+	p.knockback_distance = knockback_distance
+	p.knockback_chill_on_land = knockback_chill_on_land
 	p.stun_chance = stun_chance
 	p.stun_time = stun_time
 	p.execute_chance = execute_chance
 	p.gold_on_kill = gold_on_kill
 	p.life_on_kill_chance = life_on_kill_chance
+	p.vs_flying_mult = vs_flying_mult
+	p.burn_slow_factor = burn_slow_factor
+	p.chill_burn_mult = chill_burn_mult
+	p.chill_hit_mult = chill_hit_mult
 	p.setup(_projectile_origin(), target, damage * damage_mult)
 
 ## Painted Fire towers have no swivelling barrel: their visible emitter is the brazier at

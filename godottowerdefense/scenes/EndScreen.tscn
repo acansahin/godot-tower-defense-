@@ -40,11 +40,16 @@ text = "..."
 horizontal_alignment = 1
 
 [node name="RestartButton" type="Button" parent="Center/Panel/VBox"]
-custom_minimum_size = Vector2(180, 46)
+custom_minimum_size = Vector2(220, 56)
 layout_mode = 2
+theme_override_font_sizes/font_size = 22
+theme_override_colors/font_color = Color(1.0, 0.87, 0.55, 1.0)
 text = "Restart"
 
 [node name="MenuButton" type="Button" parent="Center/Panel/VBox"]
-custom_minimum_size = Vector2(180, 46)
+custom_minimum_size = Vector2(220, 34)
 layout_mode = 2
+flat = true
+theme_override_font_sizes/font_size = 15
+theme_override_colors/font_color = Color(0.75, 0.75, 0.78, 0.85)
 text = "Main Menu"

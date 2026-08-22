@@ -4,9 +4,11 @@ class_name WaveManager
 ## nodes (freed automatically on scene reload) instead of coroutines so a
 ## restart never leaves a spawn loop running.
 ##
-## A run is ENDLESS. Waves come from Game.WAVES while it lasts — the hand-authored opening —
-## and from WaveGenerator forever after. There is no last wave and no victory: a run ends
-## only when the player runs out of lives, and how deep they got is the score.
+## A Standard run is Game.STANDARD_WAVES long (GAME_STRATEGY_V2.md §11.1, BUILD NEXT #4) and
+## can be WON: waves come entirely from Game.WAVES, the hand-authored table, and clearing the
+## last one calls Game.declare_victory() instead of queuing another. WaveGenerator (the
+## endless tail past Game.WAVES) exists in the codebase but nothing in a Standard run reaches
+## it — it is wired up again once an Endless mode exists to call it.
 
 ## Main swaps the board from this synchronous signal before this wave's stats are derived.
 signal wave_starting(number: int)
@@ -109,7 +111,7 @@ func _start_wave() -> void:
 	# The curve itself lives in Balance; the archetype and per-wave multipliers below
 	# stack on top of it, so a single wave can be smoothed without rebalancing the whole
 	# archetype (which is shared across several waves).
-	var base_hp := Balance.wave_hp(_wave)
+	var base_hp := Balance.wave_hp(_wave, Game.ruleset)
 	var base_spd := Balance.wave_speed(_wave)
 	_hp = base_hp * float(_type_def.get("hp", 1.0)) * float(def.get("hp", 1.0))
 	_spd = base_spd * float(_type_def.get("spd", 1.0))
@@ -133,7 +135,7 @@ func _start_wave() -> void:
 	wave_started.emit(_wave)
 	wave_preview.emit(_preview_text(_wave + 1), _preview_color(_wave + 1))
 	if def.get("boss", false):
-		_spawn_boss()                # milestone centrepiece
+		_spawn_boss(def)             # milestone centrepiece
 	_spawn_one()                     # first enemy immediately
 	_spawn_timer.start(_interval)    # the rest on a cadence
 
@@ -183,12 +185,16 @@ func _spawn_child(pos: Vector2, progress: int, count: int, hp: float, spd: float
 ## these used to be two copies of the formula, and the preview could drift from the wave
 ## it was describing.
 func _spawn_count(n: int, type_def: Dictionary, wave_def: Dictionary) -> int:
-	var raw := int(round(Balance.wave_count(n)
+	var raw := int(round(Balance.wave_count(n, Game.ruleset)
 			* float(type_def.get("count", 1.0)) * float(wave_def.get("count", 1.0))))
 	return clampi(raw, 1, Balance.MAX_SPAWN_COUNT)
 
-## HUD text describing wave `n`. There is always a next wave, so this never runs dry.
+## HUD text describing wave `n`. Guards Game.STANDARD_WAVES + 1 specifically: `_start_wave`
+## previews wave 21 the moment wave 20 begins, and without this a Standard run would show a
+## generated wave for a fight that Game.declare_victory() means will never happen.
 func _preview_text(n: int) -> String:
+	if n > Game.STANDARD_WAVES:
+		return "Final wave"
 	var def: Dictionary = _wave_def(n)
 	var t: Dictionary = Game.WAVE_TYPES[def["type"]]
 	var cnt := _spawn_count(n, t, def)
@@ -203,6 +209,8 @@ func _preview_text(n: int) -> String:
 
 ## Colour for the preview label: the wave's element, or a default gold if neutral.
 func _preview_color(n: int) -> Color:
+	if n > Game.STANDARD_WAVES:
+		return Color(0.95, 0.9, 0.7)
 	var elem := String(_wave_def(n).get("element", ""))
 	if elem != "":
 		return Game.ELEMENT_COLORS.get(elem, Color(0.95, 0.9, 0.7))
@@ -210,7 +218,13 @@ func _preview_color(n: int) -> Color:
 
 ## Spawns one boss for the current wave. Not counted in _to_spawn — it is an
 ## extra enemy tracked via _alive, so the wave only clears once it dies too.
-func _spawn_boss() -> void:
+##
+## `def["boss_rule"]` (GAME_STRATEGY_V2.md §10.4, BUILD NEXT #7) picks the boss's one rule:
+## "control_immune" (Muhafız, wave 10) reuses Enemy.cc_immune directly — it already blocks
+## slow/stun/knockback and already carries its own full visual (Enemy._draw_ward), so the
+## boss needed no new mechanism, just the existing flag. "rotating_armor" (Uyanmış Muhafız,
+## wave 20) sets Enemy.rotating_armor, which cycles armor_element on its own from there.
+func _spawn_boss(def: Dictionary) -> void:
 	if Game.is_over:
 		return
 	var boss := ENEMY.instantiate() as Enemy
@@ -221,6 +235,9 @@ func _spawn_boss() -> void:
 	boss.radius = Balance.BOSS_RADIUS
 	boss.life_cost = Balance.BOSS_LIFE_COST
 	boss.is_boss = true
+	match String(def.get("boss_rule", "")):
+		"control_immune": boss.cc_immune = true
+		"rotating_armor": boss.rotating_armor = true
 	boss.removed.connect(_on_enemy_removed)
 	enemies_root.add_child(boss)
 	Audio.play("boss_spawn")
@@ -230,15 +247,21 @@ func _on_enemy_removed() -> void:
 	_alive -= 1
 	if Game.is_over:
 		return
-	# Wave is cleared once nothing is left to spawn and nothing is alive. There is no
-	# terminal wave to check for — the next one is always queued.
+	# Wave is cleared once nothing is left to spawn and nothing is alive.
 	if _to_spawn <= 0 and _alive <= 0:
 		_grant_wave_rewards()
+		# Standard mode ends in a win here (GAME_STRATEGY_V2.md §11.1, BUILD NEXT #4) — no
+		# next wave queued, no choice offered for a wave the run will not see. Past this
+		# point WaveGenerator (the endless tail past Game.WAVES) is unreachable from a
+		# Standard run; it stays in the codebase for the Endless mode BUILD NEXT #8 adds.
+		if _wave >= Game.STANDARD_WAVES:
+			Game.declare_victory()
+			return
 		# Queue the next wave first, then ask for the choice. The prep timer is a node, so
 		# it stops with the tree while the choice screen is up and resumes with whatever is
 		# left when the player picks — they get their full build time either way.
 		_queue_next_wave()
-		if _wave % Balance.CHOICE_EVERY == 0:
+		if Balance.CHOICE_WAVES.has(_wave):
 			choice_due.emit(_wave)
 
 ## Leak-free bonus + interest on banked gold, granted when a wave is cleared.
@@ -246,6 +269,9 @@ func _grant_wave_rewards() -> void:
 	Audio.play("wave_clear")
 	if Game.lives == _lives_at_start:
 		Game.add_gold(Balance.LEAK_FREE_BONUS)
-	var interest := mini(Balance.INTEREST_CAP, int(Game.gold * Balance.INTEREST_RATE))
+	# Compound (GAME_STRATEGY_V2.md §6.3, BUILD NEXT #9) adds to the RATE, not the cap — the
+	# cap is a pacing ceiling independent of how the run got there.
+	var rate := Balance.INTEREST_RATE + Run.interest_rate_add()
+	var interest := mini(Balance.INTEREST_CAP, int(Game.gold * rate))
 	if interest > 0:
 		Game.add_gold(interest)

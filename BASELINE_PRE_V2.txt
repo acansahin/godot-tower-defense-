@@ -1,0 +1,116 @@
+# BUILD NEXT #1 baseline snapshot (GAME_STRATEGY_V2.md)
+# Commit: 17952508d2d5ff0e44e4eb722707e4830a3d5313 (2026-08-21T20:01:21+03:00)
+# Command: godottowerdefense/ -- --wipe-save --dump-stats --dump-waves --dump-board
+# Pre-V2 state: 6 elements (light/darkness/water/fire/nature/earth), old balance ladder.
+# Every later BUILD NEXT numeric change (#2, #3) diffs against this file.
+
+Godot Engine v4.7.stable.official.5b4e0cb0f - https://godotengine.org
+
+--- TOWER STATS DUMP BEGIN ---
+light L1 dmg=50.000000 rng=300.0000 rsq=90000.0000 int=0.990000 pdps=0.000000 ptime=0.0000 slowf=1.000000 slowt=0.0000 sslash=0.000000 splr=0.0000 splf=0.5000 stunc=0.0000 stunt=0.0000 cost=50 upcost=175 spent=50 sell=25 flying=true
+light L2 dmg=250.000000 rng=300.0000 rsq=90000.0000 int=0.990000 pdps=0.000000 ptime=0.0000 slowf=1.000000 slowt=0.0000 sslash=0.000000 splr=0.0000 splf=0.5000 stunc=0.0000 stunt=0.0000 cost=50 upcost=788 spent=225 sell=112 flying=true
+light L3 dmg=1250.000000 rng=300.0000 rsq=90000.0000 int=0.990000 pdps=0.000000 ptime=0.0000 slowf=1.000000 slowt=0.0000 sslash=0.000000 splr=0.0000 splf=0.5000 stunc=0.0000 stunt=0.0000 cost=50 upcost=3544 spent=1013 sell=506 flying=true
+light L4 dmg=6250.000000 rng=300.0000 rsq=90000.0000 int=0.990000 pdps=0.000000 ptime=0.0000 slowf=1.000000 slowt=0.0000 sslash=0.000000 splr=0.0000 splf=0.5000 stunc=0.0000 stunt=0.0000 cost=50 upcost=24444 spent=4557 sell=2278 flying=true
+light L5 dmg=62491.000000 rng=300.0000 rsq=90000.0000 int=0.990000 pdps=0.000000 ptime=0.0000 slowf=1.000000 slowt=0.0000 sslash=0.000000 splr=0.0000 splf=0.5000 stunc=0.0000 stunt=0.0000 cost=50 upcost=0 spent=29001 sell=14500 flying=true
+darkness L1 dmg=165.000000 rng=300.0000 rsq=90000.0000 int=2.750000 pdps=0.000000 ptime=0.0000 slowf=1.000000 slowt=0.0000 sslash=0.000000 splr=0.0000 splf=0.5000 stunc=0.0000 stunt=0.0000 cost=50 upcost=175 spent=50 sell=25 flying=true
+darkness L2 dmg=825.000000 rng=300.0000 rsq=90000.0000 int=2.750000 pdps=0.000000 ptime=0.0000 slowf=1.000000 slowt=0.0000 sslash=0.000000 splr=0.0000 splf=0.5000 stunc=0.0000 stunt=0.0000 cost=50 upcost=788 spent=225 sell=112 flying=true
+darkness L3 dmg=4125.000000 rng=300.0000 rsq=90000.0000 int=2.750000 pdps=0.000000 ptime=0.0000 slowf=1.000000 slowt=0.0000 sslash=0.000000 splr=0.0000 splf=0.5000 stunc=0.0000 stunt=0.0000 cost=50 upcost=3544 spent=1013 sell=506 flying=true
+darkness L4 dmg=20625.000000 rng=300.0000 rsq=90000.0000 int=2.750000 pdps=0.000000 ptime=0.0000 slowf=1.000000 slowt=0.0000 sslash=0.000000 splr=0.0000 splf=0.5000 stunc=0.0000 stunt=0.0000 cost=50 upcost=24444 spent=4557 sell=2278 flying=true
+darkness L5 dmg=206241.000000 rng=300.0000 rsq=90000.0000 int=2.750000 pdps=0.000000 ptime=0.0000 slowf=1.000000 slowt=0.0000 sslash=0.000000 splr=0.0000 splf=0.5000 stunc=0.0000 stunt=0.0000 cost=50 upcost=0 spent=29001 sell=14500 flying=true
+water L1 dmg=10.000000 rng=262.5000 rsq=68906.2500 int=0.170000 pdps=0.000000 ptime=0.0000 slowf=0.550000 slowt=1.4000 sslash=0.000000 splr=0.0000 splf=0.5000 stunc=0.0000 stunt=0.0000 cost=50 upcost=175 spent=50 sell=25 flying=true
+water L2 dmg=50.000000 rng=262.5000 rsq=68906.2500 int=0.170000 pdps=0.000000 ptime=0.0000 slowf=0.550000 slowt=1.4000 sslash=0.000000 splr=0.0000 splf=0.5000 stunc=0.0000 stunt=0.0000 cost=50 upcost=788 spent=225 sell=112 flying=true
+water L3 dmg=250.000000 rng=262.5000 rsq=68906.2500 int=0.170000 pdps=0.000000 ptime=0.0000 slowf=0.550000 slowt=1.4000 sslash=0.000000 splr=0.0000 splf=0.5000 stunc=0.0000 stunt=0.0000 cost=50 upcost=3544 spent=1013 sell=506 flying=true
+water L4 dmg=1250.000000 rng=262.5000 rsq=68906.2500 int=0.170000 pdps=0.000000 ptime=0.0000 slowf=0.550000 slowt=1.4000 sslash=0.000000 splr=0.0000 splf=0.5000 stunc=0.0000 stunt=0.0000 cost=50 upcost=24444 spent=4557 sell=2278 flying=true
+water L5 dmg=12491.000000 rng=262.5000 rsq=68906.2500 int=0.170000 pdps=0.000000 ptime=0.0000 slowf=0.550000 slowt=1.4000 sslash=0.000000 splr=0.0000 splf=0.5000 stunc=0.0000 stunt=0.0000 cost=50 upcost=0 spent=29001 sell=14500 flying=true
+fire L1 dmg=23.000000 rng=175.0000 rsq=30625.0000 int=0.330000 pdps=0.000000 ptime=0.0000 slowf=1.000000 slowt=0.0000 sslash=0.000000 splr=0.0000 splf=0.5000 stunc=0.0000 stunt=0.0000 cost=50 upcost=175 spent=50 sell=25 flying=true
+fire L2 dmg=115.000000 rng=175.0000 rsq=30625.0000 int=0.330000 pdps=0.000000 ptime=0.0000 slowf=1.000000 slowt=0.0000 sslash=0.000000 splr=0.0000 splf=0.5000 stunc=0.0000 stunt=0.0000 cost=50 upcost=788 spent=225 sell=112 flying=true
+fire L3 dmg=575.000000 rng=175.0000 rsq=30625.0000 int=0.330000 pdps=0.000000 ptime=0.0000 slowf=1.000000 slowt=0.0000 sslash=0.000000 splr=0.0000 splf=0.5000 stunc=0.0000 stunt=0.0000 cost=50 upcost=3544 spent=1013 sell=506 flying=true
+fire L4 dmg=2875.000000 rng=175.0000 rsq=30625.0000 int=0.330000 pdps=0.000000 ptime=0.0000 slowf=1.000000 slowt=0.0000 sslash=0.000000 splr=0.0000 splf=0.5000 stunc=0.0000 stunt=0.0000 cost=50 upcost=24444 spent=4557 sell=2278 flying=true
+fire L5 dmg=28750.000000 rng=175.0000 rsq=30625.0000 int=0.330000 pdps=0.000000 ptime=0.0000 slowf=1.000000 slowt=0.0000 sslash=0.000000 splr=0.0000 splf=0.5000 stunc=0.0000 stunt=0.0000 cost=50 upcost=0 spent=29001 sell=14500 flying=true
+nature L1 dmg=66.000000 rng=262.5000 rsq=68906.2500 int=0.990000 pdps=10.000000 ptime=3.0000 slowf=1.000000 slowt=0.0000 sslash=0.000000 splr=0.0000 splf=0.5000 stunc=0.0000 stunt=0.0000 cost=50 upcost=175 spent=50 sell=25 flying=true
+nature L2 dmg=330.000000 rng=262.5000 rsq=68906.2500 int=0.990000 pdps=50.000000 ptime=3.0000 slowf=1.000000 slowt=0.0000 sslash=0.000000 splr=0.0000 splf=0.5000 stunc=0.0000 stunt=0.0000 cost=50 upcost=788 spent=225 sell=112 flying=true
+nature L3 dmg=1650.000000 rng=262.5000 rsq=68906.2500 int=0.990000 pdps=250.000000 ptime=3.0000 slowf=1.000000 slowt=0.0000 sslash=0.000000 splr=0.0000 splf=0.5000 stunc=0.0000 stunt=0.0000 cost=50 upcost=3544 spent=1013 sell=506 flying=true
+nature L4 dmg=8250.000000 rng=262.5000 rsq=68906.2500 int=0.990000 pdps=1250.000000 ptime=3.0000 slowf=1.000000 slowt=0.0000 sslash=0.000000 splr=0.0000 splf=0.5000 stunc=0.0000 stunt=0.0000 cost=50 upcost=24444 spent=4557 sell=2278 flying=true
+nature L5 dmg=82490.000000 rng=262.5000 rsq=68906.2500 int=0.990000 pdps=12498.484848 ptime=3.0000 slowf=1.000000 slowt=0.0000 sslash=0.000000 splr=0.0000 splf=0.5000 stunc=0.0000 stunt=0.0000 cost=50 upcost=0 spent=29001 sell=14500 flying=true
+earth L1 dmg=55.000000 rng=262.5000 rsq=68906.2500 int=1.000000 pdps=0.000000 ptime=0.0000 slowf=1.000000 slowt=0.0000 sslash=0.000000 splr=108.0000 splf=0.5000 stunc=0.0000 stunt=0.0000 cost=50 upcost=175 spent=50 sell=25 flying=false
+earth L2 dmg=275.000000 rng=262.5000 rsq=68906.2500 int=1.000000 pdps=0.000000 ptime=0.0000 slowf=1.000000 slowt=0.0000 sslash=0.000000 splr=108.0000 splf=0.5000 stunc=0.0000 stunt=0.0000 cost=50 upcost=788 spent=225 sell=112 flying=false
+earth L3 dmg=1375.000000 rng=262.5000 rsq=68906.2500 int=1.000000 pdps=0.000000 ptime=0.0000 slowf=1.000000 slowt=0.0000 sslash=0.000000 splr=108.0000 splf=0.5000 stunc=0.0000 stunt=0.0000 cost=50 upcost=3544 spent=1013 sell=506 flying=false
+earth L4 dmg=6875.000000 rng=262.5000 rsq=68906.2500 int=1.000000 pdps=0.000000 ptime=0.0000 slowf=1.000000 slowt=0.0000 sslash=0.000000 splr=108.0000 splf=0.5000 stunc=0.0000 stunt=0.0000 cost=50 upcost=24444 spent=4557 sell=2278 flying=false
+earth L5 dmg=68741.000000 rng=262.5000 rsq=68906.2500 int=1.000000 pdps=0.000000 ptime=0.0000 slowf=1.000000 slowt=0.0000 sslash=0.000000 splr=108.0000 splf=0.5000 stunc=0.0000 stunt=0.0000 cost=50 upcost=0 spent=29001 sell=14500 flying=false
+--- TOWER STATS DUMP END ---
+--- WAVE DUMP BEGIN (seed table = waves 1-20) ---
+w01 [table] normal   el=-      count=0.65
+w02 [table] normal   el=-     
+w03 [table] fast     el=-     
+w04 [table] swarm    el=-     
+w05 [table] normal   el=fire  
+w06 [table] air      el=-     
+w07 [table] immune   el=nature
+w08 [table] fast     el=earth 
+w09 [table] regen    el=water 
+w10 [table] tank     el=water  BOSS
+w11 [table] split    el=nature
+w12 [table] tank     el=earth 
+w13 [table] air      el=-     
+w14 [table] immune   el=water 
+w15 [table] fast     el=fire  
+w16 [table] regen    el=nature
+w17 [table] split    el=earth 
+w18 [table] swarm    el=water 
+w19 [table] tank     el=fire   hp=0.85
+w20 [table] swarm    el=fire   BOSS
+w21 [gen] split    el=fire  
+w22 [gen] swarm    el=nature
+w23 [gen] fast     el=earth 
+w24 [gen] immune   el=light 
+w25 [gen] swarm    el=darkness
+w26 [gen] normal   el=water 
+w27 [gen] air      el=-     
+w28 [gen] fast     el=nature hp=1.60 count=0.55
+w29 [gen] fast     el=earth 
+w30 [gen] normal   el=light  BOSS
+w31 [gen] fast     el=darkness
+w32 [gen] tank     el=water 
+w33 [gen] immune   el=fire  
+w34 [gen] fast     el=nature
+w35 [gen] tank     el=earth  hp=1.60 count=0.55
+w36 [gen] normal   el=light 
+w37 [gen] fast     el=darkness
+w38 [gen] normal   el=water 
+w39 [gen] normal   el=fire  
+w40 [gen] normal   el=nature BOSS
+w41 [gen] swarm    el=earth 
+w42 [gen] immune   el=light  hp=1.60 count=0.55
+w43 [gen] swarm    el=darkness
+w44 [gen] tank     el=water 
+w45 [gen] tank     el=fire  
+w46 [gen] tank     el=nature
+w47 [gen] split    el=earth 
+w48 [gen] normal   el=light 
+w49 [gen] regen    el=darkness hp=1.60 count=0.55
+w50 [gen] fast     el=water  BOSS
+w51 [gen] regen    el=fire  
+w52 [gen] normal   el=nature
+w53 [gen] air      el=-     
+w54 [gen] normal   el=light 
+w55 [gen] air      el=-     
+w56 [gen] air      el=-      hp=1.60 count=0.55
+w57 [gen] immune   el=fire  
+w58 [gen] normal   el=nature
+w59 [gen] immune   el=earth 
+w60 [gen] fast     el=light  BOSS
+--- WAVE DUMP END (impure generated waves: 0) ---
+--- BOARD DUMP BEGIN ---
+  road length      : 3199 px over 141 waypoints
+  buildable spots  : 156 (on a 68px sweep)
+  road samples     : 329 (every 12 px)
+  element      range   best 1   median  cover 95%        raw raw best
+  light          300      42%      16%  4 towers         700      92%
+  darkness       300      42%      16%  4 towers         700      92%
+  water          263      36%      13%  7 towers         263      36%
+  fire           175      20%       5%  9 towers (only 90% reachable)     175      20%
+  nature         263      36%      13%  7 towers         263      36%
+  earth          263      36%      13%  7 towers         263      36%
+--- BOARD DUMP END ---
+WARNING: 2 ObjectDB instances were leaked at exit (run with `--verbose` for details).
+   at: cleanup (core/object/object.cpp:2535)

@@ -15,14 +15,30 @@ const SHAKE_DECAY := 26.0  ## Pixels of camera shake bled off per second.
 @onready var palette = $UI/TowerPalette
 @onready var end_screen: EndScreen = $UI/EndScreen
 @onready var upgrade_choice: UpgradeChoice = $UI/UpgradeChoice
+@onready var branch_choice: BranchChoice = $UI/BranchChoice
+@onready var element_choice: ElementChoice = $UI/ElementChoice
 @onready var camera: Camera2D = $Camera2D
 @onready var preview = $Preview  ## Drag ghost.
 
 var _drag_kind: String = ""  ## Tower type being dragged from the palette ("" = none).
 var _hovered: Tower = null   ## Tower under the mouse, drawn with a clear range ring.
 var _shake: float = 0.0      ## Current camera shake magnitude in px; decays to 0.
-var _auto_pick: bool = false ## Harness only (--fill-board/--auto-pick): auto-resolve upgrade choices.
-## Harness only (`--map:s`): holds one board for a focused playtest instead of rotating.
+var _auto_pick: bool = false ## Harness only (--fill-board/--auto-pick): auto-resolve upgrade AND branch choices.
+## The tower waiting on a Lv3 branch pick, or null. Set right before branch_choice.show_choices()
+## and read back in _on_branch_chosen — the popup itself only reports WHICH branch, not for
+## which tower, since (unlike the roguelite choice) this decision belongs to one specific tower.
+var _pending_branch_tower: Tower = null
+var _auto_pick_branch_toggle: int = 0  ## Alternates "a"/"b" for --fill-board's branch auto-pick.
+## Monoculture card awaiting its element sub-choice, or {} — see _on_upgrade_chosen /
+## _on_element_chosen. Same one-in-flight-at-a-time pattern as _pending_branch_tower.
+var _pending_monoculture_card: Dictionary = {}
+## Standard mode's one board (GAME_STRATEGY_V2.md §28 Phase 1: "1 harita", BUILD NEXT #8).
+## `Game.use_board_for_wave()`'s 10-wave winding->spiral->s rotation (Game.BOARD_SEQUENCE)
+## is now Endless-only infrastructure, unreached from here — same treatment step 4 gave
+## WaveGenerator. A Standard run stays on this board from wave 1 through Game.STANDARD_WAVES.
+const STANDARD_BOARD := "winding"
+
+## Harness only (`--map:s`): holds one board for a focused playtest instead of the default.
 var _board_override: String = ""
 
 func _ready() -> void:
@@ -30,10 +46,7 @@ func _ready() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if String(arg).begins_with("--map:"):
 			_board_override = String(arg).trim_prefix("--map:")
-	if _board_override == "":
-		Game.use_board_for_wave(1)
-	else:
-		Game.use_board(_board_override, false)
+	Game.use_board(STANDARD_BOARD if _board_override == "" else _board_override, false)
 	# One seed drives both the waves and the card offers, so a whole run — what it throws at
 	# you and what it lets you answer with — replays from a single number.
 	var run_seed := randi()
@@ -48,6 +61,7 @@ func _ready() -> void:
 	Game.gold_changed.connect(palette.set_gold)
 	Game.lives_changed.connect(hud.set_lives)
 	Game.game_over.connect(_on_game_over)
+	Game.victory.connect(_on_victory)
 	wave_manager.wave_starting.connect(_on_wave_starting)
 	wave_manager.wave_started.connect(hud.set_wave)
 	wave_manager.wave_preview.connect(hud.set_next)
@@ -60,6 +74,8 @@ func _ready() -> void:
 	# whether the run is running — the choice screen itself only reports what was picked.
 	wave_manager.choice_due.connect(_on_choice_due)
 	upgrade_choice.chosen.connect(_on_upgrade_chosen)
+	branch_choice.chosen.connect(_on_branch_chosen)
+	element_choice.chosen.connect(_on_element_chosen)
 
 	# Frame the WHOLE world, once. There is no panning: a tower defense you have to scroll
 	# is one where the leak that just cost you a life happened somewhere you were not
@@ -86,10 +102,12 @@ func _ready() -> void:
 		Game.reset()
 	if OS.get_cmdline_user_args().has("--dump-stats"):
 		_dump_tower_stats()
-	if OS.get_cmdline_user_args().has("--fill-board"):
+	if _fill_board_requested():
 		_fill_board()
 	if OS.get_cmdline_user_args().has("--air-pose"):
 		_air_pose()
+	if OS.get_cmdline_user_args().has("--boss-pose"):
+		_boss_pose()
 	# TEMPORARY: answers the roguelite choice screen for you. Not decoration for --shot: the
 	# choice screen pauses the tree, and a paused tree stops the SceneTree timers every
 	# delayed harness waits on — so an unattended run simply stops at wave 3 and every later
@@ -101,8 +119,6 @@ func _ready() -> void:
 		_dump_waves()
 	if OS.get_cmdline_user_args().has("--dump-mods"):
 		_dump_mods()
-	if OS.get_cmdline_user_args().has("--dump-duals"):
-		_dump_duals()
 	if OS.get_cmdline_user_args().has("--dump-board"):
 		_dump_board()
 	if OS.get_cmdline_user_args().has("--test-sell-hit"):
@@ -122,6 +138,17 @@ func _ready() -> void:
 	if OS.get_cmdline_user_args().has("--show-choice"):
 		_on_choice_due(30)  # late wave: exercises the higher-rarity cards and NEW TOWER
 	for arg in OS.get_cmdline_user_args():
+		# `--show-branch-choice` (default "fire") or `--show-branch-choice:water` etc. — pops
+		# the Lv3 branch popup so its _draw() can be exercised without playing a tower to
+		# level 3 first. Mirrors --show-choice above.
+		if String(arg).begins_with("--show-branch-choice"):
+			var parts := String(arg).split(":")
+			branch_choice.show_choices(parts[1] if parts.size() > 1 else "fire")
+		# `--show-element-choice` — pops Monoculture's sub-choice popup (BUILD NEXT #9) so its
+		# _draw() can be exercised without rolling it out of the card pool first.
+		if String(arg) == "--show-element-choice":
+			element_choice.show_choices()
+	for arg in OS.get_cmdline_user_args():
 		if String(arg).begins_with("--shot"):
 			# `--shot` grabs the opening board; `--shot:20` waits 20 seconds first, which is
 			# how you photograph a wave in flight rather than an empty map. Several may be
@@ -133,14 +160,14 @@ func _ready() -> void:
 			else:
 				_save_screenshot(1.0)
 
-## WaveManager emits this before deriving stats or creating the first enemy, so a chapter
-## boundary installs the correct painting, path and board-specific balance together.
+## WaveManager emits this before deriving stats or creating the first enemy. Used to also
+## rotate the board by wave chapter; a Standard run now stays on STANDARD_BOARD for its whole
+## length (see _ready()), so this is a no-op every wave (Game.use_board() already short-
+## circuits on the board it is already showing) except to keep the `number` parameter's
+## signal shape intact for whatever Endless mode reconnects here later.
 func _on_wave_starting(number: int) -> void:
 	var previous_board := Game.active_board_id
-	if _board_override == "":
-		Game.use_board_for_wave(number)
-	else:
-		Game.use_board(_board_override, false)
+	Game.use_board(STANDARD_BOARD if _board_override == "" else _board_override, false)
 	grid.queue_redraw()
 	if previous_board == Game.active_board_id:
 		return
@@ -149,7 +176,7 @@ func _on_wave_starting(number: int) -> void:
 	hud.set_hint("New map: %s%s" % [Game.active_board_id.capitalize(),
 			" — %d towers moved to clear ground" % moved if moved > 0 else ""])
 	_clear_map_hint_later()
-	if OS.get_cmdline_user_args().has("--fill-board"):
+	if _fill_board_requested():
 		print("--- MAP CHANGE @ wave %d: %s (%d towers moved) ---"
 				% [number, Game.active_board_id, moved])
 
@@ -227,40 +254,51 @@ func _dump_mods() -> void:
 			var t := TOWER.instantiate() as Tower
 			towers_root.add_child(t)
 			t.setup_def(String(tid))
-			line += "%s dmg=%.3f int=%.4f slow=%.3f  " % [tid, t.damage, t.fire_interval, t.slow_factor]
+			line += "%s dmg=%.3f int=%.4f rng=%.1f slowt=%.2f burnt=%.2f  " \
+					% [tid, t.damage, t.fire_interval, t.tower_range, t.slow_time, t.burn_time]
 			t.queue_free()
 		print(line)
 
 	print("--- MOD DUMP BEGIN ---")
 	Run.reset(1)
 	probe.call("baseline")
-	Run.grant(_pool_entry("fire_dmg"))
-	probe.call("+fire_dmg")
-	Run.grant(_pool_entry("all_dmg_small"))
-	probe.call("+all_dmg_small")
-	Run.grant(_pool_entry("water_slow"))
-	probe.call("+water_slow")
-	Run.grant(_pool_entry("fire_speed"))
-	probe.call("+fire_speed")
+	# One card from each new BUILD NEXT #9 shape: an element-scoped mult-op stat (wick,
+	# burn_time), an element-scoped add-op stat (permafrost, slow_time), a global add-op stat
+	# (long_sight, range) and a global mult-op stat (bulwark, damage).
+	Run.grant(_pool_entry("wick"))
+	probe.call("+wick")
+	Run.grant(_pool_entry("permafrost"))
+	probe.call("+permafrost")
+	Run.grant(_pool_entry("long_sight"))
+	probe.call("+long_sight")
+	Run.grant(_pool_entry("bulwark"))
+	probe.call("+bulwark")
+	Run.reset(1)
+	# Monoculture's real path (main.gd _on_upgrade_chosen -> element_choice ->
+	# _on_element_chosen), driven directly rather than through the UI — proves the
+	# per-effect element override (run.gd's _effect_applies) actually lands +50%/-20% on the
+	# right towers instead of just rendering the popup correctly.
+	_on_upgrade_chosen(_pool_entry("monoculture"))
+	_on_element_chosen("fire")
+	probe.call("+monoculture:fire")
 	Run.reset(1)
 	probe.call("after reset")
-	# Element gating: a dual appears only once BOTH of its elements are raised, and the
-	# roster is derived rather than stored, so this also proves a reset takes them away.
-	# Ice is Water + Light, so raising Water alone must change nothing.
+	# Roster sanity: BUILD NEXT #2 removed the dual-recipe gate (owning both elements of a
+	# pair used to add a fifth+ tower to the palette), so buildable_towers() should now be
+	# nothing more than the four base elements, stable across a reset.
 	print("roster @start:        %s" % str(Run.buildable_towers()))
-	Run.grant(_pool_entry("elem_water"))
-	print("+water elemental:     %s" % str(Run.buildable_towers()))
-	Run.grant(_pool_entry("elem_light"))
-	print("+light elemental:     %s" % str(Run.buildable_towers()))
-	print("element levels:       %s" % str(Run.elements))
-	Run.grant(_pool_entry("elem_fire"))
-	print("+fire elemental:      %s" % str(Run.buildable_towers()))
 	Run.reset(1)
 	print("roster after reset:   %s" % str(Run.buildable_towers()))
 	print("gold/kill before: %d" % Run.bonus_gold_per_kill())
-	Run.grant(_pool_entry("gold_kill"))
-	Run.grant(_pool_entry("gold_kill"))
-	print("gold/kill after 2x Scavenger: %d" % Run.bonus_gold_per_kill())
+	Run.grant(_pool_entry("prospector"))
+	Run.grant(_pool_entry("prospector"))
+	print("gold/kill after 2x Prospector: %d" % Run.bonus_gold_per_kill())
+	# Frontload's kill_gold_mult (BUILD NEXT #9) — separate global fold from the flat
+	# bonus_gold_per_kill above; see run.gd's kill_gold_mult() comment for why they must not
+	# collapse into one number.
+	print("kill gold mult before: %.2f" % Run.kill_gold_mult())
+	Run.grant(_pool_entry("frontload"))
+	print("kill gold mult after Frontload: %.2f" % Run.kill_gold_mult())
 	# Offer sanity: no duplicates within one offer, and nothing offered past its stack cap.
 	Run.reset(7)
 	for w in [3, 9, 30]:
@@ -402,26 +440,78 @@ func _air_pose() -> void:
 		if i % 2 == 1:
 			e.take_damage(150.0)
 
+## TEMPORARY verification harness: stages both bosses' rules (GAME_STRATEGY_V2.md §10.4,
+## BUILD NEXT #7) on an empty board so cc_immune's ward and rotating_armor's icon/ring can be
+## photographed without playing to wave 10 or 20 first. Pair with --shot, WITHOUT --headless:
+##   Godot.exe --path <project> res://scenes/Main.tscn -- --boss-pose --shot --shot:6
+## (the second shot is timed past ROTATING_ARMOR_PERIOD so the ring/icon is caught having
+## already turned over at least once). Delete this and its call above once photographed.
+func _boss_pose() -> void:
+	wave_manager.set_process(false)
+	var enemy_scene: PackedScene = load("res://scenes/Enemy.tscn")
+	var rules := [
+		{"element": "water", "rule": "control_immune"},
+		{"element": "fire", "rule": "rotating_armor"},
+	]
+	for i in rules.size():
+		var e := enemy_scene.instantiate() as Enemy
+		e.setup(2000.0, 20.0, 50, Balance.BOSS_TINT)
+		e.kind = "tank"
+		e.radius = Balance.BOSS_RADIUS
+		e.is_boss = true
+		e.armor_element = String(rules[i]["element"])
+		match String(rules[i]["rule"]):
+			"control_immune": e.cc_immune = true
+			"rotating_armor": e.rotating_armor = true
+		enemies_root.add_child(e)
+		var step := int(float(Game.active_path.size() - 2) * float(i + 1) / float(rules.size() + 1)) + 1
+		e.set_progress(step)
+		e.global_position = Game.active_path[step]
+		e.take_damage(2000.0 * 0.35)  # dent the health bar so it reads against a full boss
+
 ## TEMPORARY verification harness: covers every buildable cell with towers, cycling the
 ## roster, so a headless run actually exercises targeting, firing, the projectile pool and
 ## the effect payloads. Without it a headless run has no towers and proves nothing about
 ## the combat path. Gold is granted rather than spent so placement never fails.
 ##   Godot.exe --headless --path <project> res://scenes/Main.tscn --quit-after 900 -- --fill-board
 ## Delete this and its call above once the refactor has landed and been verified.
+## True for either --fill-board or its real-time timing variant --fill-board:1x (BUILD
+## NEXT #10) — `.has()` alone only matches the bare flag exactly, so both call sites need
+## this rather than one `.has("--fill-board")` check.
+func _fill_board_requested() -> bool:
+	var args := OS.get_cmdline_user_args()
+	return args.has("--fill-board") or args.has("--fill-board:1x")
+
 func _fill_board() -> void:
 	# Headless runs one frame at a time regardless of wall clock, so the only way to cover
-	# many waves in a bounded frame budget is to make each frame simulate more time.
-	Engine.time_scale = 8.0
+	# many waves in a bounded frame budget is to make each frame simulate more time. Skipped
+	# by `--fill-board:1x` (BUILD NEXT #10's "GERÇEK BİR RUN'I ÖLÇ") — timing how long a
+	# Standard run actually takes needs REAL wall-clock pacing, which is the one thing this
+	# acceleration exists to avoid everywhere else.
+	if not OS.get_cmdline_user_args().has("--fill-board:1x"):
+		Engine.time_scale = 8.0
 	_auto_pick = true
 	Game.add_gold(999999)
+	# Real WALL-CLOCK elapsed time (not scaled by Engine.time_scale — Time.get_ticks_msec is
+	# an OS clock, unaffected by it either way), for --fill-board:1x's job of answering
+	# GAME_STRATEGY_V2.md §11.2's own unmeasured guess: does a 20-wave Standard run actually
+	# take ~10.5 minutes? (BUILD NEXT #10.) Meaningless at the default 8x speed, printed
+	# regardless since it costs nothing extra to include.
+	var start_ms := Time.get_ticks_msec()
 	# The end screen pauses the tree, so a run that ends looks exactly like a hang from the
-	# outside. Say so explicitly instead.
-	Game.game_over.connect(func() -> void:
-		# Deferred: _on_game_over banks the run, and reading Meta before that has happened
-		# would report the wallet as it was a moment BEFORE the reward landed.
+	# outside. Say so explicitly instead. Standard mode can now be WON (BUILD NEXT #4) — a
+	# fully maxed board plausibly clears all 20 waves, so both outcomes need a line or a win
+	# would silently look identical to the harness just hanging at frame budget.
+	var report := func(outcome: String) -> void:
+		# Deferred: _on_game_over/_on_victory bank the run, and reading Meta before that has
+		# happened would report the wallet as it was a moment BEFORE the reward landed.
 		await get_tree().process_frame
-		print("--- RUN OVER: wave %d | best %d | essence %d | runs %d ---"
-				% [Game.wave_reached, Meta.best_wave, Meta.essence, Meta.total_runs]))
+		var elapsed_s := float(Time.get_ticks_msec() - start_ms) / 1000.0
+		print("--- RUN %s: wave %d | best %d | essence %d | runs %d | elapsed %.1fs (%.1fmin) ---"
+				% [outcome, Game.wave_reached, Meta.best_wave, Meta.essence, Meta.total_runs,
+					elapsed_s, elapsed_s / 60.0])
+	Game.game_over.connect(func() -> void: report.call("OVER"))
+	Game.victory.connect(func() -> void: report.call("WON"))
 	var i := 0
 	# No cells to walk any more: sweep the play area on the tower spacing and take every
 	# spot the placement rule allows, which is the closest thing to "a full board" that free
@@ -436,6 +526,11 @@ func _fill_board() -> void:
 		# Lv2, so a board of Lv1 towers would never touch that path.
 		while t.can_upgrade():
 			t.upgrade()
+			# --fill-board bypasses _upgrade_tower() (it grants a gold lump instead of
+			# spending exact costs), so the Lv3 branch trigger there never fires — do it
+			# here instead, alternating so both branches of every element get exercised.
+			if t.level == 3 and t.branch == "":
+				t.set_branch("a" if (i % 2 == 0) else "b")
 		i += 1
 	print("--- FILL BOARD: placed %d towers, all at max level ---" % i)
 
@@ -570,85 +665,6 @@ func _best_seen(spots: Array, samples: Array[Vector2], r: float) -> int:
 				n += 1
 		best = maxi(best, n)
 	return best
-
-## Verification harness for the seven support duals. The risky one is the aura: it is the
-## first stat that depends on a tower OTHER than the one being computed, so the thing worth
-## proving is that it unwinds — a Fire tower next to a sold Well must return to exactly its
-## baseline, not to "baseline plus whatever rounding survived".
-##
-##   Godot.exe --headless --path <project> res://scenes/Main.tscn --quit-after 5 -- --dump-duals
-func _dump_duals() -> void:
-	print("--- DUAL DUMP BEGIN ---")
-	var subject := TOWER.instantiate() as Tower
-	towers_root.add_child(subject)
-	subject.setup_def("fire")
-	subject.position = Vector2(200, 200)
-	var report := func(label: String) -> void:
-		print("  %-26s fire dmg=%.4f int=%.5f" % [label, subject.damage, subject.fire_interval])
-	report.call("alone")
-
-	# In range: a Well is attack speed, a Moon is damage. Both at once must stack.
-	var well := TOWER.instantiate() as Tower
-	towers_root.add_child(well)
-	well.setup_def("well")
-	well.position = Vector2(300, 200)   # 100px away; Well's aura is 700 WC3 = 245px
-	Game.towers_changed.emit()
-	report.call("+well (in range)")
-	well.upgrade()
-	Game.towers_changed.emit()
-	report.call("+well at Lv2")
-	var moon := TOWER.instantiate() as Tower
-	towers_root.add_child(moon)
-	moon.setup_def("moon")
-	moon.position = Vector2(200, 300)
-	Game.towers_changed.emit()
-	report.call("+moon (damage aura)")
-	# Out of range must contribute nothing at all.
-	moon.position = Vector2(1200, 200)
-	Game.towers_changed.emit()
-	report.call("moon moved out of range")
-	towers_root.remove_child(well)
-	towers_root.remove_child(moon)
-	Game.towers_changed.emit()
-	report.call("both removed (= alone?)")
-	towers_root.remove_child(subject)
-	well.queue_free()
-	moon.queue_free()
-	subject.queue_free()
-
-	# Each probe is measured ALONE: queue_free() only takes effect at end of frame, so a
-	# tower merely freed is still a child and still projecting its aura. Two aura providers
-	# left in the tree would quietly inflate every row below. Remove, then free.
-	print("  --- payload of each support dual (measured in isolation) ---")
-	for id in ["moon", "sun", "well", "money", "life", "death", "magic"]:
-		var t := TOWER.instantiate() as Tower
-		towers_root.add_child(t)
-		t.setup_def(String(id))
-		print("    %-9s dmg=%-8.1f rng=%-7.1f int=%.2f exec=%.2f gold=%d life=%.3f aura=%s"
-				% [id, t.damage, t.tower_range, t.fire_interval, t.execute_chance,
-					t.gold_on_kill, t.life_on_kill_chance,
-					str(t._def.get("aura_stat", "-"))])
-		towers_root.remove_child(t)
-		t.queue_free()
-
-	# Magic's charge cycle: three ordinary shots, then one at charge_mult.
-	var magic := TOWER.instantiate() as Tower
-	towers_root.add_child(magic)
-	magic.setup_def("magic")
-	towers_root.remove_child(magic)
-	var charge := magic._behavior as ChargeBehavior
-	var cycle := ""
-	for _i in 9:
-		charge._charged_shots += 1
-		var every: int = int(magic._def.get("charge_shots", 4))
-		if charge._charged_shots >= every:
-			charge._charged_shots = 0
-			cycle += "X"      # charged
-		else:
-			cycle += "."
-	print("  magic shot cycle (X = charged): %s" % cycle)
-	magic.queue_free()
-	print("--- DUAL DUMP END ---")
 
 ## TEMPORARY verification harness for the tower-stats refactor. Prints every tower's
 ## resolved stats at each level so a pure refactor can be proved byte-identical against a
@@ -839,8 +855,36 @@ func _upgrade_tower(tower: Tower) -> void:
 	# around it — not just the tower that was tapped.
 	Game.towers_changed.emit()
 	Audio.play("upgrade")
+	# Lv3 is a branch, not a stat step (GAME_STRATEGY_V2.md §4, BUILD NEXT #5) — the tower
+	# already climbed to level 3 above, using its base (unbranched) stats for this one frame;
+	# the popup decides which branch it settles into from here. `branch == ""` guards against
+	# re-asking if a future respec-adjacent feature ever calls _upgrade_tower on an already-
+	# branched Lv3+ tower.
+	if tower.level == 3 and tower.branch == "":
+		if _auto_pick:
+			# Harnesses (--fill-board) alternate so both branches of every element actually
+			# get played, rather than every tower defaulting to the same half of the roster.
+			tower.set_branch("a" if (_auto_pick_branch_toggle % 2 == 0) else "b")
+			_auto_pick_branch_toggle += 1
+			return
+		_pending_branch_tower = tower
+		get_tree().paused = true
+		hud.set_input_blocked(true)
+		branch_choice.show_choices(tower.element)
 
-## Removes the tower and refunds half of the gold sunk into it.
+## branch_choice.gd reports back which branch (never for which tower — see
+## _pending_branch_tower), so this is also where the interactive path un-pauses; the harness
+## path in _upgrade_tower above never pauses in the first place and never reaches here.
+func _on_branch_chosen(branch_id: String) -> void:
+	if _pending_branch_tower != null and is_instance_valid(_pending_branch_tower):
+		_pending_branch_tower.set_branch(branch_id)
+		Game.towers_changed.emit()  # a newly-branched Grove's aura must reach its neighbours now
+	_pending_branch_tower = null
+	hud.set_input_blocked(false)
+	get_tree().paused = false
+
+## Removes the tower and refunds the gold sunk into it — all of it if the tower never fired,
+## most of it otherwise (see Tower.sell_value / Tower.has_fired).
 func _sell_tower(tower: Tower) -> void:
 	Audio.play("sell")
 	Game.add_gold(tower.sell_value())
@@ -904,8 +948,34 @@ func _on_choice_due(wave: int) -> void:
 	hud.set_input_blocked(true)
 	upgrade_choice.show_choices(options)
 
+## Monoculture's sub-choice (GAME_STRATEGY_V2.md §6.3, BUILD NEXT #9) is the one card whose
+## effects depend on a choice made AFTER the card itself is picked, so it cannot just call
+## Run.grant() here like every other card does.
 func _on_upgrade_chosen(upgrade: Dictionary) -> void:
+	if upgrade.get("needs_element_choice", false):
+		_pending_monoculture_card = upgrade
+		if _auto_pick:
+			# Harness only: nothing is going to tap an element card in a headless run.
+			_on_element_chosen(String(Game.TOWER_ORDER[0]))
+			return
+		element_choice.show_choices()
+		return  # tree stays paused; _on_element_chosen finishes the job below
 	Run.grant(upgrade)
+	hud.set_input_blocked(false)
+	get_tree().paused = false
+
+## Builds Monoculture's actual effects list now that an element was picked — one effect at
+## +50% for it, three more at -20% each for the others, using the per-effect `element`
+## override run.gd's _effect_applies() reads (see its own comment for why that exists).
+func _on_element_chosen(element: String) -> void:
+	var effects: Array = []
+	for el in Game.TOWER_ORDER:
+		effects.append({"stat": "damage", "op": "mult",
+				"value": 1.5 if el == element else 0.8, "element": el})
+	var final_card: Dictionary = _pending_monoculture_card.duplicate()
+	final_card["effects"] = effects
+	_pending_monoculture_card = {}
+	Run.grant(final_card)
 	hud.set_input_blocked(false)
 	get_tree().paused = false
 
@@ -914,4 +984,20 @@ func _on_game_over() -> void:
 	# Bank the run BEFORE the summary draws: finish_run updates the best-wave record and
 	# the wallet, both of which the summary reports.
 	var earned := Meta.finish_run(Game.wave_reached)
-	end_screen.show_summary(earned)
+	end_screen.show_summary(earned, false)
+
+## Standard mode's win path (GAME_STRATEGY_V2.md §11.1, BUILD NEXT #4) — same bookkeeping as
+## a loss (bank the run, show the summary), framed as a win rather than a result. audio.gd
+## already synthesizes a "victory" jingle distinct from "gameover"; nothing played it before
+## there was a way to win.
+func _on_victory() -> void:
+	Audio.play("victory")
+	var earned := Meta.finish_run(Game.wave_reached)
+	# Stars (GAME_STRATEGY_V2.md §12.4, BUILD NEXT #8): ★ for finishing at all — true here,
+	# since this only runs on Game.victory — ★★ for ≤5 lives lost, ★★★ for a flawless clear.
+	# Compared against the RULESET's own starting lives, not a hardcoded 20, so Easy's extra
+	# lives do not make ★★★ easier to reach than Normal's.
+	var lives_lost := Balance.ruleset_start_lives(Game.ruleset) - Game.lives
+	var stars := 3 if lives_lost <= 0 else (2 if lives_lost <= 5 else 1)
+	Meta.record_stars(Game.ruleset, stars)
+	end_screen.show_summary(earned, true, stars)

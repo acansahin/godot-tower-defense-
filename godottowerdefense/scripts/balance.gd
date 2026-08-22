@@ -14,15 +14,41 @@ extends Node
 ## Nothing here changes behaviour — every value is the one that used to live at the site
 ## named in its comment.
 
-# --- Run start -----------------------------------------------------------------
+# --- Run start / rulesets (BUILD NEXT #8) ---------------------------------------
 
+## Easy/Normal (GAME_STRATEGY_V2.md §12, §28 Phase 1 — Hard is later phase content, not
+## implemented here). "normal" is the tuned baseline every OTHER constant in this file
+## already assumes (CREEP_HP_PERCENT, BASE_COUNT_*, …), so its multipliers are 1.0 and it
+## changes nothing about the curves below; "easy" scales down from that same baseline
+## rather than replacing it, via ruleset_hp_mult/ruleset_count_mult below, applied in
+## wave_hp/wave_count. start_gold/start_lives are absolute per §12.2's own table, not
+## multipliers.
+##
 ## The original map starts a player on 30 gold, but its towers are not bought from a
 ## palette — you research elements and are given elementals, so 30 gold against a
 ## 50-gold tower is a bootstrap the player reaches by another route. We have no such
-## route, so this is one of the two deliberate departures from the map (the other is
-## noted on TOWER_DEFS): enough for three tier-1 towers.
-const START_GOLD := 150
-const START_LIVES := 20
+## route, so 120 (Normal) is one of the two deliberate departures from the map (the other
+## is noted on TOWER_DEFS): enough for over two tier-1 towers.
+const RULESETS := {
+	"normal": {"hp_mult": 1.0, "count_mult": 1.0, "start_gold": 120, "start_lives": 20},
+	"easy": {"hp_mult": 0.70, "count_mult": 0.85, "start_gold": 150, "start_lives": 25},
+}
+const DEFAULT_RULESET := "normal"
+
+func _ruleset(id: String) -> Dictionary:
+	return RULESETS.get(id, RULESETS[DEFAULT_RULESET])
+
+func ruleset_hp_mult(id: String) -> float:
+	return float(_ruleset(id).get("hp_mult", 1.0))
+
+func ruleset_count_mult(id: String) -> float:
+	return float(_ruleset(id).get("count_mult", 1.0))
+
+func ruleset_start_gold(id: String) -> int:
+	return int(_ruleset(id).get("start_gold", 120))
+
+func ruleset_start_lives(id: String) -> int:
+	return int(_ruleset(id).get("start_lives", 20))
 
 # --- Tower upgrade curve (ported from Element TD v2.0) -------------------------
 #
@@ -33,14 +59,29 @@ const START_LIVES := 20
 # shapes rather than as the same tower at different sizes.
 
 const MAX_LEVEL := 5
-## Gold to BUILD a tower at tier 1, then to reach each tier above it. Straight from the
-## map: 50 / 175 / 788 / 3544 / 24444.
-const TIER_COSTS: Array = [50, 175, 788, 3544, 24444]
-## Damage multiplier applied on each upgrade. Tiers 2-4 are x5; Pure is x10, which is
-## the one place the map breaks its own pattern and the reason Pure is a decision
-## rather than a formality.
+## Gold to BUILD a tower at tier 1, then to reach each tier above it. Replaced the WC3-ported
+## 50/175/788/3544/24444 ladder in the V2 redesign (GAME_STRATEGY_V2.md §4.2, §29.1, BUILD
+## NEXT #3): the map's ladder ended in a 24444-gold, five-and-a-half-digit purchase that no
+## run economy sized for a phone session could ever reach cleanly. 50/40/70/120/200 keeps
+## the total cost of a maxed tower (480) inside what one run's economy actually earns
+## (§29.2 measures ~6090 gold across 20 waves against ~12 good build spots x 480 = 5760).
+const TIER_COSTS: Array = [50, 40, 70, 120, 200]
+## Damage multiplier applied on each upgrade. Unused while every TOWER_DEFS entry supplies
+## its own explicit `damage_tiers` (see game.gd) — kept as the documented fallback shape,
+## not yet rewritten to the V2 tier ratio (10/18/32/56/100, i.e. x1.8/x1.78/x1.75/x1.79)
+## since that number belongs with the branch redesign (BUILD NEXT #5-#6), not this pass.
 const TIER_DAMAGE_MULT: Array = [5.0, 5.0, 5.0, 10.0]
-const SELL_REFUND := 0.5          ## fraction of total_spent returned when sold
+## Fraction of total_spent returned when a tower that has already fired is sold. A tower
+## sold before its first shot instead returns SELL_REFUND_UNFIRED (100%) — see
+## Tower.sell_value(). Two-tier refund replaces V1's flat 50% (GAME_STRATEGY_V2.md §9,
+## BUILD NEXT #3): a flat rate punished the exact mistake a new player must be free to
+## make (bad placement), while a flat 100% would let an expert re-tile the whole board
+## before every wave for free. The condition is "did this tower ever do anything", not
+## "how long has it stood" — a tower dropped mid-wave in the wrong spot is still a free
+## take-back as long as it never got a shot off.
+const SELL_REFUND := 0.8
+## Refund fraction for a tower sold before its first shot. See SELL_REFUND above.
+const SELL_REFUND_UNFIRED := 1.0
 ## slow_splash radius gains this fraction of its base per level past 2 (Lv3 = x1.3).
 const SLOW_SPLASH_GROWTH := 0.3
 ## Hard floor on a tower's seconds-per-shot. Water is the fastest element at 0.17s and
@@ -98,17 +139,21 @@ func upgrade_cost(_build_cost: int, level: int) -> int:
 
 # --- Wave pacing + economy (was wave_manager.gd:12-22) -------------------------
 
-const PREP_TIME := 4.0            ## Delay between waves.
-## Delay before wave 1 only. Training teaches the controls, but the endless run opens on a
-## different board with all six towers visible; four seconds is still too short to read the
-## palette, choose a coverage spot and place the first defence.
-const FIRST_PREP_TIME := 12.0
-## Banked gold earns this each wave. The map pays 2.5% every 15 seconds and lets you
-## research the rate upward; a wave is roughly one interest tick there, so the rate
-## carries over directly. The cap is ours — the map has none, and without one the
-## right play late in an endless run is to stop building and hold gold.
-const INTEREST_RATE := 0.025
-const INTEREST_CAP := 400
+## Delay between waves. 3.0 (was 4.0) per GAME_STRATEGY_V2.md §11.2's session-length budget
+## — a 20-wave Standard run has to fit ~10.5 minutes, and 19 inter-wave gaps is where most
+## of the trim comes from without touching in-wave pacing.
+const PREP_TIME := 3.0
+## Delay before wave 1 only. Training teaches the controls, but the run opens on a
+## different board with the tower palette visible; ten seconds (was 12, §11.2) is still
+## long enough to read the palette, choose a coverage spot and place the first defence.
+const FIRST_PREP_TIME := 10.0
+## Banked gold earns this each wave, HUD-visible as a projection (GAME_STRATEGY_V2.md §8.1,
+## BUILD NEXT #3): 5% (was 2.5%) with a cap of +60 gold per wave (was 400) rather than a
+## cap on the bank balance itself. At 5%/wave, 50 gold held for 10 waves earns 31 gold —
+## less than a single build — so interest rewards banking toward a threshold purchase, not
+## indefinite hoarding; see GAME_STRATEGY_V2.md §8.2 for the full walk-through.
+const INTEREST_RATE := 0.05
+const INTEREST_CAP := 60
 const LEAK_FREE_BONUS := 6        ## Bonus if no enemy reached the end this wave.
 
 ## Flying used to also be rolled per enemy on ground waves (15% from wave 3). That is gone:
@@ -137,9 +182,13 @@ const HP_GROWTH := 1.16
 const CREEP_HP_PERCENT := 1.20
 ## Enemy speed is tied to the LENGTH OF THE ROAD, not to anything in the source map, and
 ## nothing else in the game reads that length — so if the road changes, these move with it
-## or the pacing breaks silently. `--dump-board` prints the length: it is 3992px, and
-## 80 + 9n gives a wave-1 crossing of about 45 seconds, which is the pace the game was
-## tuned at over three road lengths now.
+## or the pacing breaks silently. `--dump-board --map:winding` prints the length: it is
+## 3199px (NOT the 3992px this comment quoted for two commits — that number was `spiral`,
+## measured by a bare `--dump-board` before boards rotated per-run; a run today still
+## rotates winding -> spiral -> s every 10 waves, `Game.WAVES_PER_BOARD`). GAME_STRATEGY_V2.md's
+## BUILD NEXT plan pins Standard mode to `winding` alone once that lands (not done yet, see
+## build-next memory) — until then this constant is tuned against `winding`'s 3199px, which
+## is what wave 1-10 actually plays on. 80 + 9n gives a wave-1 crossing of about 44 seconds.
 const BASE_SPEED_FLAT := 80.0
 const BASE_SPEED_LINEAR := 9.0
 ## Global movement reduction: enemies stay readable on every road. The matching 20% HP
@@ -154,16 +203,18 @@ const CREEP_SPEED_PERCENT := 0.82
 ## So the count ramps to the map's number instead of starting there. Wave 1 is 9 enemies
 ## and wave 17 onwards is the full 28, which keeps the map's late-game shape while giving
 ## the opening a pace a phone session can absorb.
-const BASE_COUNT_FLAT := 9
-const BASE_COUNT_LINEAR := 1.2
-const BASE_COUNT_MAX := 28
-## Gold per kill: the map's `max(wave / 3, 1.10^(wave-1))`, plus a flat floor of ours.
 ##
-## The exponential is right for the long game but pays ONE gold a kill until wave 5, which
-## against a 50-gold tower meant the first five waves bought about three towers between
-## them — the board sat empty and nothing the player did seemed to matter. REWARD_FLAT
-## lifts the opening without touching the curve that takes over from wave 8 or so.
-const BOUNTY_GROWTH := 1.10
+## `8 + n` (was `9 + 1.2n`) per GAME_STRATEGY_V2.md §11.2, BUILD NEXT #3 — a flatter ramp
+## that reaches the same 28-enemy cap four waves later (wave 20 vs wave 16), part of the
+## same session-length trim as PREP_TIME.
+const BASE_COUNT_FLAT := 8
+const BASE_COUNT_LINEAR := 1.0
+const BASE_COUNT_MAX := 28
+## Gold per kill: `3 + wave` (GAME_STRATEGY_V2.md §29.1, BUILD NEXT #3), replacing the map's
+## `max(wave / 3, 1.10^(wave-1))` + flat floor. That exponential stays under the /3 term
+## until the high 20s, so through the whole 20-wave Standard span it barely grew (old
+## wave_reward(20) = 9); the new run economy is sized against a linear curve instead
+## (new wave_reward(20) = 23) — see §29.2's whole-run budget, which assumes this shape.
 const REWARD_FLAT := 3
 const SPAWN_INTERVAL_START := 0.9
 const SPAWN_INTERVAL_DECAY := 0.04
@@ -181,28 +232,39 @@ const ENEMY_BASE_RADIUS := 24.0
 ## completely unaffected and only the generated tail is clamped.
 const MAX_SPAWN_COUNT := 160
 
-func wave_hp(wave: int) -> float:
-	return BASE_HP_FLAT * pow(HP_GROWTH, wave - 1) * CREEP_HP_PERCENT
+func wave_hp(wave: int, ruleset: String = DEFAULT_RULESET) -> float:
+	return BASE_HP_FLAT * pow(HP_GROWTH, wave - 1) * CREEP_HP_PERCENT * ruleset_hp_mult(ruleset)
 
 func wave_speed(wave: int) -> float:
 	return (BASE_SPEED_FLAT + wave * BASE_SPEED_LINEAR) * CREEP_SPEED_PERCENT
 
-func wave_count(wave: int) -> int:
-	return mini(BASE_COUNT_MAX, BASE_COUNT_FLAT + int(float(wave) * BASE_COUNT_LINEAR))
+## Ruleset scaling is applied AFTER the flat+linear count and rounded, rather than folded
+## into BASE_COUNT_FLAT/LINEAR directly, so "normal" (mult 1.0) reproduces the exact integer
+## the un-scaled formula always gave — no behaviour change for the ruleset every existing
+## number in this file was already tuned against.
+func wave_count(wave: int, ruleset: String = DEFAULT_RULESET) -> int:
+	var base := BASE_COUNT_FLAT + int(float(wave) * BASE_COUNT_LINEAR)
+	return mini(BASE_COUNT_MAX, int(round(float(base) * ruleset_count_mult(ruleset))))
 
 func wave_reward(wave: int) -> int:
-	return REWARD_FLAT + int(maxf(float(wave) / 3.0, pow(BOUNTY_GROWTH, wave - 1)))
+	return REWARD_FLAT + wave
 
 func spawn_interval(wave: int) -> float:
 	return maxf(SPAWN_INTERVAL_MIN, SPAWN_INTERVAL_START - wave * SPAWN_INTERVAL_DECAY)
 
 # --- Roguelite choices ---------------------------------------------------------
 
-## A choice is offered after every Nth wave is cleared. Kept frequent on purpose: a short
-## session is only a few waves long, and a session that contains no choice at all is just
-## a tower defense wave — the choice IS the roguelite loop, so it has to come around inside
-## the length of a bus ride.
-const CHOICE_EVERY := 3
+## A choice is offered after each of these waves is cleared. Explicit list (was every 3rd
+## wave via CHOICE_EVERY) per GAME_STRATEGY_V2.md §5, BUILD NEXT #3: the flat cadence put a
+## card on wave 20, the Standard run's last wave, with no wave left for it to affect — an
+## error repeated four times in V1's own doc. Every entry here sits just before a difficulty
+## step (first real test, first boss, the finale) so a card reads as preparation, not filler,
+## and 15 is deliberately five waves short of the last wave so the run's closing stretch
+## tests mastery of what the player already picked rather than teaching one more thing.
+## Past wave 15, no more choices are offered until BUILD NEXT #4/#8 define what Endless
+## mode's own cadence should be — Standard's own card count and length are fixed by this
+## list, not by an ongoing formula.
+const CHOICE_WAVES: Array = [3, 7, 11, 15]
 const CHOICE_COUNT := 3   ## Cards offered per choice.
 
 ## Relative odds per rarity before the wave drift below.
@@ -265,15 +327,27 @@ func offline_essence(seconds: float, best_wave: int) -> int:
 func workshop_cost(base_cost: int, cost_growth: float, level: int) -> int:
 	return int(round(float(base_cost) * pow(cost_growth, float(level))))
 
+# --- Branch mechanics (BUILD NEXT #5-#6) ----------------------------------------
+
+## Undertow (Water branch B): minimum seconds between two knockbacks on the SAME enemy.
+## GAME_STRATEGY_V2.md §4.3's own stated reason: without it, several Undertow towers can
+## juggle one enemy in place forever, which is a lock rather than the "buys distance"
+## identity the branch is for.
+const KNOCKBACK_COOLDOWN := 2.0
+
 # --- Boss (was wave_manager.gd:24-31) ------------------------------------------
 
-const BOSS_HP_MULT := 6.0
-const BOSS_SPEED_MULT := 0.6
-const BOSS_REWARD_MULT := 10
+## Values from GAME_STRATEGY_V2.md §10.4, BUILD NEXT #3 (was 6.0/0.6/10/10): a boss should
+## read as a distinct event rather than a scaled-up Runner, and V1 playtesting found the old
+## numbers too close to a normal wave — a slightly slower, harder-hitting boss that pays out
+## visibly more, and costs less than half the run's starting lives if it slips.
+const BOSS_HP_MULT := 8.0
+const BOSS_SPEED_MULT := 0.7
+const BOSS_REWARD_MULT := 12
 ## Not a straight scale-up: a boss has to stay narrower than the road it walks
 ## (2 * Game.ROAD_HALF = 80), so 38 -> 76 wide is the ceiling here.
 const BOSS_RADIUS := 38.0
-const BOSS_LIFE_COST := 10
+const BOSS_LIFE_COST := 5
 const BOSS_TINT := Color(0.45, 0.1, 0.5)
 
 # --- Enemy archetype modifiers (were bare literals in enemy.gd) ----------------

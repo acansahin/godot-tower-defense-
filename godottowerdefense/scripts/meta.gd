@@ -20,6 +20,11 @@ var best_wave: int = 0
 var total_runs: int = 0
 ## Workshop entry id -> level owned.
 var levels: Dictionary = {}
+## Ruleset id ("normal"/"easy") -> best star count (0-3) ever earned on it
+## (GAME_STRATEGY_V2.md §12.4, §13.2, BUILD NEXT #8). Phase 1 has one map, so this is the
+## whole of "stars" for now; a future second/third map would key this by (board, ruleset)
+## instead of ruleset alone.
+var stars: Dictionary = {}
 ## Unix seconds when the game was last seen. Drives the offline reward.
 var last_seen: int = 0
 ## Essence granted by the last offline calculation, for the menu to report. Not persisted —
@@ -41,6 +46,7 @@ func _load() -> void:
 	# JSON gives back a plain Dictionary with float values; levels are re-read as ints at
 	# the point of use (level_of), so no conversion pass is needed here.
 	levels = d.get("levels", {})
+	stars = d.get("stars", {})
 
 func _persist() -> void:
 	Save.put_section(SECTION, {
@@ -49,6 +55,7 @@ func _persist() -> void:
 		"total_runs": total_runs,
 		"last_seen": last_seen,
 		"levels": levels,
+		"stars": stars,
 	})
 	Save.flush()
 
@@ -96,6 +103,20 @@ func finish_run(wave_reached: int) -> int:
 	essence_changed.emit(essence)
 	touch()  # persists everything above
 	return earned
+
+## Best star count ever earned on `ruleset` (0 if never won there).
+func stars_for(ruleset: String) -> int:
+	return int(stars.get(ruleset, 0))
+
+## Records a win's star count (GAME_STRATEGY_V2.md §12.4: ★ finish, ★★ ≤5 lives lost,
+## ★★★ no lives lost) — keeps the best, same rule as best_wave. Only called on an actual
+## victory (main.gd's _on_victory); a loss never reaches this, so there is no 0-star entry
+## to record — "never won it" and "won it for 1 star" both start from an absent key.
+func record_stars(ruleset: String, count: int) -> void:
+	if count <= stars_for(ruleset):
+		return
+	stars[ruleset] = count
+	_persist()
 
 # --- Workshop ------------------------------------------------------------------
 

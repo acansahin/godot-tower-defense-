@@ -8,11 +8,13 @@ extends Control
 ## scale on a phone, so the old 38px-tall slot arrived as ~19 CSS px. Two columns buy
 ## the height back.
 ##
-## The roster is no longer fixed: six elements at the start, plus up to eight duals as
-## element cards complete their recipes, plus Lightning — fifteen slots against a panel
-## sized for four. Rather than clip the tail (a tower you own but cannot see is a bug the
-## player cannot diagnose), the layout SHRINKS to fit, and only once it has to. Up to
-## twelve slots keep the full-size box; past that everything scales down together.
+## The roster is Game.TOWER_ORDER (four elements as of BUILD NEXT #2 — see
+## GAME_STRATEGY_V2.md §2) plus anything a card unlocks outright via Run.buildable_towers().
+## The panel used to also carry up to eight duals and Lightning, fifteen slots against a
+## panel sized for four; that headroom is gone with the dual roster, but the SHRINK-to-fit
+## logic stays general rather than assuming a fixed count — a tower you own but cannot see
+## is a bug the player cannot diagnose. Up to twelve slots keep the full-size box; past that
+## everything scales down together.
 
 signal drag_started(id: String)
 

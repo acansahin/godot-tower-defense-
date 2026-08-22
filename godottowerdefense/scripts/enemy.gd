@@ -51,10 +51,21 @@ var is_flying: bool = false  ## Flyers can only be hit by archer towers.
 var is_boss: bool = false    ## Bosses get a crown + heavier presence.
 var life_cost: int = 1       ## Lives lost if this enemy reaches the end (bosses cost more).
 # Archetype traits (set by WaveManager from the wave's WAVE_TYPES entry).
-var cc_immune: bool = false  ## Ignores slow / stun. Poison still applies (it's damage, not control).
+## Ignores slow / stun / knockback (apply_slow, apply_stun, apply_knockback all check this).
+## Damage-over-time (poison, burn) and damage-taken debuffs (crack) still apply — those are
+## damage, not control. Doubles as Boss 1's rule (GAME_STRATEGY_V2.md §10.4, BUILD NEXT #7:
+## "kontrole tamamen bağışık") — the ward drawn by _draw_ward is already this flag's whole
+## visual, so the boss needed no separate immunity mechanism, just this set to true.
+var cc_immune: bool = false
 var regen_dps: float = 0.0   ## Heals this much per second.
 var split_into: int = 0      ## Children spawned on death (0 = none).
 var armor_element: String = ""  ## Element matchup vs tower damage element ("" = neutral).
+## Boss 2's rule (GAME_STRATEGY_V2.md §10.4, BUILD NEXT #7): `armor_element` advances around
+## Game.TOWER_ORDER's ring every ROTATING_ARMOR_PERIOD seconds while this is set, ticked in
+## _tick_status(). Only ever true on the wave-20 boss (see wave_manager.gd's "boss_rule").
+var rotating_armor: bool = false
+var _armor_rotate_timer: float = 0.0
+const ROTATING_ARMOR_PERIOD := 5.0
 ## Which WAVE_TYPES archetype this is ("normal", "fast", …). Set by WaveManager; the only
 ## thing that reads it is the painted sprite lookup, which is why an unset one is harmless.
 var kind: String = ""
@@ -91,9 +102,24 @@ var _slow_factor: float = 1.0
 var _slow_time: float = 0.0
 var _poison_dps: float = 0.0
 var _poison_time: float = 0.0
+var _poison_spreads: bool = false  ## Plague (Nature Lv5): re-applied to a neighbour on death.
 var _stun_time: float = 0.0
 var _regen_block: float = 0.0  ## Counts down after damage; regen is paused while > 0.
 var _flash: float = 0.0        ## 1 -> 0 white pop after a direct hit.
+
+# Branch status effects (BUILD NEXT #5-#6, GAME_STRATEGY_V2.md §4.3). Separate from the
+# generic slow/poison/stun trio above because burn STACKS (poison and slow both use
+# "strongest/longest wins" — see apply_poison/apply_slow) and armor-crack is a damage-taken
+# multiplier nothing above expresses.
+var _burn_stacks: int = 0
+var _burn_dps_per_stack: float = 0.0
+var _burn_time: float = 0.0
+var _burn_max_stacks: int = 1
+var _burn_doubles_at_max: bool = false  ## Cinderheart (Fire Lv5).
+var _burn_spreads: bool = false         ## Firestorm (Fire Lv5, simplified — see Tower.
+var _crack_time: float = 0.0
+var _crack_bonus: float = 0.0           ## Fraction of EXTRA damage taken from all sources.
+var _knockback_cd: float = 0.0          ## Undertow: 2s per-enemy cooldown, decremented in _tick_status.
 
 # --- Layer repaint helpers -----------------------------------------------------
 # Each guards against being called before _ready() has built the layers (make_flying is
@@ -139,10 +165,87 @@ func apply_stun(time: float) -> void:
 ## Deliberately NOT gated on cc_immune: that flag means crowd-control immunity, and
 ## poison is damage rather than control. This is what keeps Nature / Ice / Lava useful
 ## against Immune waves instead of leaving most of the roster with no effect at all.
-func apply_poison(dps: float, time: float) -> void:
+func apply_poison(dps: float, time: float, spreads_on_death: bool = false) -> void:
 	_poison_dps = maxf(_poison_dps, dps)
 	_poison_time = maxf(_poison_time, time)
+	_poison_spreads = _poison_spreads or spreads_on_death
 	_repaint_overlay()
+
+## Fire's burn (Blaze/Wildfire branches): unlike poison, stacks — up to `max_stacks` — rather
+## than just taking the strongest single application. Each stack adds its own `dps_per_stack`
+## to the total tick; refreshing an existing stack (rather than adding a new one once at cap)
+## still extends the timer, so a Blaze that keeps landing hits does not let the burn lapse
+## just because it is already at 3.
+##
+## Deliberately NOT gated on cc_immune, matching apply_poison above for the same reason
+## (§3.1: burn is damage, not control) — this was wrongly gated when first written (BUILD
+## NEXT #5-6) and is fixed here while touching neighbouring code (BUILD NEXT #9). It also
+## matters for Boss 1 (control_immune, BUILD NEXT #7): its rule is "no slow/freeze/knockback/
+## stagger", never "no damage-over-time" — the old gate silently made Blaze and Wildfire
+## useless against it.
+func apply_burn(dps_per_stack: float, time: float, max_stacks: int, doubles_at_max: bool,
+		spreads_on_death: bool) -> void:
+	_burn_max_stacks = maxi(_burn_max_stacks, max_stacks)
+	if _burn_stacks < _burn_max_stacks:
+		_burn_stacks += 1
+	_burn_dps_per_stack = maxf(_burn_dps_per_stack, dps_per_stack)
+	_burn_time = maxf(_burn_time, time)
+	_burn_doubles_at_max = _burn_doubles_at_max or doubles_at_max
+	_burn_spreads = _burn_spreads or spreads_on_death
+	_repaint_overlay()
+
+## Siege's armor crack: `bonus` extra damage taken from EVERY source (not just Siege's own
+## hits) for `time` seconds. Strongest/longest wins, same rule as slow and stun.
+func apply_crack(bonus: float, time: float) -> void:
+	_crack_bonus = maxf(_crack_bonus, bonus)
+	_crack_time = maxf(_crack_time, time)
+	_repaint_overlay()
+
+# --- Cross-element card queries (GAME_STRATEGY_V2.md §6.2, BUILD NEXT #9) ------------------
+# STEAM and EROSION read the target's CURRENT status at hit time — not something a static
+# per-tower stat can express — so these are the two public reads projectile.gd needs instead
+# of reaching into the underscore-prefixed fields directly.
+
+## True while this enemy is chilled (Water's slow, any branch). STEAM/EROSION key off this.
+func is_chilled() -> bool:
+	return _slow_time > 0.0
+
+## True while this enemy is actively burning (Fire's DoT, either branch).
+func is_burning() -> bool:
+	return _burn_time > 0.0
+
+## MAGMA (Fire+Earth overlap): Earth's splash, landing on an already-burning enemy, refreshes
+## the burn's remaining time WITHOUT touching stacks or per-stack damage — a plain
+## apply_burn() call here would either add an unwanted stack or (passed 0 dps) silently keep
+## the OLD dps floor via maxf, so this is its own narrow method rather than a reused one.
+func refresh_burn(time: float) -> void:
+	if _burn_time > 0.0:
+		_burn_time = maxf(_burn_time, time)
+		_repaint_overlay()
+
+## Undertow: shoves this enemy `distance` px back along the road it just walked. Bosses are
+## immune (never called for one — see Projectile._apply) and a per-enemy cooldown stops a
+## single enemy from being juggled in place forever by several Undertow towers.
+func apply_knockback(distance: float) -> bool:
+	if cc_immune or _knockback_cd > 0.0 or is_boss:
+		return false
+	var remaining := distance
+	# Walk backward along the same waypoint list _move() walks forward along, symmetric to
+	# how it advances _target_index — leaving the enemy still exactly ON the road rather than
+	# cutting a straight line through whatever the road bends around.
+	while remaining > 0.0 and _target_index > 1:
+		var behind: Vector2 = _path[_target_index - 1]
+		var to_behind := behind - global_position
+		var seg := to_behind.length()
+		if seg <= remaining:
+			global_position = behind
+			_target_index -= 1
+			remaining -= seg
+		else:
+			global_position += to_behind.normalized() * remaining
+			remaining = 0.0
+	_knockback_cd = Balance.KNOCKBACK_COOLDOWN
+	return true
 
 ## Sets how far along the path this enemy starts (used for split children).
 func set_progress(index: int) -> void:
@@ -152,6 +255,22 @@ func set_progress(index: int) -> void:
 ## Drives the First / Last tower targeting modes.
 func progress() -> float:
 	return Game.path_progress(_target_index, global_position)
+
+## The `count` closest other living enemies within `radius`, nearest first. Used by Plague's
+## death-time poison transfer (count 1, or 3 with EMBERSEED — GAME_STRATEGY_V2.md §6.2,
+## BUILD NEXT #9); a plain sort since this fires once per death, not per frame, and `count`
+## is always small.
+func _nearest_others(radius: float, count: int) -> Array[Enemy]:
+	var candidates: Array[Enemy] = []
+	for e in EnemyIndex.query(global_position, radius):
+		var enemy := e as Enemy
+		if enemy == null or enemy == self or not enemy.is_alive():
+			continue
+		candidates.append(enemy)
+	candidates.sort_custom(func(a: Enemy, b: Enemy) -> bool:
+		return global_position.distance_squared_to(a.global_position) \
+				< global_position.distance_squared_to(b.global_position))
+	return candidates.slice(0, count)
 
 ## False once this enemy has died or escaped. queue_free() only takes effect at the
 ## end of the frame, so towers holding a target reference must check this rather than
@@ -346,7 +465,37 @@ func _tick_status(delta: float) -> void:
 		take_damage(_poison_dps * delta)
 		if _poison_time <= 0.0:
 			_poison_dps = 0.0
+			_poison_spreads = false
 			_repaint_overlay()
+	if _burn_time > 0.0:
+		_burn_time -= delta
+		# Cinderheart (Fire Lv5): at the stack cap, the whole pile ticks twice as fast —
+		# implemented as double damage per tick rather than double tick rate, which is the
+		# same total DPS without needing a second timer.
+		var tick_mult := 2.0 if (_burn_doubles_at_max and _burn_stacks >= _burn_max_stacks) else 1.0
+		take_damage(_burn_dps_per_stack * float(_burn_stacks) * tick_mult * delta)
+		if _burn_time <= 0.0:
+			_burn_stacks = 0
+			_burn_dps_per_stack = 0.0
+			_burn_doubles_at_max = false
+			_burn_spreads = false
+			_repaint_overlay()
+	if _crack_time > 0.0:
+		_crack_time -= delta
+		if _crack_time <= 0.0:
+			_crack_bonus = 0.0
+			_repaint_overlay()
+	if _knockback_cd > 0.0:
+		_knockback_cd -= delta
+	if rotating_armor:
+		_armor_rotate_timer += delta
+		if _armor_rotate_timer >= ROTATING_ARMOR_PERIOD:
+			_armor_rotate_timer -= ROTATING_ARMOR_PERIOD
+			var ring: Array = Game.TOWER_ORDER  # water -> fire -> nature -> earth -> water
+			var i := ring.find(armor_element)
+			armor_element = String(ring[(maxi(i, 0) + 1) % ring.size()])
+			queue_redraw()      # the ground ring (_draw_element_ring) lives on THIS node
+			_repaint_overlay()  # the rule icon shows the current colour too
 
 func _move(delta: float) -> void:
 	if _stun_time > 0.0:
@@ -378,14 +527,42 @@ func _move(delta: float) -> void:
 func take_damage(amount: float) -> void:
 	if _dead:
 		return
-	_regen_block = Balance.REGEN_DELAY  # any hit — including a poison tick — suspends regen
-	health -= amount
+	_regen_block = Balance.REGEN_DELAY  # any hit — including a poison/burn tick — suspends regen
+	# Siege's crack: applies to EVERY source of damage while active, not just Siege's own
+	# hits — that is the whole point of "cracks the armor" over a private damage bonus.
+	var dealt := amount * (1.0 + _crack_bonus) if _crack_time > 0.0 else amount
+	health -= dealt
 	_repaint_overlay()  # health bar + regen marker live on the overlay
 	if health <= 0.0:
 		_die()
 
+## Search radius for Plague's nearest-survivor poison transfer — generous enough to usually
+## find someone on a real board without scanning the whole enemies group (see EnemyIndex).
+const PLAGUE_SEARCH_RADIUS := 400.0
+## Firestorm's death-AoE radius (simplified from a persistent ground patch — see
+## Game.TOWER_BRANCHES's fire.b.lv5 comment). Matches Wildfire's own Lv3 spread radius since
+## Firestorm is Wildfire's ultimate and reads as "the same fire, once more, on the way out".
+const FIRESTORM_RADIUS := 70.0
+
 func _die() -> void:
 	_dead = true
+	# Plague (Nature Lv5): a poisoned enemy passes its poison to the nearest survivor.
+	# Checked BEFORE `_dead` matters to anyone else — is_alive() already reads false for
+	# this enemy by the time any of this runs, so `_die()` itself is exempt from its own gate.
+	if _poison_spreads and _poison_time > 0.0:
+		# EMBERSEED (Fire+Nature overlap, GAME_STRATEGY_V2.md §6.2, BUILD NEXT #9): dying
+		# poisoned AND burning spreads the poison to three neighbours instead of one.
+		var count := 3 if (is_burning() and Run.has_card("embers_eed")) else 1
+		for victim in _nearest_others(PLAGUE_SEARCH_RADIUS, count):
+			victim.apply_poison(_poison_dps, _poison_time, true)
+	# Firestorm (Fire Lv5, simplified — see Game.TOWER_BRANCHES): a burning death also lights
+	# every enemy within FIRESTORM_RADIUS, instead of leaving a timed ground patch behind.
+	if _burn_spreads and _burn_time > 0.0:
+		for e in EnemyIndex.query(global_position, FIRESTORM_RADIUS):
+			var enemy := e as Enemy
+			if enemy != null and enemy != self and enemy.is_alive():
+				enemy.apply_burn(_burn_dps_per_stack * 0.5, _burn_time, _burn_max_stacks,
+						_burn_doubles_at_max, true)
 	Audio.play("boss_death" if is_boss else "enemy_death", 0.1)
 	# Spawn the visuals before the queue_free() below — they read the tree through `self`.
 	DeathBurst.spawn(self, global_position, color, radius)
@@ -395,7 +572,9 @@ func _die() -> void:
 		Game.request_shake(Balance.SHAKE_BOSS_DEATH)
 	# The per-kill bonus is added HERE rather than inside Game.add_gold, which also pays the
 	# sell refund, the wave interest and the early-call bonus — none of which is a kill.
-	Game.add_gold(reward + Run.bonus_gold_per_kill())
+	# `reward` is scaled by kill_gold_mult() (Frontload's -25%) before Scavenger's flat bonus
+	# is added, not after — Frontload taxes the bounty itself, not bonuses layered on it.
+	Game.add_gold(int(round(float(reward) * Run.kill_gold_mult())) + Run.bonus_gold_per_kill())
 	# Splitters break into smaller children that continue from here. Emit BEFORE
 	# `removed` so WaveManager adds them to the alive count first (no early clear).
 	if split_into > 0:
@@ -409,6 +588,10 @@ func _escape() -> void:
 	_dead = true
 	Audio.play("leak")
 	Game.request_shake(Balance.SHAKE_LEAK)  # a leak should be felt, not just seen in the HUD
+	# Overwritten by every leak, so if THIS one is the fatal one, it is what Game.lose_life()
+	# below leaves behind for the end screen — see Game.record_leak.
+	Game.record_leak(String(Game.WAVE_TYPES.get(kind, {}).get("name", kind.capitalize())),
+			armor_element)
 	Game.lose_life(life_cost)
 	removed.emit()
 	queue_free()
@@ -636,6 +819,7 @@ func _draw_overlay(ci: CanvasItem) -> void:
 					Color(0.45, 1.0, 0.5, 0.30 + 0.45 * pulse), 3.0, true)
 	if is_boss:
 		_draw_crown(ci)
+		_draw_boss_rule_icon(ci)
 
 	# Health bar above the head (scales with body size so bosses read clearly).
 	var bar_w := radius * 2.2
@@ -665,6 +849,27 @@ func _draw_crown(ci: CanvasItem) -> void:
 		]), gold)
 		ci.draw_circle(Vector2(cx, y - 16.0), 3.3, Color(0.9, 0.2, 0.2))  # gem tip
 	ci.draw_rect(Rect2(dx - wd, y, wd * 2.0, 7.0), Color(0, 0, 0, 0.3), false, 1.5)
+
+## The rule icon GAME_STRATEGY_V2.md §10.4 asks for, sitting just above the health bar (which
+## _draw_overlay places 20px above the head) — a boss should teach its one rule without a
+## tooltip. cc_immune already carries a full-body treatment (_draw_ward), which is plenty on
+## its own; this is the small mark that also sits with the health bar, and the ONLY visible
+## cue rotating_armor gets beyond the ground ring changing colour every 5s on its own.
+func _draw_boss_rule_icon(ci: CanvasItem) -> void:
+	if not (cc_immune or rotating_armor):
+		return
+	var pos := Vector2(_visual_dx(), _head_y() - 34.0)
+	if cc_immune:
+		ci.draw_circle(pos, 8.0, Color(1.0, 0.97, 0.86, 0.22))
+		ci.draw_arc(pos, 8.0, 0.0, TAU, 16, Color(1.0, 0.97, 0.86, 0.9), 2.0, true)
+	elif rotating_armor:
+		var ec: Color = Game.ELEMENT_COLORS.get(armor_element, Color.WHITE)
+		ci.draw_circle(pos, 6.0, ec)
+		# Four ticks orbiting the swatch — "this keeps moving", the same read the ground
+		# ring's own colour change gives, just legible without looking down at the feet.
+		for i in 4:
+			var a := _anim_phase * 2.0 + i * TAU / 4.0
+			ci.draw_circle(pos + Vector2(cos(a), sin(a)) * 11.0, 2.0, ec)
 
 ## The cc-immune marker: a pale daylight sphere with the creep standing INSIDE it.
 ##
