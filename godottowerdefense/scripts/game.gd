@@ -6,9 +6,13 @@ extends Node
 
 signal gold_changed(amount: int)
 signal lives_changed(amount: int)
-## The run ended — lives hit zero. There is no `victory` counterpart: waves are endless, so
-## a run is always ended by the player running out of lives, and `wave_reached` is the score.
+## The run ended in a loss — lives hit zero. See `victory` below for the other way a
+## Standard run ends (GAME_STRATEGY_V2.md's BUILD NEXT #4): a run is no longer necessarily
+## endless, so `wave_reached` is not always the whole story any more.
 signal game_over
+## The run ended in a win — the player cleared Game.STANDARD_WAVES. Fired by
+## Game.declare_victory(), never emitted alongside `game_over` for the same run.
+signal victory
 ## Camera kick in pixels. Broadcast here so an Enemy can ask for one without knowing
 ## anything about the level's camera; Main owns the actual Camera2D.
 signal shake_requested(amount: float)
@@ -352,29 +356,50 @@ func can_build_at(pos: Vector2, others: Array = []) -> bool:
 #   slow_splash (Lv2+ radius the slow ALSO spreads to — slow only, no damage),
 #   poison_dps/poison_time (damage over time),
 #   stun_chance/stun_time (chance to freeze the enemy in place). Missing = "off".
+## Lv1-2 base stats for the four elements are no longer ported WC3 numbers — they are
+## GAME_STRATEGY_V2.md §4.3's own design values (BUILD NEXT #5-#6), replacing the WC3-tier
+## damage ladder step 3 deliberately left untouched. `range` stays in the WC3-unit field
+## (read by Balance.WC3_RANGE_SCALE, tower.gd `_recompute`) purely so every other range read
+## site keeps working unmodified — the WC3-unit framing is now fiction for these four, so
+## each is commented with the real px target it was reverse-derived from
+## (target_px / Balance.WC3_RANGE_SCALE = 0.35). `damage_tiers` follows the shared
+## 1.0/1.8/3.2/5.6/10.0 growth shape (§4.2) from each element's own new Lv1 base, rounded by
+## hand the same way the WC3 Pure-tier numbers were — see the comment below this table.
+##
+## From Lv3, a tower's stats also depend on Game.TOWER_BRANCHES[element][branch] — see
+## Tower._recompute() and BUILD NEXT #5's branch-choice popup. Lv1-2 (no branch chosen yet)
+## always uses the bare entry below.
 const TOWER_DEFS := {
 	"fire": {
 		"name": "Fire", "cost": 50, "color": Color(0.95, 0.45, 0.18), "element": "fire",
-		"damage_tiers": [23, 115, 575, 2875, 28750],
-		"range": 500.0, "interval": 0.33,
+		"damage_tiers": [10, 18, 32, 56, 100],
+		"range": 485.7, "interval": 0.40,      # range: 170px = 485.7 * 0.35
+		# Burn: 4 dps, 2s, 1 stack (Blaze/Wildfire change this from Lv3 — see TOWER_BRANCHES).
+		"burn_dps": 4.0, "burn_time": 2.0, "burn_max_stacks": 1,
 	},
 	"water": {
 		"name": "Water", "cost": 50, "color": Color(0.30, 0.60, 0.95), "element": "water",
-		"damage_tiers": [10, 50, 250, 1250, 12491],
-		"range": 750.0, "interval": 0.17,
-		"slow_factor": 0.55, "slow_time": 1.4,
+		"damage_tiers": [6, 11, 19, 34, 60],
+		"range": 600.0, "interval": 0.25,      # range: 210px = 600.0 * 0.35
+		"slow_factor": 0.75, "slow_time": 1.5, # Chill: -25% speed, 1.5s, on every hit
 	},
 	"nature": {
 		"name": "Nature", "cost": 50, "color": Color(0.35, 0.80, 0.35), "element": "nature",
-		"damage_tiers": [66, 330, 1650, 8250, 82490],
-		"range": 750.0, "interval": 0.99,
-		"poison_dps": 10.0, "poison_time": 3.0,
+		"damage_tiers": [12, 22, 38, 67, 120],
+		"range": 628.6, "interval": 0.90,      # range: 220px = 628.6 * 0.35
+		"poison_dps": 12.0, "poison_time": 3.0,
+		# Base THORN identity, both branches inherit it (GAME_STRATEGY_V2.md §3.1): poison
+		# ignores the element matchup entirely (unlike every other payload in the game,
+		# direct hits included) and, like all damage, blocks this tick's regen — see
+		# Enemy.take_damage's regen-block, which already fires for poison ticks with no
+		# extra code needed.
+		"poison_ignores_matchup": true,
 	},
 	"earth": {
 		"name": "Earth", "cost": 50, "color": Color(0.72, 0.55, 0.34), "element": "earth",
-		"damage_tiers": [55, 275, 1375, 6875, 68741],
-		"range": 750.0, "interval": 1.0, "can_hit_flying": false,
-		"splash_radius": 108.0, "splash_factor": 0.5,
+		"damage_tiers": [34, 61, 109, 190, 340],
+		"range": 571.4, "interval": 1.40, "can_hit_flying": false,  # range: 200px = 571.4 * 0.35
+		"splash_radius": 90.0, "splash_factor": 0.5,
 	},
 	## Reaches four times as far as Fire for the same DPS. On our board that is over
 	## half the width — the map's boards are much larger, so this is the number whose
@@ -391,170 +416,120 @@ const TOWER_DEFS := {
 		"damage_tiers": [165, 825, 4125, 20625, 206241],
 		"range": 2000.0, "interval": 2.75,
 	},
-	# --- Dual towers ---------------------------------------------------------------
-	# Not in TOWER_ORDER: a dual becomes buildable when the player owns both of its
-	# elements deeply enough (see DUAL_RECIPES and Run.buildable_towers). Costs and
-	# damage are the map's tier-1 dual numbers.
-	#
-	# Range and interval are OURS, not the map's. Most duals inherit those two fields
-	# from their Warcraft III base unit instead of overriding them, so the object data
-	# simply does not contain them — resolving them would mean reading war3.mpq's own
-	# unit table. Damage, cost and recipe are ported; reach and cadence are set to sit
-	# between the two parent elements, which is what they read as in play.
-	"ice": {  # Water + Light
-		"name": "Ice", "cost": 275, "color": Color(0.60, 0.90, 0.98),
-		"damage": 150.0, "range": 900.0, "interval": 0.75,
-		"slow_factor": 0.4, "slow_time": 2.0,
-		"splash_radius": 96.0, "splash_factor": 0.5,
-		"slow_splash": 135.0,  # from Lv2 the chill spreads to enemies within this radius
-	},
-	"steam": {  # Fire + Water
-		"name": "Steam", "cost": 275, "color": Color(0.70, 0.82, 0.95),
-		"damage": 150.0, "range": 625.0, "interval": 0.4,
-		"splash_radius": 120.0, "splash_factor": 0.6,
-		"poison_dps": 40.0, "poison_time": 2.5,  # "gradually reduces health"
-	},
-	"lava": {  # Fire + Earth
-		"name": "Lava", "cost": 275, "color": Color(0.92, 0.35, 0.20),
-		"damage": 751.0, "range": 625.0, "interval": 1.4, "can_hit_flying": false,
-		"splash_radius": 132.0, "splash_factor": 0.6,
-		"poison_dps": 90.0, "poison_time": 2.5,  # incinerate
-	},
-	"poison": {  # Water + Darkness
-		"name": "Poison", "cost": 275, "color": Color(0.55, 0.75, 0.30),
-		"damage": 500.0, "range": 1375.0, "interval": 1.2,
-		"slow_factor": 0.6, "slow_time": 1.6,
-		"poison_dps": 160.0, "poison_time": 3.0,
-	},
-	"clay": {  # Water + Earth — the map gives this one an explicit 1.05s cooldown
-		"name": "Clay", "cost": 275, "color": Color(0.80, 0.62, 0.45),
-		"damage": 600.0, "range": 750.0, "interval": 1.05,
-		"slow_factor": 0.7, "slow_time": 1.2,
-	},
-	"tech": {  # Earth + Darkness — explicit 0.50s cooldown in the map; "rapidfire"
-		"name": "Tech", "cost": 275, "color": Color(0.62, 0.66, 0.72),
-		"damage": 350.0, "range": 1375.0, "interval": 0.5,
-	},
-	"roots": {  # Earth + Nature — explicit 8.10s cooldown; entangles, ground only
-		"name": "Roots", "cost": 275, "color": Color(0.45, 0.60, 0.28),
-		"damage": 100.0, "range": 750.0, "interval": 2.2, "can_hit_flying": false,
-		"slow_factor": 0.25, "slow_time": 2.6,
-	},
-	"electricity": {  # Light + Fire — the map's only dual with an explicit range (1200)
-		"name": "Electricity", "cost": 275, "color": Color(1.0, 0.9, 0.25),
-		"damage": 570.0, "range": 1200.0, "interval": 0.8,
-		"stun_chance": 0.2, "stun_time": 0.8,
-	},
-
-	# --- Support and economy duals -------------------------------------------------
-	# These are the seven the generic damage payload could not express. Six of them are
-	# still pure data — an aura is read by its NEIGHBOURS (see Tower._recompute), an
-	# execute and an on-kill payout are read by the projectile — so only Magic, whose
-	# shots differ from one another, needed a TowerBehavior.
-	#
-	# In the map Moon and Sun buff "nearby Tidal Towers" specifically. Tidal is a triple
-	# and we have no triples, so the aura is generalised to every tower in radius; a
-	# single-target buff with no legal target would be a dead tower.
-	"moon": {  # Light + Darkness
-		"name": "Moon", "cost": 275, "color": Color(0.78, 0.80, 0.95),
-		"damage": 500.0, "range": 1375.0, "interval": 1.3,
-		"aura_stat": "damage", "aura_radius": 700.0, "aura_mult": 1.12,
-	},
-	"sun": {  # Fire + Nature
-		"name": "Sun", "cost": 275, "color": Color(1.0, 0.78, 0.30),
-		"damage": 600.0, "range": 625.0, "interval": 1.3,
-		"aura_stat": "damage", "aura_radius": 700.0, "aura_mult": 1.12,
-	},
-	"well": {  # Water + Nature — "Spring Forward", speed for the towers around it
-		"name": "Well", "cost": 275, "color": Color(0.45, 0.85, 0.80),
-		"damage": 350.0, "range": 750.0, "interval": 1.0,
-		"aura_stat": "attack_speed", "aura_radius": 700.0, "aura_mult": 1.10,
-	},
-	"money": {  # Light + Earth — "extra bounty for successful kills"
-		"name": "Money", "cost": 275, "color": Color(0.95, 0.82, 0.25),
-		"damage": 550.0, "range": 1000.0, "interval": 1.2,
-		"gold_on_kill": 3,
-	},
-	"life": {  # Light + Nature — "takes the life from kills and adds it to the player"
-		"name": "Life", "cost": 275, "color": Color(0.60, 0.95, 0.62),
-		"damage": 339.0, "range": 1000.0, "interval": 1.2,
-		# A flat life per kill would pay ~28 lives a wave. A small chance makes it a slow
-		# bleed back rather than an infinite pool, which is what the map's wording implies.
-		"life_on_kill_chance": 0.02,
-	},
-	"death": {  # Nature + Darkness — the map gives it an explicit 1.00s cooldown
-		"name": "Death", "cost": 275, "color": Color(0.35, 0.30, 0.42),
-		"damage": 353.0, "range": 1000.0, "interval": 1.0,
-		# The map spares mechanical and undead creeps. We do not model those classes, so
-		# bosses are the exemption instead — same intent (the set-piece enemies cannot be
-		# deleted by a coin flip), and it keeps a boss wave from ending on one lucky roll.
-		"execute_chance": 0.04,
-	},
-	"magic": {  # Fire + Darkness — "can store its mana to deal extra damage"
-		"name": "Magic", "cost": 275, "color": Color(0.72, 0.45, 0.92),
-		"damage": 500.0, "range": 1000.0, "interval": 1.1,
-		"behavior": "charge", "charge_shots": 4, "charge_mult": 3.5,
-	},
-
-	# --- Locked: Lightning -----------------------------------------------------
-	# NOT BUILDABLE and not a map tower: the map has no neutral stunner, it has Lightning
-	# as tier 2 of Light + Fire (our `electricity`). This entry is ours, kept because the
-	# roguelite pool can still grant it. Range is in WC3 units like everything else.
-	"lightning": {  # chance to stun; the map has Lightning as tier 2 of Light + Fire
-		"name": "Lightning", "cost": 70, "color": Color(1.0, 0.9, 0.25),
-		"damage": 14.0, "range": 794.0, "interval": 0.7,
-		"stun_chance": 0.25, "stun_time": 1.2,
-	},
 }
-## The buildable roster, in palette order. The six elements ARE the game's identity, so
-## the palette is exactly them — no duals, no Lightning. Anything not listed here cannot be
-## built, previewed or paid for, even though TOWER_DEFS still describes it.
+## The buildable roster, in palette order. Cut from six elements to four in the V2 redesign
+## (see GAME_STRATEGY_V2.md §2, BUILD NEXT #2): Light and Darkness are retired as a *role*,
+## not deleted — their TOWER_DEFS entries and painted art stay in the repo, unreferenced,
+## for the Phase 4 return GAME_STRATEGY_V2.md §28 describes. The fifteen dual towers and
+## Lightning went the same way as the dual mechanic they depended on (see ELEMENT_BEATS and
+## the removed DUAL_RECIPES/DUAL_ELEMENT_LEVEL below) — cross-element play becomes a card
+## effect (Run/UPGRADE_POOL), not a second tier of buildable towers.
 ## Ordered around the damage circle (see ELEMENT_BEATS) rather than alphabetically, so the
 ## palette itself teaches which element answers which.
-const TOWER_ORDER: Array = ["light", "darkness", "water", "fire", "nature", "earth"]
+const TOWER_ORDER: Array = ["water", "fire", "nature", "earth"]
 
-# --- Dual recipes ---------------------------------------------------------------
-# All fifteen pairs of the six elements, with the map's own names. The towers state
-# their recipe in their own tooltips ("( Water + Light )"), so this is read data, not
-# a guess — `python tools/extract_w3x.py <map> recipes` prints it.
+# --- Tower branches (BUILD NEXT #5-#6) ------------------------------------------
+# Every element splits into two branches at Lv3 (GAME_STRATEGY_V2.md §4, §4.3): a two-card
+# popup (branch_choice.gd, shown from main.gd's _upgrade_tower once a tower reaches level 3)
+# sets Tower.branch to "a" or "b" for the rest of the run. From then on Tower._recompute()
+# layers this entry's `lv3` fields over the base TOWER_DEFS entry, then `lv4`/`lv5` as the
+# tower keeps levelling — a plain Dictionary.merge(overwrite=true) each step, so any field
+# the branch does not mention keeps its base/lower-tier value. `lv1_2` fields (currently
+# unused) are reserved for a branch that needs to differ before Lv3, which none do.
 #
-# The map gates towers by ELEMENT OWNERSHIP, not by combining two placed towers: each
-# element is a research track you level up (war3map.j's `Element_Upgrade[0..5]`, raised
-# by killing bosses), and owning the elements is what makes a recipe buildable. Run
-# mirrors that — see Run.elements and Run.buildable_towers().
+# Levelling stays "seviye sadece hasarı değiştirir; branch her şeyi değiştirebilir" (§2.3):
+# the 1.0/1.8/3.2/5.6/10.0 damage growth from TOWER_DEFS.damage_tiers is untouched by branch
+# choice — a branch instead multiplies the RESULT via `damage_mult`, so Siege's "+60%
+# damage" stacks on top of the same ladder every tower climbs, rather than replacing it.
 #
-# Only the ids that also have a TOWER_DEFS entry can actually be built. The other seven
-# are listed because the recipe is real and the table should be complete; each needs a
-# TowerBehavior that does not exist yet:
-#   moon / sun   (Light+Darkness, Fire+Nature) — buff an adjacent tower
-#   well         (Water+Nature)                — attack-speed aura
-#   money        (Light+Earth)                 — bounty on kill
-#   life         (Light+Nature)                — kills restore lives
-#   death        (Nature+Darkness)             — chance to instantly kill
-#   magic        (Fire+Darkness)               — banks mana into burst damage
-const DUAL_RECIPES := {
-	"moon": ["light", "darkness"],
-	"electricity": ["light", "fire"],
-	"ice": ["light", "water"],
-	"money": ["light", "earth"],
-	"life": ["light", "nature"],
-	"steam": ["fire", "water"],
-	"lava": ["fire", "earth"],
-	"sun": ["fire", "nature"],
-	"magic": ["fire", "darkness"],
-	"clay": ["water", "earth"],
-	"well": ["water", "nature"],
-	"poison": ["water", "darkness"],
-	"roots": ["earth", "nature"],
-	"tech": ["earth", "darkness"],
-	"death": ["nature", "darkness"],
+# No stat here is WC3-derived; every number is GAME_STRATEGY_V2.md §4.3's own design value,
+# already in the units _recompute() reads them in (seconds, px, 0..1 chance/factor) — none
+# of them go through Balance.WC3_RANGE_SCALE. The mechanic each branch is actually FOR
+# (burn stacking, knockback, armor-crack, the Grove aura) is new engine-side machinery in
+# enemy.gd / tower.gd / projectile.gd, listed in each branch's comment; the stats here are
+# only the part a plain override can express.
+const TOWER_BRANCHES := {
+	"fire": {
+		"a": {
+			"id": "blaze", "name": "Blaze", "desc": "Faster. Burn stacks up to 3x",
+			# Burn now stacks instead of just refreshing (Enemy.apply_burn/_burn_stacks).
+			"lv3": {"interval": 0.28, "burn_max_stacks": 3},
+			# Cinderheart: at 3 stacks, burn ticks twice as fast (Enemy._burn_doubles_at_max).
+			"lv5": {"burn_doubles_at_max": true},
+		},
+		"b": {
+			"id": "wildfire", "name": "Wildfire", "desc": "Burn spreads to nearby enemies",
+			# Burn also catches enemies within 70px at half power on every hit
+			# (Projectile._apply_burn_splash).
+			"lv3": {"burn_spread_radius": 70.0},
+			# Firestorm: simplified from §4.3's persistent 4s ground patch — GDScript's
+			# scene-tree lifecycle makes a standalone hazard object real scope on its own, and
+			# an instant transfer reads the same in practice (a burning kill sets nearby
+			# enemies alight) without a new autonomous node type. Documented, not hidden: see
+			# BUILD NEXT #6 notes in the design memory.
+			"lv5": {"burn_spreads_on_death": true},
+		},
+	},
+	"water": {
+		"a": {
+			"id": "glacier", "name": "Glacier", "desc": "Deeper chill. Pulses every 4th shot",
+			"lv3": {"slow_factor": 0.55, "chill_pulse_every": 4},
+			# Absolute Zero reuses the existing generic stun_chance/stun_time payload — a
+			# freeze IS a stun as far as Enemy/Projectile are concerned, just named for what
+			# it looks like on Water.
+			"lv5": {"stun_chance": 0.15, "stun_time": 1.0},
+		},
+		"b": {
+			"id": "undertow", "name": "Undertow", "desc": "Chance to push enemies back",
+			# 2s per-enemy cooldown and boss immunity are enforced engine-side
+			# (Enemy.apply_knockback / Projectile._apply), not data here.
+			"lv3": {"knockback_chance": 0.25, "knockback_distance": 60.0},
+			"lv5": {"knockback_distance": 120.0, "knockback_chill_on_land": true},
+		},
+	},
+	"earth": {
+		"a": {
+			"id": "quake", "name": "Quake", "desc": "Bigger splash. Every hit staggers",
+			# Stagger reuses the generic stun payload at a short, always-on duration.
+			"lv3": {"splash_radius": 140.0, "stun_chance": 1.0, "stun_time": 0.4},
+			# Fissure reuses the EXISTING slow_splash mechanism (already "the slow also
+			# spreads to this radius") — no new engine code, just filling in the fields Ice
+			# used to.
+			"lv5": {"slow_splash": 140.0, "slow_factor": 0.7, "slow_time": 2.0},
+		},
+		"b": {
+			"id": "siege", "name": "Siege", "desc": "Smaller splash. Cracks armor",
+			"lv3": {"splash_radius": 50.0, "damage_mult": 1.6},
+			# The crack (+25% damage taken from ALL sources, 3s) is written up in §4.3 as
+			# switching on at Lv4, not Lv3 — the only branch whose mechanic has its own
+			# internal level gate rather than turning on wholesale at Lv3.
+			"lv4": {"crack_bonus": 0.25, "crack_time": 3.0},
+			# Sunder: the crack also spreads to enemies within 80px when applied.
+			"lv5": {"crack_spread_radius": 80.0},
+		},
+	},
+	"nature": {
+		"a": {
+			"id": "blight", "name": "Blight", "desc": "Stronger poison that never expires",
+			# "Kendini yeniler" needs no new code: apply_poison() already extends the timer
+			# (maxf) on every hit, so a target the tower keeps hitting never sees it lapse.
+			"lv3": {"poison_dps_mult": 1.8, "poison_time": 8.0},
+			# Plague: a poisoned enemy that dies passes its poison to the nearest survivor.
+			"lv5": {"poison_spreads_on_death": true},
+		},
+		"b": {
+			"id": "grove", "name": "Grove", "desc": "Doesn't attack. Empowers nearby towers",
+			# no_attack stops Tower._process from ever asking for a target — see the
+			# aura_stat pattern this reuses (Tower._recompute's neighbour loop), extended
+			# with two fields (aura_gold_add, aura_life_chance_add) that pattern never
+			# needed before because no earlier aura granted more than one stat at once.
+			"lv3": {"no_attack": true, "aura_stat": "attack_speed", "aura_radius": 160.0,
+					"aura_mult": 1.15},
+			"lv4": {"aura_gold_add": 1},
+			"lv5": {"aura_damage_mult": 1.12, "aura_life_chance_add": 0.03},
+		},
+	},
 }
-## Element level at which an element counts toward a recipe. Every element starts the run
-## at 1 so all six towers are buildable from the first wave; a dual therefore needs BOTH of
-## its elements raised once past the start, which is what the choice screen's element cards
-## are for. The map starts you at zero elements and hands them out for boss kills — we keep
-## the opening playable instead, the same class of departure as Balance.START_GOLD.
-const DUAL_ELEMENT_LEVEL := 2
 
 # --- Wave definitions ----------------------------------------------------------
 # Each wave picks an archetype from WAVE_TYPES; its stats = the base scaling
@@ -605,7 +580,11 @@ const WAVES: Array = [
 	{"type": "immune", "element": "nature"},           # 7  — slow/stun stop working
 	{"type": "fast", "element": "earth"},              # 8
 	{"type": "regen", "element": "water"},             # 9  — must out-damage the heal
-	{"type": "tank", "boss": true, "element": "water"},# 10 — FIRST BOSS
+	# boss_rule (GAME_STRATEGY_V2.md §10.4, BUILD NEXT #7): the ONE question each boss asks.
+	# Wave 10's Muhafız is immune to every control effect in the game (slow/stun/knockback —
+	# see Enemy.cc_immune) rather than to one named kind, so a future control type is covered
+	# automatically instead of needing its own exemption listed here.
+	{"type": "tank", "boss": true, "element": "water", "boss_rule": "control_immune"},# 10 — FIRST BOSS
 	{"type": "split", "element": "nature"},            # 11 — splitters
 	{"type": "tank", "element": "earth"},              # 12
 	{"type": "air"},                                   # 13
@@ -615,7 +594,10 @@ const WAVES: Array = [
 	{"type": "split", "element": "earth"},             # 17
 	{"type": "swarm", "element": "water"},             # 18
 	{"type": "tank", "element": "fire", "hp": 0.85},   # 19 — mild trim so 20 reads as the spike
-	{"type": "swarm", "boss": true, "element": "fire"},# 20 — SECOND BOSS, then the generator
+	# Wave 20's Uyanmış Muhafız cycles its own armour every 5s (Enemy.rotating_armor) around
+	# Game.TOWER_ORDER's ring, starting here at "fire" — asks whether the run invested in one
+	# element or spread across all four, which the first boss never asked.
+	{"type": "swarm", "boss": true, "element": "fire", "boss_rule": "rotating_armor"},# 20 — SECOND BOSS, then the generator
 ]
 
 # --- Roguelite upgrade pool ----------------------------------------------------
@@ -637,95 +619,89 @@ const WAVES: Array = [
 #
 # An entry with neither `element` nor `tower` applies to every tower, which is why the
 # global ones cost a higher rarity than their single-element equivalents.
+## The 22-card pool BUILD NEXT #9 replaces the interim step-2 prune with (GAME_STRATEGY_V2.md
+## §6.3): 8 tower-mechanic cards, 6 cross-element synergy cards, 4 economy cards, 4 run-
+## identity cards. Every card here is genuinely new relative to the old pool — this is a
+## wholesale replacement, not an extension, because the interim pool's flat "+25% damage to
+## one element" cards were explicitly a step-2 placeholder for this step to retire.
+##
+## Most of the new stats (burn_time, slow_time, vs_flying, burn_slow, overclock_every,
+## groundwork, target_lowest_hp, chill_burn, chill_hit) are TowerMods.fold cases; MAGMA,
+## EMBERSEED, BLOOM, BEDROOT and SALVAGE carry no `effects` at all — they gate purely on
+## Run.has_card(id) at the engine call site that needs them (tower.gd's BLOOM/BEDROOT aura
+## scan, enemy.gd's EMBERSEED spread, projectile.gd's MAGMA refresh and Aftershock echo,
+## tower.gd's Salvage-equivalent check lives in Tower.sell_value — see BUILD NEXT #9 notes
+## in the design memory for the full engine-side map).
 const UPGRADE_POOL: Array = [
-	# --- Common: one element, one stat -----------------------------------------
-	{"id": "fire_dmg", "name": "Ember Focus", "rarity": "common", "max_stacks": 4,
-		"element": "fire", "desc": "Fire towers deal +25% damage",
-		"effects": [{"stat": "damage", "op": "mult", "value": 1.25}]},
-	{"id": "water_dmg", "name": "Deep Current", "rarity": "common", "max_stacks": 4,
-		"element": "water", "desc": "Water towers deal +25% damage",
-		"effects": [{"stat": "damage", "op": "mult", "value": 1.25}]},
-	{"id": "nature_dmg", "name": "Thornbloom", "rarity": "common", "max_stacks": 4,
-		"element": "nature", "desc": "Nature towers deal +25% damage",
-		"effects": [{"stat": "damage", "op": "mult", "value": 1.25}]},
-	{"id": "earth_dmg", "name": "Bedrock", "rarity": "common", "max_stacks": 4,
-		"element": "earth", "desc": "Earth towers deal +25% damage",
-		"effects": [{"stat": "damage", "op": "mult", "value": 1.25}]},
-	{"id": "light_dmg", "name": "Sunspear", "rarity": "common", "max_stacks": 4,
-		"element": "light", "desc": "Light towers deal +25% damage",
-		"effects": [{"stat": "damage", "op": "mult", "value": 1.25}]},
-	{"id": "darkness_dmg", "name": "Umbral Weight", "rarity": "common", "max_stacks": 4,
-		"element": "darkness", "desc": "Darkness towers deal +25% damage",
-		"effects": [{"stat": "damage", "op": "mult", "value": 1.25}]},
-	{"id": "all_range", "name": "Long Sight", "rarity": "common", "max_stacks": 3,
-		"desc": "All towers gain +18 range",
-		"effects": [{"stat": "range", "op": "add", "value": 18.0}]},
-	{"id": "gold_kill", "name": "Scavenger", "rarity": "common", "max_stacks": 5,
+	# --- Mekanik (8) -------------------------------------------------------------
+	{"id": "wick", "name": "Wick", "rarity": "common", "max_stacks": 1,
+		"element": "fire", "desc": "Fire's burn lasts twice as long",
+		"effects": [{"stat": "burn_time", "op": "mult", "value": 2.0}]},
+	{"id": "permafrost", "name": "Permafrost", "rarity": "common", "max_stacks": 3,
+		"element": "water", "desc": "Water's chill lasts 1.5s longer",
+		"effects": [{"stat": "slow_time", "op": "add", "value": 1.5}]},
+	{"id": "long_sight", "name": "Long Sight", "rarity": "common", "max_stacks": 3,
+		"desc": "All towers gain +25 range",
+		"effects": [{"stat": "range", "op": "add", "value": 25.0}]},
+	{"id": "backdraft", "name": "Backdraft", "rarity": "rare", "max_stacks": 1,
+		"element": "fire", "desc": "Fire's burn also slows the target by 15%",
+		"effects": [{"stat": "burn_slow", "op": "mult", "value": 0.85}]},
+	{"id": "aftershock", "name": "Aftershock", "rarity": "rare", "max_stacks": 1,
+		"element": "earth", "desc": "Earth's splash lands again 0.3s later at 40% power"},
+	{"id": "spore", "name": "Spore", "rarity": "rare", "max_stacks": 1,
+		"element": "nature", "desc": "Nature towers deal +60% damage to flying enemies",
+		"effects": [{"stat": "vs_flying", "op": "mult", "value": 1.6}]},
+	{"id": "overclock", "name": "Overclock", "rarity": "epic", "max_stacks": 1,
+		"desc": "Every tower's 5th shot deals double damage",
+		"effects": [{"stat": "overclock_every", "value": 5.0}]},
+	{"id": "groundwork", "name": "Groundwork", "rarity": "legendary", "max_stacks": 1,
+		"element": "earth", "desc": "Earth can now hit flying enemies, but its splash radius is halved",
+		"effects": [{"stat": "groundwork", "value": 1.0}]},
+
+	# --- Cross-element (6) — GAME_STRATEGY_V2.md §6.2 ---------------------------
+	{"id": "steam", "name": "Steam", "rarity": "rare", "max_stacks": 1,
+		"element": "fire", "desc": "Fire's burn deals +50% damage to chilled enemies",
+		"effects": [{"stat": "chill_burn", "op": "mult", "value": 1.5}]},
+	{"id": "erosion", "name": "Erosion", "rarity": "rare", "max_stacks": 1,
+		"element": "earth", "desc": "Earth deals +40% damage to chilled enemies",
+		"effects": [{"stat": "chill_hit", "op": "mult", "value": 1.4}]},
+	{"id": "magma", "name": "Magma", "rarity": "epic", "max_stacks": 1,
+		"desc": "Earth's splash refreshes the burn on any enemy it hits"},
+	{"id": "embers_eed", "name": "Emberseed", "rarity": "epic", "max_stacks": 1,
+		"desc": "A poisoned enemy dying while burning spreads its poison to three neighbours instead of one"},
+	{"id": "bloom", "name": "Bloom", "rarity": "rare", "max_stacks": 1,
+		"desc": "Nature towers within 140px of a Water tower tick their poison 30% faster"},
+	{"id": "bedroot", "name": "Bedroot", "rarity": "rare", "max_stacks": 1,
+		"desc": "Earth towers within 140px of a Nature tower also spread poison"},
+
+	# --- Ekonomi (4) -------------------------------------------------------------
+	{"id": "prospector", "name": "Prospector", "rarity": "common", "max_stacks": 5,
 		"desc": "+2 gold for every enemy killed",
 		"effects": [{"stat": "gold_per_kill", "op": "add", "value": 2.0}]},
+	{"id": "foreman", "name": "Foreman", "rarity": "common", "max_stacks": 1,
+		"desc": "Upgrades cost 20% less",
+		"effects": [{"stat": "upgrade_cost_mult", "value": 0.8}]},
+	{"id": "salvage", "name": "Salvage", "rarity": "rare", "max_stacks": 1,
+		"desc": "Selling a tower always refunds it in full"},
+	{"id": "compound", "name": "Compound", "rarity": "epic", "max_stacks": 1,
+		"desc": "Wave-end interest rises from 5% to 8%",
+		"effects": [{"stat": "interest_rate_add", "value": 0.03}]},
 
-	# --- Rare: a mechanic rather than a flat stat -------------------------------
-	{"id": "fire_speed", "name": "Wildfire", "rarity": "rare", "max_stacks": 3,
-		"element": "fire", "desc": "Fire towers attack 25% faster",
-		"effects": [{"stat": "attack_speed", "op": "mult", "value": 1.25}]},
-	{"id": "nature_poison", "name": "Virulence", "rarity": "rare", "max_stacks": 3,
-		"element": "nature", "desc": "Nature poison deals +50% damage",
-		"effects": [{"stat": "poison", "op": "mult", "value": 1.5}]},
-	{"id": "water_slow", "name": "Undertow", "rarity": "rare", "max_stacks": 2,
-		"element": "water", "desc": "Water slows 30% harder",
-		"effects": [{"stat": "slow_power", "op": "mult", "value": 1.3}]},
-	{"id": "earth_splash", "name": "Shockwave", "rarity": "rare", "max_stacks": 3,
-		"element": "earth", "desc": "Earth splash radius +35%",
-		"effects": [{"stat": "splash", "op": "mult", "value": 1.35}]},
-	{"id": "all_dmg_small", "name": "Attunement", "rarity": "rare", "max_stacks": 3,
-		"desc": "All towers deal +15% damage",
-		"effects": [{"stat": "damage", "op": "mult", "value": 1.15}]},
-
-	# --- Epic: the first tower unlocks, and real global power -------------------
-	# --- Element cards ----------------------------------------------------------
-	# These grant no stats. They raise an element track, and every dual recipe the new
-	# level completes becomes buildable (Game.DUAL_RECIPES, Run.dual_available). Two
-	# cards therefore open between one and four towers depending on which pair is hit,
-	# which is the decision the map's element research is built around.
-	#
-	# max_stacks 1: a second level in the same element unlocks nothing further, so
-	# offering it again would be a dead card.
-	{"id": "elem_light", "name": "Light Elemental", "rarity": "epic",
-		"raise_element": "light", "min_wave": 3, "max_stacks": 1,
-		"desc": "Raise Light. Unlocks its duals once the partner element is raised too"},
-	{"id": "elem_darkness", "name": "Darkness Elemental", "rarity": "epic",
-		"raise_element": "darkness", "min_wave": 3, "max_stacks": 1,
-		"desc": "Raise Darkness. Unlocks its duals once the partner element is raised too"},
-	{"id": "elem_water", "name": "Water Elemental", "rarity": "epic",
-		"raise_element": "water", "min_wave": 3, "max_stacks": 1,
-		"desc": "Raise Water. Unlocks its duals once the partner element is raised too"},
-	{"id": "elem_fire", "name": "Fire Elemental", "rarity": "epic",
-		"raise_element": "fire", "min_wave": 3, "max_stacks": 1,
-		"desc": "Raise Fire. Unlocks its duals once the partner element is raised too"},
-	{"id": "elem_nature", "name": "Nature Elemental", "rarity": "epic",
-		"raise_element": "nature", "min_wave": 3, "max_stacks": 1,
-		"desc": "Raise Nature. Unlocks its duals once the partner element is raised too"},
-	{"id": "elem_earth", "name": "Earth Elemental", "rarity": "epic",
-		"raise_element": "earth", "min_wave": 3, "max_stacks": 1,
-		"desc": "Raise Earth. Unlocks its duals once the partner element is raised too"},
-	{"id": "all_speed", "name": "Quickening", "rarity": "epic", "max_stacks": 2,
-		"desc": "All towers attack 20% faster",
-		"effects": [{"stat": "attack_speed", "op": "mult", "value": 1.2}]},
-	{"id": "all_dmg_big", "name": "Convergence", "rarity": "epic", "max_stacks": 2,
-		"desc": "All towers deal +35% damage",
-		"effects": [{"stat": "damage", "op": "mult", "value": 1.35}]},
-
-	# --- Legendary: run-defining ------------------------------------------------
-	{"id": "unlock_lightning", "name": "Lightning", "rarity": "legendary",
-		"unlock": "lightning", "min_wave": 12,
-		"desc": "Unlocks the Lightning tower — 25% chance to freeze an enemy in place"},
-	{"id": "overcharge", "name": "Overcharge", "rarity": "legendary", "max_stacks": 1,
-		"desc": "All towers: +50% damage, +25 range, 15% faster",
-		"effects": [
-			{"stat": "damage", "op": "mult", "value": 1.5},
-			{"stat": "range", "op": "add", "value": 25.0},
-			{"stat": "attack_speed", "op": "mult", "value": 1.15},
-		]},
+	# --- Run kimliği (4) ----------------------------------------------------------
+	{"id": "deadeye", "name": "Deadeye", "rarity": "epic", "max_stacks": 1,
+		"desc": "All towers now target the enemy with the LEAST health",
+		"effects": [{"stat": "target_lowest_hp", "value": 1.0}]},
+	{"id": "bulwark", "name": "Bulwark", "rarity": "epic", "max_stacks": 1,
+		"grant_lives": 5,
+		"desc": "+5 lives right now, but all towers deal 10% less damage",
+		"effects": [{"stat": "damage", "op": "mult", "value": 0.9}]},
+	{"id": "monoculture", "name": "Monoculture", "rarity": "legendary", "max_stacks": 1,
+		"needs_element_choice": true,
+		"desc": "Choose an element: it deals +50% damage, the other three deal -20%"},
+	{"id": "frontload", "name": "Frontload", "rarity": "legendary", "max_stacks": 1,
+		"grant_gold": 300,
+		"desc": "+300 gold right now, but every kill's bounty is reduced by 25%",
+		"effects": [{"stat": "kill_gold_mult", "value": 0.75}]},
 ]
 
 # --- Workshop: permanent upgrades ----------------------------------------------
@@ -762,26 +738,31 @@ const WORKSHOP_DEFS: Array = [
 # A tower's damage element vs an enemy's armour element gives a multiplier (see
 # element_mult). Neutral ("") on either side = x1, so Lightning / dual towers and
 # early/air waves are unaffected.
-## The damage circle from Element TD: Light -> Darkness -> Water -> Fire -> Nature ->
-## Earth -> Light. Each element beats the next one round; being beaten is the weak side.
-## With six elements every element still has exactly one strength and one weakness, so
-## the shape of the matchup is unchanged from the four-element version — there are just
-## more armour types a wave can wear, and two more answers to carry.
+## The damage circle, cut back to four elements (GAME_STRATEGY_V2.md §3.3): Water -> Fire
+## -> Nature -> Earth -> Water. Each element beats the next one round; being beaten is the
+## weak side. Three of these four relationships are the same links the six-element ring
+## carried; only Earth's target moved, from the retired Light to Water, closing the ring
+## on itself. Every relationship now has a physical read (water douses fire, fire burns
+## plant, roots crack stone, earth dams water) instead of an arbitrary link to memorize.
 const ELEMENT_BEATS := {
-	"light": "darkness", "darkness": "water", "water": "fire",
-	"fire": "nature", "nature": "earth", "earth": "light",
+	"water": "fire", "fire": "nature", "nature": "earth", "earth": "water",
 }
 const ELEMENT_COLORS := {
 	"fire": Color(0.95, 0.45, 0.18), "water": Color(0.30, 0.60, 0.95),
 	"nature": Color(0.35, 0.80, 0.35), "earth": Color(0.72, 0.55, 0.34),
 	"light": Color(1.0, 0.96, 0.72), "darkness": Color(0.45, 0.28, 0.62),
 }
-const ELEMENT_STRONG := 1.75
-## Mismatched element damage. Kept fairly gentle on purpose: at 0.6 a wave whose armour
-## countered the player's main element (notably the water waves vs. the cheap, popular
-## Fire tower) inflated its effective HP by 67%, which read as a difficulty spike rather
-## than a prompt to diversify.
-const ELEMENT_WEAK := 0.7
+## 1.6 / 0.85 (was 1.75 / 0.7) per GAME_STRATEGY_V2.md §7.2, BUILD NEXT #3 — deliberately
+## missed in the first pass at #3 and fixed here. At the old 2.5x spread between a strong and
+## a weak hit, matchup was the single biggest lever in the game (bigger than placement or
+## branch choice combined) and optimal play degenerated to "read the wave's colour, build its
+## counter." At 1.6/0.85 (1.88x spread) matchup sits in the same weight class as those other
+## decisions instead of dominating them — see §7.2's side-by-side comparison table.
+const ELEMENT_STRONG := 1.6
+## Mismatched element damage, deliberately gentler than ELEMENT_STRONG is generous: a reward-
+## first asymmetry, so building the wrong element for a wave costs less than building the
+## right one gains.
+const ELEMENT_WEAK := 0.85
 
 ## Damage multiplier for attacker element `atk` hitting armour element `def`.
 func element_mult(atk: String, def: String) -> float:
@@ -793,14 +774,57 @@ func element_mult(atk: String, def: String) -> float:
 		return ELEMENT_WEAK
 	return 1.0
 
+## The active difficulty (GAME_STRATEGY_V2.md §12, BUILD NEXT #8): "normal" or "easy", a key
+## into Balance.RULESETS. Picked on the menu (see menu.gd) before Main even loads, read by
+## reset() below for start gold/lives and by wave_manager.gd for the HP/count scaling — it is
+## NOT reset by Game.reset() itself, so a mid-run retry keeps whatever the player chose.
+var ruleset: String = Balance.DEFAULT_RULESET
 var gold: int = 0
 var lives: int = 0
 var is_over: bool = false
+## True when `is_over` was reached by clearing the last wave rather than running out of
+## lives. Distinguishes the two on the end screen (see EndScreen.show_summary) without a
+## second copy of everything `is_over` already gates (spawning, life loss, the choice screen).
+var is_won: bool = false
 ## Highest wave this run actually started. The run summary's headline number, and the basis
 ## for the permanent-currency award once meta progression lands.
 var wave_reached: int = 0
 # The all-time best wave now lives in Meta, where it is persisted along with the rest of
 # the permanent progression — see Meta.best_wave.
+
+## The number of hand-authored waves a Standard run plays before it can be won. Kept as its
+## own named constant rather than reading Game.WAVES.size() at the call site, so the win
+## condition (WaveManager) states its own intent instead of leaning on the seed table's
+## length being exactly this by coincidence — the two happen to match today (20) and should
+## keep matching if the seed table ever grows.
+const STANDARD_WAVES := 20
+
+## Which enemy caused the most recent life loss, and on which wave — overwritten by every
+## leak, fatal or not, so by the time `game_over` fires this describes the exact leak that
+## ended the run. Read by EndScreen for the one-line "why you lost" (GAME_STRATEGY_V2.md
+## §24.1, BUILD NEXT #4). Cleared on reset() so a stale reason never survives into a run
+## that hasn't lost yet.
+var last_leak_wave: int = 0
+var last_leak_label: String = ""    ## WAVE_TYPES display name, e.g. "Regen".
+var last_leak_element: String = ""  ## Armor element, "" = neutral.
+
+## Records that `label` (element `element`) got past the defense on the current wave. Called
+## by Enemy._escape() BEFORE Game.lose_life(), so a fatal leak's own data is what survives.
+func record_leak(label: String, element: String) -> void:
+	last_leak_wave = wave_reached
+	last_leak_label = label
+	last_leak_element = element
+
+## Ends the run as a win: the player cleared Game.STANDARD_WAVES. Reuses `is_over` for every
+## guard that already stops the run (spawning, life loss, another choice) rather than adding
+## a second flag those sites would also need to check — `is_won` only distinguishes how the
+## summary is framed.
+func declare_victory() -> void:
+	if is_over:
+		return
+	is_over = true
+	is_won = true
+	victory.emit()
 
 ## The active board profile. Main uses PATH/OBSTACLES; the training scene swaps in the
 ## separate painted map's open road and its deliberately scarce build clearings. Keeping the
@@ -827,6 +851,11 @@ func use_main_board() -> void:
 ## chapter, so an unfinished map slot never sends a deep run back to an earlier layout.
 ## A real run always gets free placement — the scarce painted clearings are a lesson device,
 ## not an endless-run rule — so this never passes the tutorial's WINDING_BUILD_ZONES on.
+##
+## UNREACHED as of BUILD NEXT #8: Standard mode pins to main.gd's STANDARD_BOARD for its
+## whole length instead of rotating (GAME_STRATEGY_V2.md §28 Phase 1 is one map), so nothing
+## calls this today. Left in place — same as WaveGenerator since step 4 — for the Endless
+## mode that reconnects it.
 func use_board_for_wave(wave: int) -> void:
 	var chapter := floori(float(maxi(wave, 1) - 1) / float(WAVES_PER_BOARD))
 	use_board(String(BOARD_SEQUENCE[mini(chapter, BOARD_SEQUENCE.size() - 1)]), false)
@@ -918,10 +947,16 @@ func _dist_point_segment(p: Vector2, a: Vector2, b: Vector2) -> float:
 func reset() -> void:
 	# The Workshop's Treasury / Ramparts levels land here rather than in Balance: they are
 	# permanent progression, not a tuning constant, and this is the one place a run begins.
-	gold = Balance.START_GOLD + Meta.bonus_start_gold()
-	lives = Balance.START_LIVES + Meta.bonus_start_lives()
+	# `ruleset` (Easy/Normal, BUILD NEXT #8) is picked before this runs — see the menu — and
+	# left as-is by a mid-run reset() so a retry keeps the difficulty the player chose.
+	gold = Balance.ruleset_start_gold(ruleset) + Meta.bonus_start_gold()
+	lives = Balance.ruleset_start_lives(ruleset) + Meta.bonus_start_lives()
 	is_over = false
+	is_won = false
 	wave_reached = 0
+	last_leak_wave = 0
+	last_leak_label = ""
+	last_leak_element = ""
 
 ## Asks the level for a short camera kick (boss deaths, leaks).
 func request_shake(amount: float) -> void:

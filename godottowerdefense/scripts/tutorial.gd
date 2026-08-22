@@ -1,6 +1,10 @@
 extends Node2D
 class_name Tutorial
-## A compact, self-contained six-tower training match shown before every endless run.
+## A compact, self-contained four-tower training match shown before every Standard run
+## (GAME_STRATEGY_V2.md §28 Phase 1: "90 saniyelik tutorial, 5 adım"; BUILD NEXT #10 cut this
+## from six element lessons to four and trimmed every hint to <=5 words — the demonstration
+## itself (build it, watch it fight its counter, see the number/colour payoff) is the
+## teaching; the text is a caption, not the lesson).
 ##
 ## Training has its own painting, open-ended road and scarce build clearings. It deliberately
 ## does NOT use WaveManager: the lesson advances on actions (build Water, watch it fire,
@@ -15,34 +19,30 @@ const START_GOLD := 500
 const START_LIVES := 10
 const SPAWN_INTERVAL := 0.85
 
-## One small lesson per basic element. Every tower fights the armour it counters, so the
-## complete sequence also walks once around the element circle. Values are deliberately
-## hand-tuned teaching encounters, not endless-wave balance data.
+## One small lesson per element (BUILD NEXT #10: six element lessons cut to Game.
+## TOWER_ORDER's four). Every tower fights the armour it counters, so the complete sequence
+## also walks once around the 4-element ring (GAME_STRATEGY_V2.md §3.3: water -> fire ->
+## nature -> earth -> water). Values are deliberately hand-tuned teaching encounters, not
+## endless-wave balance data — each is chosen so the lesson's tower clears its group cleanly
+## at its OWN Lv1 stats (see game.gd's TOWER_DEFS), verified by --tutorial-auto's leak check.
+## Hints are capped at 5 words: the demonstration teaches, the text only names what to watch.
 const LESSONS: Array = [
 	{"tower": "water", "label": "Water: rapid slow", "armor": "fire",
-		"count": 4, "hp": 70.0, "speed": 88.0, "interval": 0.62,
-		"build": "Place Water in a glowing grass pocket. Its rapid bolts repeatedly slow targets.",
-		"combat": "Water beats Fire armour. Watch the blue slow effect and gold ×1.75 damage."},
-	{"tower": "fire", "label": "Fire: rapid damage", "armor": "nature",
-		"count": 4, "hp": 75.0, "speed": 96.0, "interval": 0.62,
-		"build": "Place Fire near a road bend. Its short reach rewards careful positioning.",
-		"combat": "Fire beats Nature armour and attacks rapidly, but has the shortest range."},
-	{"tower": "nature", "label": "Nature: poison", "armor": "earth",
-		"count": 4, "hp": 125.0, "speed": 86.0, "interval": 0.74,
-		"build": "Place Nature in another pocket. Poison keeps dealing damage after impact.",
-		"combat": "Nature beats Earth armour. The green poison continues ticking between shots."},
-	{"tower": "earth", "label": "Earth: splash", "armor": "light",
-		"count": 6, "hp": 90.0, "speed": 82.0, "interval": 0.24,
-		"build": "Place Earth beside a long road section. Earth hits clustered ground enemies.",
-		"combat": "Earth beats Light armour. This tight group demonstrates its splash damage."},
-	{"tower": "light", "label": "Light: long range", "armor": "darkness",
-		"count": 4, "hp": 85.0, "speed": 100.0, "interval": 0.72,
-		"build": "Place Light even if the road looks distant. It has the longest practical reach.",
-		"combat": "Light beats Darkness armour and can watch several separated road bends."},
-	{"tower": "darkness", "label": "Darkness: heavy hits", "armor": "water",
-		"count": 3, "hp": 250.0, "speed": 76.0, "interval": 1.05,
-		"build": "Place Darkness in the last free pocket. It fires slowly but hits extremely hard.",
-		"combat": "Darkness beats Water armour. Each slow shot delivers the largest basic hit."},
+		"count": 4, "hp": 35.0, "speed": 88.0, "interval": 0.62,
+		"build": "Drag Water onto open ground.",
+		"combat": "Watch the blue slow, gold damage."},
+	{"tower": "fire", "label": "Fire: burns over time", "armor": "nature",
+		"count": 3, "hp": 30.0, "speed": 96.0, "interval": 0.72,
+		"build": "Place Fire close to the road.",
+		"combat": "Fast hits, short range, keeps burning."},
+	{"tower": "nature", "label": "Nature: poison ignores armour", "armor": "earth",
+		"count": 4, "hp": 40.0, "speed": 86.0, "interval": 0.74,
+		"build": "Place Nature anywhere clear.",
+		"combat": "Green poison ticks after each hit."},
+	{"tower": "earth", "label": "Earth: splash damage", "armor": "water",
+		"count": 5, "hp": 25.0, "speed": 82.0, "interval": 0.70,
+		"build": "Place Earth near clustered enemies.",
+		"combat": "One hit, whole group takes splash."},
 ]
 
 enum Step { INTRO, BUILD, COMBAT, UPGRADE_WATER, COMPLETE }
@@ -86,8 +86,9 @@ func _ready() -> void:
 	Game.use_board("winding")
 	Game.reset()
 	Run.reset(0)
-	# Fixed teaching budget: all six basics plus Water's first upgrade, with 25 left. Meta
-	# progression must not make the lesson's instructions and displayed numbers disagree.
+	# Fixed teaching budget: all four basics (4x50=200) plus Water's first upgrade (40), with
+	# 260 left over. Meta progression must not make the lesson's instructions and displayed
+	# numbers disagree.
 	Game.gold = START_GOLD
 	Game.lives = START_LIVES
 	Game.is_over = false
@@ -116,7 +117,7 @@ func _ready() -> void:
 	complete_dim.hide()
 	complete_panel.hide()
 	stage_label.text = "Training Grounds"
-	hint_label.text = "Learn the essentials, or press Skip Tutorial to begin the endless run."
+	hint_label.text = "Learn the essentials, or press Skip Tutorial to start the run."
 	if OS.get_cmdline_user_args().has("--tutorial-auto"):
 		call_deferred("_run_auto_tutorial")
 	for arg in OS.get_cmdline_user_args():
@@ -263,7 +264,7 @@ func _drop(world_pos: Vector2) -> void:
 	Audio.play("build")
 	_lesson_tower = tower
 	# Only the tower introduced by this step may fire. Earlier towers remain on the board as
-	# a six-element lineup but cannot steal the demonstration wave's kills.
+	# a four-element lineup but cannot steal the demonstration wave's kills.
 	for child in towers_root.get_children():
 		var built := child as Tower
 		if built != null:
@@ -335,8 +336,8 @@ func _on_group_cleared() -> void:
 		print("  tutorial %s: leaks=%d" % [_expected_tower(), _last_lesson_leaks])
 	if _lesson_index == 0:
 		_step = Step.UPGRADE_WATER
-		stage_label.text = "Training 1/6 — Water upgrade"
-		hint_label.text = "Tap the Water tower's body to upgrade it. The red × sells for half during real runs."
+		stage_label.text = "Training 1/%d — Water upgrade" % LESSONS.size()
+		hint_label.text = "Tap Water's body to upgrade it."
 	else:
 		_advance_lesson()
 
@@ -347,7 +348,7 @@ func _finish_lesson() -> void:
 	grid.set_showing(false)
 	_set_hovered(null)
 	stage_label.text = "Training complete"
-	hint_label.text = "Ready for the endless run. Build a mixed defence and counter each wave's armour."
+	hint_label.text = "Ready. Build a mixed defence, counter each wave's armour, and clear all 20 waves to win."
 	complete_dim.show()
 	complete_panel.show()
 	play_button.grab_focus()
@@ -356,7 +357,7 @@ func _finish_lesson() -> void:
 		_save_screenshot(0.25, "tutorial_complete.png")
 
 ## Harness: completes the action-gated lesson without synthetic mouse events. It exercises
-## all six combat groups, Water's upgrade, board-profile movement and completion.
+## all four combat groups, Water's upgrade, board-profile movement and completion.
 func _run_auto_tutorial() -> void:
 	Engine.time_scale = 8.0
 	_begin_lesson()
@@ -390,20 +391,33 @@ func _run_auto_tutorial() -> void:
 		_harness_error("completion", _lesson_index)
 		return
 	Engine.time_scale = 1.0
-	print("--- TUTORIAL COMPLETE: all six towers built and all counter waves cleared ---")
+	print("--- TUTORIAL COMPLETE: all four towers built and all counter waves cleared ---")
 
+## Picks the still-free WINDING_BUILD_ZONES pad CLOSEST to the road, not just the first free
+## one in array order — a real player reads the hint ("place Fire near a bend") and the live
+## range-preview ghost while dragging; this is the harness's equivalent of that judgement.
+## Matters most for Fire (170px, the shortest range of the four): the zone list has six pads
+## left over from the old six-lesson tutorial, spread out for towers that used to reach much
+## further, and array order alone could hand Fire a pad nothing on the road is in range of —
+## found exactly this way when the four-lesson rewrite (BUILD NEXT #10) first hit "leaks=3"
+## with the pad `_find_auto_build_position` used to return unconditionally.
 func _find_auto_build_position() -> Vector2:
-	# Try the pad centre first, then small offsets. The same search is used after every build,
-	# so it proves that a legal six-tower layout exists rather than bypassing placement rules.
 	const OFFSETS: Array = [
 		Vector2.ZERO, Vector2(-32, 0), Vector2(32, 0), Vector2(0, -32), Vector2(0, 32),
 	]
+	var best := Vector2(-1, -1)
+	var best_dist := INF
 	for entry in Game.WINDING_BUILD_ZONES:
 		for offset in OFFSETS:
 			var candidate: Vector2 = entry[0] + offset
-			if Game.can_build_at(candidate, towers_root.get_children()):
-				return candidate
-	return Vector2(-1, -1)
+			if not Game.can_build_at(candidate, towers_root.get_children()):
+				continue
+			var d := Game.dist_to_road(candidate)
+			if d < best_dist:
+				best_dist = d
+				best = candidate
+			break  # one legal offset per zone is enough to rank the zone itself
+	return best
 
 func _harness_error(point: String, lesson: int) -> void:
 	push_error("Tutorial harness failed at %s (lesson=%d, step=%d)" % [point, lesson, _step])

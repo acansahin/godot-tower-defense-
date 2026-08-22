@@ -9,6 +9,7 @@ const TUTORIAL_SCENE := "res://scenes/Tutorial.tscn"
 
 @onready var _center: CenterContainer = $UI/Root/Center
 @onready var _how_panel: CenterContainer = $UI/Root/HowPanel
+@onready var _ruleset_button: Button = $UI/Root/Center/Panel/VBox/RulesetButton
 @onready var _play_button: Button = $UI/Root/Center/Panel/VBox/PlayButton
 @onready var _how_button: Button = $UI/Root/Center/Panel/VBox/HowButton
 @onready var _sound_button: Button = $UI/Root/Center/Panel/VBox/SoundButton
@@ -18,8 +19,13 @@ const TUTORIAL_SCENE := "res://scenes/Tutorial.tscn"
 @onready var _status_label: Label = $UI/Root/Center/Panel/VBox/StatusLabel
 @onready var _workshop: Workshop = $UI/Root/Workshop
 
+## Cycle order for the Difficulty button — just the two Phase 1 ships (GAME_STRATEGY_V2.md
+## §12, §28; BUILD NEXT #8). Hard is a later phase and has no Balance.RULESETS entry yet.
+const RULESET_CYCLE := ["normal", "easy"]
+
 func _ready() -> void:
 	Game.use_main_board()
+	_ruleset_button.pressed.connect(_on_ruleset)
 	_play_button.pressed.connect(_on_play)
 	_how_button.pressed.connect(_on_how)
 	_sound_button.pressed.connect(_on_sound)
@@ -28,6 +34,7 @@ func _ready() -> void:
 	_workshop_button.pressed.connect(_on_workshop)
 	_workshop.closed.connect(_on_workshop_closed)
 	Meta.essence_changed.connect(func(_v: int) -> void: _refresh_status())
+	_refresh_ruleset_label()
 	if OS.has_feature("web"):
 		_quit_button.hide()   # there is nothing to quit to in a browser tab
 	_how_panel.hide()
@@ -52,7 +59,28 @@ func _refresh_status() -> void:
 	parts.append("Essence: %d" % Meta.essence)
 	if Meta.best_wave > 0:
 		parts.append("Best: wave %d" % Meta.best_wave)
+	# Stars for the CURRENTLY SELECTED ruleset only (GAME_STRATEGY_V2.md §12.4, BUILD NEXT
+	# #8) — showing both at once would need the reader to remember which row is which; this
+	# way the star line always answers "how did I do at the difficulty I am about to play".
+	var earned_stars := Meta.stars_for(Game.ruleset)
+	if earned_stars > 0:
+		parts.append("%s: %s%s" % [Game.ruleset.capitalize(),
+				"★".repeat(earned_stars), "☆".repeat(3 - earned_stars)])
 	_status_label.text = "\n".join(parts)
+
+## Cycles Game.ruleset (GAME_STRATEGY_V2.md §12, BUILD NEXT #8). Not persisted across
+## sessions on purpose for now — Meta owns what outlives a run, and a difficulty pick is
+## closer to "what am I about to play" than permanent progression; Game.ruleset already
+## survives a mid-run retry (see game.gd's reset()), which is the case that actually matters.
+func _on_ruleset() -> void:
+	var i := RULESET_CYCLE.find(Game.ruleset)
+	Game.ruleset = String(RULESET_CYCLE[(maxi(i, 0) + 1) % RULESET_CYCLE.size()])
+	Audio.play("build")
+	_refresh_ruleset_label()
+	_refresh_status()  # the star line below is ruleset-specific
+
+func _refresh_ruleset_label() -> void:
+	_ruleset_button.text = "Difficulty: %s" % Game.ruleset.capitalize()
 
 func _on_workshop() -> void:
 	Audio.play("build")

@@ -11,6 +11,9 @@ const FIREBALL_FRAMES := 12
 const FIREBALL_FPS := 18.0
 const FIRE_ARC_HEIGHT := 22.0
 const FIRE_BIRTH_TIME := 0.09
+const MAGMA_REFRESH_TIME := 3.0    ## See _apply()'s MAGMA block.
+const AFTERSHOCK_DELAY := 0.3
+const AFTERSHOCK_MULT := 0.4
 
 var speed: float = 630.0  ## px/s. Scales with tower range so flight *time* stays constant.
 var damage: float = 10.0
@@ -24,11 +27,33 @@ var slow_time: float = 0.0
 var slow_splash_radius: float = 0.0  ## If > 0, the slow (only) also chills enemies within this radius of impact.
 var poison_dps: float = 0.0
 var poison_time: float = 0.0
+var poison_ignores_matchup: bool = false  ## Nature's THORN: bypasses Game.element_mult entirely.
+var poison_spreads_on_death: bool = false ## Plague (Nature Lv5).
 var stun_chance: float = 0.0    ## 0..1 chance to freeze the enemy on hit.
 var execute_chance: float = 0.0      ## 0..1 chance to kill outright (Death). Never bosses.
 var gold_on_kill: int = 0            ## Extra gold when this bolt lands the killing blow (Money).
 var life_on_kill_chance: float = 0.0 ## 0..1 chance a kill by this bolt returns a life (Life).
 var stun_time: float = 0.0
+
+# --- Branch payload (BUILD NEXT #5-#6) ------------------------------------------
+var burn_dps: float = 0.0             ## Per-stack. See Enemy.apply_burn.
+var burn_time: float = 0.0
+var burn_max_stacks: int = 1
+var burn_spread_radius: float = 0.0   ## Wildfire: also burns (half power) within this radius.
+var burn_doubles_at_max: bool = false ## Cinderheart.
+var burn_spreads_on_death: bool = false  ## Firestorm (simplified).
+var crack_bonus: float = 0.0          ## Siege: +fraction damage taken from all sources.
+var crack_time: float = 0.0
+var crack_spread_radius: float = 0.0  ## Sunder: crack also spreads within this radius.
+var knockback_chance: float = 0.0     ## Undertow.
+var knockback_distance: float = 0.0
+var knockback_chill_on_land: bool = false  ## Riptide: applies this bolt's slow on landing.
+
+# --- Card payload (BUILD NEXT #9, GAME_STRATEGY_V2.md §6.3) --------------------------------
+var vs_flying_mult: float = 1.0   ## Spore: damage multiplier vs flying targets.
+var burn_slow_factor: float = 1.0 ## Backdraft: burn also applies this slow (1.0 = off).
+var chill_burn_mult: float = 1.0  ## STEAM: burn vs a target Water has chilled.
+var chill_hit_mult: float = 1.0   ## EROSION: direct hits vs a chilled target.
 
 var _target: Enemy = null
 var pool: Node = null  ## The $Projectiles pool that owns this bolt (see projectiles.gd); null = unpooled.
@@ -87,13 +112,43 @@ func _hit(target: Enemy) -> void:
 	if slow_splash_radius > 0.0 and slow_time > 0.0:
 		_apply_slow_splash(target, impact)
 		FrostRing.spawn(self, impact, slow_splash_radius)  # show the frost field
+	if burn_spread_radius > 0.0 and burn_time > 0.0:
+		_apply_burn_splash(target, impact)
+	if crack_spread_radius > 0.0 and crack_time > 0.0:
+		_apply_crack_splash(target, impact)
+	if element == "earth" and splash_radius > 0.0 and Run.has_card("aftershock"):
+		_schedule_aftershock(impact)
 	if element == "fire":
 		FireImpact.spawn(self, impact)
 	_recycle()
 
-## Applies damage (scaled by mult and the element matchup) plus any slow / poison.
-## `show_number` is only set for the direct hit — a wide splash would otherwise bury
-## the screen under a dozen simultaneous numbers.
+## Aftershock (GAME_STRATEGY_V2.md §6.3, BUILD NEXT #9): Earth's splash lands again 0.3s
+## later at 40% power. Scheduled via `get_tree().create_timer()`, which lives on the
+## SceneTree rather than this node — this bolt is about to be recycled back into the shared
+## pool and could easily be flying a different shot by the time the timer fires, so the
+## connected Callable captures plain data instead of `self`/`enemy` and never touches this
+## Projectile instance again after this call.
+func _schedule_aftershock(impact: Vector2) -> void:
+	var echo_damage := damage * splash_factor * AFTERSHOCK_MULT
+	var echo_radius := splash_radius
+	var echo_element := element
+	var echo_hits_flying := hits_flying
+	get_tree().create_timer(AFTERSHOCK_DELAY).timeout.connect(func() -> void:
+		var radius_sq := echo_radius * echo_radius
+		for e in EnemyIndex.query(impact, echo_radius):
+			var enemy := e as Enemy
+			if enemy == null or not enemy.is_alive():
+				continue
+			if enemy.is_flying and not echo_hits_flying:
+				continue
+			if impact.distance_squared_to(enemy.global_position) > radius_sq:
+				continue
+			var matchup := Game.element_mult(echo_element, enemy.armor_element)
+			enemy.take_damage(echo_damage * matchup))
+
+## Applies damage (scaled by mult and the element matchup) plus any slow / poison / burn /
+## crack / knockback. `show_number` is only set for the direct hit — a wide splash would
+## otherwise bury the screen under a dozen simultaneous numbers.
 func _apply(enemy: Enemy, mult: float, show_number: bool) -> void:
 	# Whether it was alive BEFORE this bolt touched it. _apply also runs for every splash
 	# victim, and one of those can already be a corpse from an earlier hit this frame —
@@ -101,6 +156,14 @@ func _apply(enemy: Enemy, mult: float, show_number: bool) -> void:
 	var was_alive := enemy.is_alive()
 	var matchup := Game.element_mult(element, enemy.armor_element)
 	var dealt := damage * mult * matchup
+	# Spore (vs flying) and EROSION (vs a target Water has chilled) — both conditional on the
+	# TARGET's own state, so they can only be resolved here at hit time, never baked into a
+	# static tower stat. `chill_hit_mult`/`chill_burn_mult` are 1.0 unless the matching card
+	# was taken AND this tower's element is the one it scoped to (folded in Tower._recompute).
+	if enemy.is_flying:
+		dealt *= vs_flying_mult
+	if enemy.is_chilled():
+		dealt *= chill_hit_mult
 	enemy.flash()
 	if show_number:
 		_show_damage(enemy.global_position, dealt, matchup)
@@ -108,7 +171,33 @@ func _apply(enemy: Enemy, mult: float, show_number: bool) -> void:
 	if slow_time > 0.0:
 		enemy.apply_slow(slow_factor, slow_time)
 	if poison_time > 0.0:
-		enemy.apply_poison(poison_dps * mult * matchup, poison_time)
+		# Nature's THORN ignores the matchup entirely (GAME_STRATEGY_V2.md §3.1) — the one
+		# payload in the game that does not respect `matchup`, direct hits included.
+		var poison_matchup := 1.0 if poison_ignores_matchup else matchup
+		enemy.apply_poison(poison_dps * mult * poison_matchup, poison_time,
+				poison_spreads_on_death)
+	if burn_time > 0.0:
+		var burn_dealt := burn_dps * mult * matchup
+		if enemy.is_chilled():
+			burn_dealt *= chill_burn_mult  # STEAM
+		enemy.apply_burn(burn_dealt, burn_time, burn_max_stacks,
+				burn_doubles_at_max, burn_spreads_on_death)
+		# Backdraft: burn also chills — read here rather than folded into `slow_time` above,
+		# since Fire towers have no slow payload of their own to piggyback on otherwise.
+		if burn_slow_factor < 1.0:
+			enemy.apply_slow(burn_slow_factor, burn_time)
+	# MAGMA (Fire+Earth overlap, GAME_STRATEGY_V2.md §6.2, BUILD NEXT #9): Earth's hits
+	# refresh an already-burning target's remaining burn time. GAME_STRATEGY_V2.md does not
+	# give an exact refreshed duration — 3.0s is a middle estimate between base Fire's 2.0s
+	# and Blaze's stacked timers, not a sourced number.
+	if element == "earth" and enemy.is_burning() and Run.has_card("magma"):
+		enemy.refresh_burn(MAGMA_REFRESH_TIME)
+	if crack_time > 0.0:
+		enemy.apply_crack(crack_bonus, crack_time)
+	if knockback_distance > 0.0 and randf() < knockback_chance:
+		var landed := enemy.apply_knockback(knockback_distance)
+		if landed and knockback_chill_on_land and slow_time > 0.0:
+			enemy.apply_slow(slow_factor, slow_time)
 	if stun_time > 0.0 and randf() < stun_chance:
 		enemy.apply_stun(stun_time)
 	# Death's execute. Rolled AFTER the normal hit so a creep the damage already killed does
@@ -171,6 +260,34 @@ func _apply_slow_splash(main_target: Enemy, center: Vector2) -> void:
 			continue
 		if center.distance_squared_to(enemy.global_position) <= radius_sq:
 			enemy.apply_slow(slow_factor, slow_time)
+
+## Wildfire (Fire branch B): the burn also catches enemies near the impact, at half power and
+## with no direct damage component — same shape as _apply_slow_splash, and for the same
+## reason (GAME_STRATEGY_V2.md §3.1): this is a status spreading, not a second splash nuke.
+func _apply_burn_splash(main_target: Enemy, center: Vector2) -> void:
+	var radius_sq := burn_spread_radius * burn_spread_radius
+	for e in EnemyIndex.query(center, burn_spread_radius):
+		var enemy := e as Enemy
+		if enemy == null or enemy == main_target:
+			continue
+		if enemy.is_flying and not hits_flying:
+			continue
+		if center.distance_squared_to(enemy.global_position) <= radius_sq:
+			var matchup := Game.element_mult(element, enemy.armor_element)
+			enemy.apply_burn(burn_dps * 0.5 * matchup, burn_time, burn_max_stacks,
+					burn_doubles_at_max, burn_spreads_on_death)
+
+## Sunder (Earth branch B ultimate): the armor crack also spreads to enemies near the impact.
+func _apply_crack_splash(main_target: Enemy, center: Vector2) -> void:
+	var radius_sq := crack_spread_radius * crack_spread_radius
+	for e in EnemyIndex.query(center, crack_spread_radius):
+		var enemy := e as Enemy
+		if enemy == null or enemy == main_target:
+			continue
+		if enemy.is_flying and not hits_flying:
+			continue
+		if center.distance_squared_to(enemy.global_position) <= radius_sq:
+			enemy.apply_crack(crack_bonus, crack_time)
 
 func _draw() -> void:
 	if element == "fire":

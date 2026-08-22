@@ -34,7 +34,7 @@ const BOSS_EVERY := 10
 ## decision comes up evenly.
 ## Ordered around Game.ELEMENT_BEATS, so consecutive waves ask for adjacent answers on the
 ## damage circle rather than jumping across it.
-const ELEMENT_CYCLE: Array = ["light", "darkness", "water", "fire", "nature", "earth"]
+const ELEMENT_CYCLE: Array = ["water", "fire", "nature", "earth"]
 
 ## An elite wave trades count for individual strength. Deliberately rare: it is a spike, and
 ## a spike stops reading as one if it happens often.

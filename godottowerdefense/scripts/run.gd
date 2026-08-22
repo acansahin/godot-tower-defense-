@@ -24,10 +24,11 @@ var taken: Array[Dictionary] = []
 var permanent: Array[Dictionary] = []
 ## Tower ids unlocked this run, on top of Game.TOWER_ORDER.
 var unlocked: Array[String] = []
-## Element level per element id. Every element starts at 1, so the six base towers are
-## buildable immediately; raising one to Game.DUAL_ELEMENT_LEVEL is what makes its dual
-## recipes available. This is the map's own gate — it levels six research tracks and asks
-## which ones you own — rather than a merge-two-towers mechanic, which the map does not have.
+## Element level per element id. Every element starts at 1, so all four base towers are
+## buildable immediately. Left over from the six-element build's dual-recipe gate (BUILD
+## NEXT #2 removed the last card that raised it — see game.gd's UPGRADE_POOL note); kept
+## because `grant()`'s `raise_element` branch and `element_level()` are cheap, general
+## infrastructure a future card could use again, not because anything reads it today.
 var elements: Dictionary = {}
 
 ## Folded TowerMods per "id|element" key, cleared whenever the modifier set changes. The
@@ -38,6 +39,9 @@ var _cache: Dictionary = {}
 var _stacks: Dictionary = {}
 ## Folded global (non-tower) effects, e.g. gold per kill.
 var _gold_per_kill: int = 0
+var _kill_gold_mult: float = 1.0  ## Frontload's -25%, see kill_gold_mult().
+var _upgrade_cost_mult: float = 1.0  ## Foreman's -20%, see upgrade_cost_mult().
+var _interest_rate_add: float = 0.0  ## Compound's +3%, see interest_rate_add().
 var _rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
@@ -54,6 +58,9 @@ func reset(run_seed: int) -> void:
 	_cache.clear()
 	_stacks.clear()
 	_gold_per_kill = 0
+	_kill_gold_mult = 1.0
+	_upgrade_cost_mult = 1.0
+	_interest_rate_add = 0.0
 	_rng.seed = run_seed
 	# The Workshop's permanent power enters the run here, as the baseline every card then
 	# stacks on top of. Re-read each run rather than cached, so a level bought between runs
@@ -81,15 +88,32 @@ func mods_for(id: String, element: String) -> TowerMods:
 	_cache[key] = m
 	return m
 
+## Stats that are NOT a per-tower TowerMods field — folded separately in _refold_globals
+## instead, so e.g. "+2 gold per kill" cannot also land on a tower stat (TowerMods.fold has
+## no case for any of these and would push_warning on an "unknown stat" otherwise).
+const GLOBAL_STATS := ["gold_per_kill", "kill_gold_mult", "upgrade_cost_mult", "interest_rate_add"]
+
 func _fold_into(m: TowerMods, up: Dictionary, id: String, element: String) -> void:
-	if not _applies_to(up, id, element):
-		return
 	for effect in up.get("effects", []):
-		# Global effects are folded separately in _refold_globals; skip them here so a
-		# "+2 gold per kill" card cannot also land on a tower stat.
-		if String((effect as Dictionary).get("stat", "")) == "gold_per_kill":
+		var eff := effect as Dictionary
+		if not _effect_applies(up, eff, id, element):
 			continue
-		m.fold(effect)
+		if GLOBAL_STATS.has(String(eff.get("stat", ""))):
+			continue
+		m.fold(eff)
+
+## True if this ONE effect (inside card `up`) targets a tower with this id/element. A
+## per-effect `element`/`tower` key overrides the card-level one, falling back to it when
+## absent — every card but one only ever sets scope at the card level, so this reproduces
+## the old card-only behaviour exactly for them. Monoculture (GAME_STRATEGY_V2.md §6.3,
+## BUILD NEXT #9) is the one card that needs the override: a single pick with one effect at
+## +50% for the chosen element and three more at -20% each for the others.
+func _effect_applies(up: Dictionary, eff: Dictionary, id: String, element: String) -> bool:
+	var want_el := String(eff.get("element", up.get("element", "")))
+	if want_el != "" and want_el != element:
+		return false
+	var want_id := String(eff.get("tower", up.get("tower", "")))
+	return want_id == "" or want_id == id
 
 ## Extra gold per enemy killed. Queried at the kill site rather than inside Game.add_gold,
 ## which also pays sell refunds, wave interest and the early-call bonus — a per-kill bonus
@@ -97,50 +121,49 @@ func _fold_into(m: TowerMods, up: Dictionary, id: String, element: String) -> vo
 func bonus_gold_per_kill() -> int:
 	return _gold_per_kill
 
+## Multiplier on a kill's base bounty (Frontload's -25%, GAME_STRATEGY_V2.md §6.3, BUILD
+## NEXT #9). Separate from bonus_gold_per_kill because that is a flat ADD on top of the
+## bounty (Scavenger) while this scales the bounty ITSELF — folding them into one number
+## would apply Frontload's penalty to Scavenger's bonus too, which nothing asks for.
+func kill_gold_mult() -> float:
+	return _kill_gold_mult
+
+## Multiplier on the next upgrade's gold cost (Foreman's -20%).
+func upgrade_cost_mult() -> float:
+	return _upgrade_cost_mult
+
+## Added directly to Balance.INTEREST_RATE for this run (Compound's +3%, i.e. 5%->8%).
+func interest_rate_add() -> float:
+	return _interest_rate_add
+
+## True if the player took card `id` this run (not the Workshop's permanent effects — those
+## have no `id` a card offer could match). For binary global toggles (Deadeye, Groundwork,
+## EMBERSEED) that would be awkward to express as a per-(tower,element) TowerMods field
+## since they are not really a stat delta so much as "is this rule active".
+func has_card(id: String) -> bool:
+	for up in taken:
+		if String(up.get("id", "")) == id:
+			return true
+	return false
+
 ## Element level for `id`, or 0 for an element this run does not have.
 func element_level(id: String) -> int:
 	return int(elements.get(id, 0))
 
-## True when both elements of `dual_id`'s recipe are raised far enough to build it. A recipe
-## with no TOWER_DEFS entry is never buildable however deep its elements go — the seven
-## unported duals are listed in DUAL_RECIPES for completeness, not as content.
-func dual_available(dual_id: String) -> bool:
-	if not Game.TOWER_DEFS.has(dual_id):
-		return false
-	var recipe: Array = Game.DUAL_RECIPES.get(dual_id, [])
-	if recipe.is_empty():
-		return false
-	for e in recipe:
-		if element_level(String(e)) < Game.DUAL_ELEMENT_LEVEL:
-			return false
-	return true
-
-## Every tower the player may currently build: the six elements, every dual whose recipe
-## the current element levels satisfy, and anything granted outright by a card.
+## Every tower the player may currently build: the four elements, plus anything granted
+## outright by a card. The dual-recipe gate (owned-element level -> extra tower) that used
+## to live here went with the dual roster in BUILD NEXT #2 — see GAME_STRATEGY_V2.md §2 and
+## §6; cross-element play is now a card effect, not a second tier of buildable towers.
 ##
 ## Derived on every call rather than maintained as a list, for the same reason tower stats
-## are recomputed rather than accumulated: there is no separate state to fall out of step
-## with the element levels, so lowering one (a future card, a reset) cannot strand a tower
-## in the palette that its recipe no longer supports.
+## are recomputed rather than accumulated: there is no separate state to fall out of step,
+## so a future card that grants and later revokes a tower id cannot strand it in the palette.
 func buildable_towers() -> Array:
 	var out: Array = Game.TOWER_ORDER.duplicate()
-	for id in Game.DUAL_RECIPES:
-		var dual := String(id)
-		if dual_available(dual) and not out.has(dual):
-			out.append(dual)
 	for id in unlocked:
 		if not out.has(id):
 			out.append(id)
 	return out
-
-## True if `up` targets a tower with this id/element. An upgrade with neither an `element`
-## nor a `tower` key is global and applies to everything.
-func _applies_to(up: Dictionary, id: String, element: String) -> bool:
-	var want_el := String(up.get("element", ""))
-	if want_el != "" and want_el != element:
-		return false
-	var want_id := String(up.get("tower", ""))
-	return want_id == "" or want_id == id
 
 # --- Granting ------------------------------------------------------------------
 
@@ -162,6 +185,17 @@ func grant(up: Dictionary) -> void:
 			unlocked.append(unlock)
 			roster_changed.emit()
 		return
+	# Instant one-time grants (Bulwark's +5 lives, Frontload's +300 gold, GAME_STRATEGY_V2.md
+	# §6.3, BUILD NEXT #9) pay out immediately rather than through the fold below — a single
+	# payment, not a recurring stat. Both cards ALSO carry a recurring penalty in `effects`
+	# (Bulwark's -10% damage, Frontload's kill_gold_mult), so this falls through to the
+	# normal taken.append() rather than returning early like raise/unlock above.
+	var grant_lives := int(up.get("grant_lives", 0))
+	if grant_lives > 0:
+		Game.add_life(grant_lives)
+	var grant_gold := int(up.get("grant_gold", 0))
+	if grant_gold > 0:
+		Game.add_gold(grant_gold)
 	taken.append(up)
 	_cache.clear()
 	_refold_globals()
@@ -171,11 +205,19 @@ func grant(up: Dictionary) -> void:
 ## same reason tower stats are: a total that is only ever added to cannot be undone.
 func _refold_globals() -> void:
 	_gold_per_kill = 0
+	_kill_gold_mult = 1.0
+	_upgrade_cost_mult = 1.0
+	_interest_rate_add = 0.0
 	for up in taken:
 		for e in up.get("effects", []):
 			var effect := e as Dictionary
-			if String(effect.get("stat", "")) == "gold_per_kill":
-				_gold_per_kill += int(float(effect.get("value", 0.0)))
+			var stat := String(effect.get("stat", ""))
+			var v := float(effect.get("value", 0.0))
+			match stat:
+				"gold_per_kill": _gold_per_kill += int(v)
+				"kill_gold_mult": _kill_gold_mult *= v
+				"upgrade_cost_mult": _upgrade_cost_mult *= v
+				"interest_rate_add": _interest_rate_add += v
 
 # --- Offering ------------------------------------------------------------------
 
