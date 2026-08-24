@@ -15,12 +15,14 @@ that would land on the new road or blocked scenery is moved to the nearest clear
 boards are hand-painted 1536x864 worlds whose gameplay roads are **traced out of their
 paintings**, not authored beside them. The run draws enemies from a data table
 of **creep archetypes** (including flyers, tanks, swarms, splitters, regenerators, periodic
-**bosses** and **elite** waves). The buildable roster is the six elements —
-**Light / Darkness / Water / Fire / Nature / Earth**, with the stats of the original
-Warcraft III map (see [docs/element-td-data.md](docs/element-td-data.md)) — plus an
+**bosses** and **elite** waves). The buildable roster is four elements —
+**Water / Fire / Nature / Earth** — which grow into the map's own combination towers by
+fusion (see below); Light and Darkness are retired for now, their data and art left in the
+repo. Numbers come from the original Warcraft III map where the port takes them
+(see [docs/element-td-data.md](docs/element-td-data.md)). On top of that sits an
 **element-matchup** system (each is strong and
 weak against another, so tower choice vs. an enemy's armor element matters),
-**tap-to-upgrade** towers each with a small **sell button**, **time controls** (pause and
+**tap-to-open** tower panels (upgrade, fuse, sell), **time controls** (pause and
 1x/2x/3x), a gold economy with interest and streak bonuses, lives, an interactive **tutorial**,
 and a **run summary** reporting how deep you got.
 
@@ -28,17 +30,32 @@ A run has **no win condition and no last wave**. Waves 1–20 are hand-authored 
 mechanic is introduced deliberately; past that, `WaveGenerator` produces waves forever, with
 a boss every 10. The run ends when your lives run out, and the wave you reached is the score.
 
-Every 3 waves the run pauses and offers **three roguelite upgrades** — element damage,
-attack speed, poison, slow strength, economy, or an **Elemental** that raises one of the
-six element tracks. Elements are what gate the **dual towers**: raise both halves of a
-recipe (Water + Light = Ice, Fire + Water = Steam, ...) and it appears in the palette,
-exactly as the original map gates towers by which elements you own. They last the run and
-reset with it. Adding one is a row in `Game.UPGRADE_POOL`.
+On waves 3, 7, 11 and 15 an **element avatar boss** arrives — one for each of the four
+elements, in a random order every run. Beat it and that element unlocks for **fusion** for
+the rest of the run; let it walk off the end of the road and you lose it.
+
+Fusion is how cross-element power enters a run, and it happens on the board rather than on a
+card. Tap any tower and its panel offers to absorb an unlocked element for gold. The set of
+elements a tower carries is its whole identity:
+
+| Elements | What it becomes |
+|---|---|
+| 1 | one of the four base towers |
+| 2 | a **dual** — Steam, Lava, Sun, Clay, Well, Roots |
+| 3 | a **triple** — Infernal, Rainbow, Dinosaur, Flesh Golem |
+| 4 | **Pure** — nothing resists it and no enemy rule stops it |
+
+Order does not matter, exactly as in the source map: Fire absorbing Water and Water
+absorbing Fire both produce Steam. All ten combinations, their names, their per-tier name
+ladders (Steam → Vapor → Immolation) and their abilities are read out of the original
+Warcraft III map — see [docs/element-td-data.md §3.1](docs/element-td-data.md). Fusing is
+permanent, and a fused tower keeps climbing the same five-level damage ladder as every
+other tower. Adding a combination is a row in `Game.FUSIONS`.
 
 Losing banks **Essence**, scaled to the wave you reached, and Essence buys permanent
 **Workshop** levels from the title screen — tower damage, attack speed, range, starting gold
 and starting lives. Those apply to every run afterwards, through the *same* modifier fold
-the roguelite cards use. Progress is saved to `user://save.json` (versioned, atomic, with a
+the fusion ladder builds on. Progress is saved to `user://save.json` (versioned, atomic, with a
 `.bak` fallback), and time away earns a capped **offline** Essence trickle.
 
 Towers are **data-driven**: every tower is one entry in `Game.TOWER_DEFS` with a
@@ -59,8 +76,8 @@ tower reference this is growing toward.
    title screen; press **Play** there to start a run.
 
 No plugins or downloads are required. Two kinds of art now sit side by side: the
-**painted** board and all six element towers, five tiers each (`assets/art/`), and the
-**code-drawn** everything else — enemies, the fifteen dual towers, projectiles, every
+**painted** board and the element towers, five tiers each (`assets/art/`), and the
+**code-drawn** everything else — enemies, every fusion tower, projectiles, every
 effect and all of the UI — still built from primitive shapes in `_draw()`. Every sound is still synthesized
 at startup; no audio file ships with the game. See §6.
 
@@ -73,9 +90,13 @@ at startup; no audio file ships with the game. See §6.
   cover** — so you can judge placement before spending the gold.
 - **Hover a placed tower** to light up its range ring. Ranges stay faint otherwise, so a
   full board doesn't turn into a tangle of overlapping circles.
-- **There is no build grid.** A tower stands wherever you drop it, as long as it is off the
-  road, out of the water, inside the play area and not on top of another tower — one rule,
-  `Game.can_build_at()`, and the green/red ghost is that rule drawn. While a drag is in
+- **There is no build grid, but there is terrain.** A tower stands wherever you drop it, as
+  long as it is off the road, on OPEN GROUND — grass, never trees, cliffs or water —
+  inside the play area and not on top of another tower. One rule, `Game.can_build_at()`,
+  and the green/red ghost is that rule drawn. Where the open ground is comes from the
+  painting itself, not from hand-placed zones: `tools/build_mask.py` reads the board art and
+  writes a mask the placement rule samples, so the forest really is closed ground rather
+  than merely looking closed. While a drag is in
   progress the ground that is closed to building is shaded, so the margins the painting
   cannot show (the road's keep-out, the strip under the palette) are visible exactly when
   you are asking about them. The ghost never disappears over bad ground; it turns red,
@@ -83,9 +104,10 @@ at startup; no audio file ships with the game. See §6.
 - **Click / tap a tower to upgrade it** (up to level 5) — each level raises **damage only**,
   and a painted tower visibly grows with it. A green ▲ chevron floats beside any tower whose
   next level you can already afford, so you can spot upgrade candidates at a glance.
-- **Tap the small red × at a tower's bottom-right corner to sell it** — refunds half of
-  everything you spent on it. Keeping every action on the tower itself means the whole
-  board stays reachable with a thumb on a phone.
+- **Tap a tower to open its panel** — upgrade, absorb an unlocked element, or sell.
+  Selling refunds most of everything you spent on it, fusion costs included. The panel
+  replaced a 26px sell "×" tucked into the corner of the tower's cell, which was the
+  smallest tap target in the game and the one thing that could not be made bigger.
 - Towers always target the enemy **closest to the exit** ("First") — the one most likely
   to cost you a life. There is no per-tower target picker.
 - **The whole board is on screen at once.** The world is slightly larger than the design
@@ -93,7 +115,8 @@ at startup; no audio file ships with the game. See §6.
   you cannot see.
 - **Time controls** sit in the bottom-left corner: **Pause** (or **Space**) freezes
   everything, and the speed button (or **F**) cycles **1x → 2x → 3x**.
-- **Ground-only towers** (Earth) can't hit flyers; the other five can.
+- **Ground-only towers** (Earth) can't hit flyers — but fusing Earth into Lava or any
+  triple lifts that restriction, which is the source map's own rule.
 - **Upgrading raises damage only.** Range and fire rate are fixed per element for the
   whole run, so a Pure Fire still has Fire's short reach and quick cadence. The five
   tiers cost 50 / 175 / 788 / 3544 / 24444 gold.
@@ -144,23 +167,22 @@ godottowerdefense/
     ├── game.gd              # "Game" autoload: shared state, placement rule + TOWER_DEFS
     ├── meta.gd              # "Meta" autoload: Essence, Workshop levels, offline reward
     ├── workshop.gd          # Between-runs screen: spend Essence on permanent upgrades
-    ├── run.gd               # "Run" autoload: this run's upgrades, unlocks, folded mods
+    ├── run.gd               # "Run" autoload: avatar boss order, unlocked fusions, mods
     ├── tower_mods.gd        # Folded modifier totals for one (tower id, element) pair
-    ├── upgrade_choice.gd    # The 3-card between-waves reward screen
     ├── wave_generator.gd    # Endless wave definitions past the seed table
     ├── tutorial.gd          # Training flow: placement, two groups, upgrade, hand-off
     ├── tutorial_map.gd      # Draws the separate close map + legal-clearings/road overlay
     ├── audio.gd             # "Audio" autoload: synthesized chiptune SFX + music
     ├── enemy_index.gd       # "EnemyIndex" autoload: per-frame spatial hash for targeting
     ├── menu.gd              # Title screen: play / how-to-play / sound / quit
-    ├── main.gd             # Wires the level together (placement, upgrades, sell)
+    ├── main.gd             # Wires the level together (placement, upgrade, fuse, sell)
     ├── map.gd              # Draws the painted board (+ the traced-road overlay, off)
     ├── grid.gd             # Shades the ground you may NOT build on, during a drag
     ├── sprites.gd          # Loads the painted tower art + its ground anchor; null
     │                       # for anything not painted yet, so the code art falls back
     ├── enemy.gd            # Path walking, health, flyer visuals, slow/poison
     ├── enemy_layer.gd      # Draw-only child layer for enemy.gd (body / overlay split)
-    ├── tower.gd            # Generic tower: targeting, stats, click-upgrade + sell ×
+    ├── tower.gd            # Generic tower: targeting, stats, element set + fusion
     ├── tower_behavior.gd   # Base strategy: what a tower does with its frame
     ├── bolt_behavior.gd    # The default behavior: cooldown -> one homing bolt
     ├── projectile.gd       # Homing projectile: damage, splash, slow, poison
@@ -279,8 +301,9 @@ costs, and the mutable `gold` / `lives` with signals. Four more autoloads sit be
 (`scripts/enemy_index.gd`, the per-frame enemy spatial hash used for targeting).
 
 **Towers pull modifiers from `Run`; nothing is pushed into them.** A tower re-derives its
-stats when `Run.modifiers_changed` fires, and a tower built *after* a card was picked reads
-the same source on its first `_recompute()` — so there is no back-fill step to forget. Per-
+stats when `Run.modifiers_changed` fires, and a tower built *after* a Workshop level was
+bought reads the same source on its first `_recompute()` — so there is no back-fill step to
+forget. Per-
 frame cost is zero: `Run` folds the modifier list into one `TowerMods` per
 (tower id, element) pair and caches it until the set changes.
 
@@ -302,7 +325,11 @@ editing three files and hunting for un-named literals; it is now one file.
 - **`Game.can_build_at(pos, others)`** *is* the placement rule, and the only one: inside
   the play area (`PLAY_TOP` … `PLAY_RIGHT`, so no tower is half under the HUD bar or under
   the palette, which also eats the click), at least `ROAD_KEEPOUT` from the road, clear of
-  every circle in `OBSTACLES`, and at least `TOWER_GAP` from any tower already standing.
+  every circle in `OBSTACLES`, on open ground per the board's build mask (nine samples
+  around the tower's base, so it cannot perch on the last grass texel with its back in a
+  tree), and at least `TOWER_GAP` from any tower already standing. A board that publishes an
+  explicit `active_build_zones` allowlist — the tutorial does — uses that INSTEAD of the
+  mask, never both.
   One radius — `TOWER_RADIUS` — does placement, overlap, hit-testing and the drawn
   footprint, so what you can build on, what you can tap and what you can see are the same
   disc.
@@ -350,11 +377,12 @@ editing three files and hunting for un-named literals; it is now one file.
   barrel twitching between equal candidates and skips the scan on most frames. When it
   does need a new target it queries **`EnemyIndex`** (see below) rather than the whole
   enemy group, so the scan looks only at enemies near the tower. It tracks an upgrade
-  `level` (pips + green upgrade chevron) and `total_spent`. A click on the tower upgrades
-  it; a tap on the small red **×** at its bottom-right corner (`is_sell_hit`) sells it —
-  no info panel, so the actions live on the tower itself and stay reachable on a phone.
-  It draws itself from **`sprites.gd`** if its element and tier have been painted (today:
-  all six elements, five tiers each) and from the code art if not — which is still what the
+  `level` (pips + green upgrade chevron), the `elements` it carries (a row of coloured dots
+  once it has been fused) and `total_spent`. A click anywhere on the tower opens its panel;
+  upgrading, fusing and selling all live there. It draws itself from **`sprites.gd`** if its
+  element and tier have been painted — but only while it is UNFUSED, since the painted sets
+  are per base element and a Steam tower wearing the painted Fire art would be the one place
+  where what you see and what the tower is disagree. Every fusion is code art, which is what
   fifteen duals get, and is what let the board be repainted one element at a time. A sprite is hung by its **ground anchor** — the
   median middle of the bottom 4% of its opaque rows, *not* the lowest row alone, which on a
   painted tower is a sliver of one rock — so the base sits on the spot the tower occupies, and
@@ -374,8 +402,9 @@ editing three files and hunting for un-named literals; it is now one file.
   — the tower's element vs. the enemy's armor element.
 - **`Main`** handles input: palette drags build the chosen tower wherever the drop is
   legal, and a click within `TOWER_RADIUS` of a placed tower (`_tower_at`, nearest wins)
-  either upgrades it or, if it hit the corner ×, sells it (`_upgrade_tower`
-  / `_sell_tower`). It also owns the `Camera2D` and applies the screen shake that
+  opens the tower panel above it. The panel only REPORTS what was pressed; `Main` spends the
+  gold and changes the board (`_upgrade_tower` / `_fuse_tower` / `_sell_tower`), so exactly
+  one file mutates a tower. It also owns the `Camera2D` and applies the screen shake that
   `Game.shake_requested` broadcasts, so an `Enemy` can ask for a kick without knowing the
   camera exists. It also applies `Game.use_board_for_wave()` before WaveManager spawns the
   first enemy of a chapter, so painting, pathing and new placement checks change together;
@@ -410,7 +439,9 @@ editing three files and hunting for un-named literals; it is now one file.
 | On-kill payloads | `TOWER_DEFS` `gold_on_kill`/`life_on_kill_chance`/`execute_chance` | Money pays gold, Life has a 2% chance to return a life, Death has a 4% chance to kill outright (never a boss). Applied in `projectile.gd` `_apply()`, which is the only place a kill can be attributed to the tower that earned it |
 | Upgrade: max level / growth | `balance.gd` `MAX_LEVEL`, `TOWER_DEFS.damage_tiers` | 5 tiers; damage only, listed explicitly per element (×5 a tier, ×10 into Pure — with the map's own Pure-row typos preserved). Range and interval never change |
 | Upgrade cost | `balance.gd` `TIER_COSTS` | 175 / 788 / 3544 / 24444, the same ladder for every element |
-| Sell refund | `tower.gd` `SELL_REFUND` | 50% of total gold spent (tap the corner × to sell) |
+| Sell refund | `balance.gd` `SELL_REFUND` / `SELL_REFUND_UNFIRED` | 80% of total gold spent, or 100% if the tower never got a shot off. `total_spent` includes fusion costs, so a Pure tower refunds against the whole road it travelled. Sell from the tower panel |
+| Fusion cost | `balance.gd` `FUSION_COSTS` | 160 / 420 / 900 gold for the 2nd, 3rd and 4th element. Scaled from the map's own 275 / 1017 combination costs against its 50-gold base tower; the map has no four-element tower, so Pure's is roughly double the triple. **Not yet measured against what a run actually banks** — the number most likely to move after real play |
+| Avatar bosses | `balance.gd` `ELEMENT_BOSS_*`, `game.gd` `WAVES` | Waves 3/7/11/15, one per element in a random order per run (`Run.boss_elements`, drawn from the run seed). HP ×5, speed ×0.7, reward ×8, costs 3 lives — softer than the two set-piece bosses because there are four of them and the first lands on wave 3. Killing one unlocks its element for fusion; leaking it does not |
 | Targeting | `tower.gd` `_find_target()` | Fixed to "First" — the enemy furthest along the path (closest to the exit); no per-tower picker |
 | Game speed | `hud.gd` `SPEEDS` | 1x / 2x / 3x via `Engine.time_scale`; pause via `get_tree().paused` |
 | Screen shake | `main.gd` `SHAKE_DECAY`, `enemy.gd` | 7px on a boss death, 4px on a leak, bled off at 26 px/s |

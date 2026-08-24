@@ -25,15 +25,18 @@ var splash_mult: float = 1.0
 ## a 0.55 factor would make the enemy faster, which is the opposite of what the card says.
 var slow_power: float = 1.0
 
-# --- BUILD NEXT #9 card pool (GAME_STRATEGY_V2.md §6.3) -------------------------
+# --- Conditional and rule-shaped stats ------------------------------------------
+# Written by nothing today: the card pool that set them is gone, and a fusion writes its
+# stats through the DEFINITION (Game.FUSIONS -> Tower._recompute's `_eff`) rather than
+# through this fold. They stay because this is the Workshop's expansion surface — a new
+# WORKSHOP_DEFS row reaches every one of them with no engine work — and because each is
+# already read at its call site in tower.gd / projectile.gd.
 var burn_time_mult: float = 1.0   ## Wick: burn duration.
 var slow_time_add: float = 0.0    ## Permafrost: seconds added to every chill.
 var vs_flying_mult: float = 1.0   ## Spore: damage multiplier vs flying targets only.
 ## Backdraft: burn ALSO applies this slow factor (1.0 = no slow) — read at hit time in
 ## projectile.gd, not baked into a static stat, since it rides whichever hit actually lands.
 var burn_slow_factor: float = 1.0
-## Aftershock: fraction of splash damage re-dealt 0.3s later at the same point (0 = off).
-var splash_echo_mult: float = 0.0
 ## Overclock: every Nth shot deals double damage (0 = off).
 var overclock_every: int = 0
 ## Groundwork: Earth ignores can_hit_flying and hits half splash radius (both toggle
@@ -66,7 +69,6 @@ func fold(effect: Dictionary) -> void:
 		"slow_time": slow_time_add += v
 		"vs_flying": vs_flying_mult *= v
 		"burn_slow": burn_slow_factor *= v
-		"splash_echo": splash_echo_mult = v
 		"overclock_every": overclock_every = int(v)
 		"groundwork": groundwork = true
 		"target_lowest_hp": target_lowest_hp = true

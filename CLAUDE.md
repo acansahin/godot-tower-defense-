@@ -41,25 +41,37 @@ correct). Everything after a bare `--` reaches `OS.get_cmdline_user_args()`:
 
 Arg-gated harnesses currently in `main.gd`, none of which can fire in a normal session:
 `--dump-stats` (every tower's stats at every level), `--dump-waves` (60 wave definitions
-plus a generator-purity check), `--dump-mods` (roguelite modifiers apply / stay in scope /
-unwind on reset), `--dump-meta` (essence curve, workshop costs, purchases reaching towers,
+plus a generator-purity check), `--dump-fusions` (all eleven `Game.FUSIONS` rows at every
+level, each as a DPS multiple of the base elements printed above it, plus every fusion key
+round-tripped through `fusion_key()` — a typo'd key silently falls back to the base
+definition, so the tower keeps working, keeps its old stats and pockets the gold),
+`--dump-bosses` (20 run seeds' avatar-boss orders: proves each element appears exactly once
+and that the SEED, not the global RNG, picks the order), `--dump-matchup`
+(`element_mult_best` for every element set against every armour — the table to read before
+arguing about Pure's balance, since it is the proof a four-element set is never resisted),
+`--dump-meta` (essence curve, workshop costs, purchases reaching towers,
 settings round-trip), `--dump-board` (road length,
 cell count, and per element how much of the road one tower watches and how many towers it
 takes to watch 95% of it — plus a `raw` column measuring the same with the range cap
-lifted), `--fill-board` (a tower on every cell at max level, 8x speed, auto-picks upgrades
-AND branches (alternating a/b so both get played — BUILD NEXT #5-#6), prints each wave and
-the run-over line with real WALL-CLOCK elapsed time — meaningless at 8x, but `--fill-board:1x`
-skips the speed-up for exactly this: BUILD NEXT #10 used it to measure a real Standard run at
-~4.7 minutes, though that is a maxed-board LOWER BOUND, not proof of the ~10.5 min target for
-an actual player's gradual build-up — nothing currently simulates that), `--tutorial-auto`
+lifted), `--fill-board` (a tower on every cell at max level, 8x speed, spread across the
+whole fusion ladder — a quarter stay base, a quarter become duals, then triples, then Pure —
+prints each wave with `earned=`, the gold gained since the previous wave began, and the
+run-over line with real WALL-CLOCK elapsed time plus which fusions unlocked. `earned` is a
+DELTA on purpose: this harness grants itself a million gold so placement never fails, so the
+absolute balance measures nothing while the delta is real income. Because a maxed board
+leaks nothing it is an UPPER bound — measured at ~3.7k gold banked by wave 15 and ~7.1k
+across the full 20, which is the only figure the suite has to size `Balance.FUSION_COSTS`
+against. Nothing simulates a player's gradual build-up. Elapsed is meaningless at 8x, but
+`--fill-board:1x` skips the speed-up for exactly this: BUILD NEXT #10 used it to measure a
+real Standard run at ~4.7 minutes, though that is a maxed-board LOWER BOUND, not proof of the
+~10.5 min target for an actual player's gradual build-up — nothing currently simulates that),
+`--tutorial-auto`
 (Tutorial.tscn only: clears all four element lessons and Water's upgrade without synthetic
 mouse events, printing leaks per lesson — the harness that caught BUILD NEXT #10's own
-tutorial numbers going stale against steps 5-6's damage rework), `--show-choice` (pops the
-choice screen so its `_draw` can be
-exercised), `--show-branch-choice` / `--show-branch-choice:water` (same, for the Lv3
-branch popup — Fire if no element named — without playing a tower to level 3 first),
-`--show-element-choice` (same, for Monoculture's element sub-choice popup, BUILD NEXT #9,
-without rolling it out of the card pool first), `--air-pose` (parks eight Air creeps along
+tutorial numbers going stale against steps 5-6's damage rework), `--show-fusion-panel`
+(stands one Lv3 tower on an empty board with two elements unlocked and opens its panel, so
+the panel's `_draw` can be photographed without playing to an avatar boss
+first), `--air-pose` (parks eight Air creeps along
 the road on an EMPTY board so the flyer's drawing can be photographed — `--fill-board`
 buries the road and kills them at the spawn point, and a normal run never reaches the Air
 wave without leaking away all twenty lives first), `--boss-pose` (stages both bosses' rules —
@@ -68,10 +80,10 @@ can be photographed without playing to wave 10 or 20 first), `--shot` (saves one
 `user://shot.png` and prints the path — the only harness that shows you the board rather
 than describing it, so **drop `--headless` for this one**; `--shot:20` waits 20s first and
 lands in `shot_20.png`, and several may be passed at once to watch a run across waves),
-`--auto-pick` (answers the choice screen — **any unattended run that must reach wave 3
-needs this**: the choice screen pauses the tree, which stops the SceneTree timers every
-delayed `--shot` waits on, so without it the run silently stops and the later shots never
-fire), `--go-back` (rewinds the
+`--auto-pick` (buys every fusion as soon as it is unlocked and affordable, so an unattended
+run climbs to Pure instead of finishing on four base towers. It is no longer needed just to
+keep a delayed `--shot:N` alive: nothing pauses the tree any more, since the three popups
+that did are gone), `--go-back` (rewinds the
 last-seen stamp 4h so the next launch collects an offline reward), `--wipe-save` (clears
 `user://save.json`).
 
@@ -134,9 +146,31 @@ same tool's scan found. Re-trace after any change to the art and check the resul
 the only check that catches enemies walking beside the road rather than on it.
 
 **There is also no build grid.** A tower stands wherever `Game.can_build_at()` allows: off
-the road by `ROAD_KEEPOUT`, out of `OBSTACLES`, inside `PLAY_TOP`/`PLAY_RIGHT`, and
-`TOWER_GAP` from its neighbours. `--dump-board` and `--fill-board` therefore sweep a
-lattice (`main.gd` `_buildable_lattice()`) instead of walking a cell list.
+the road by `ROAD_KEEPOUT`, out of `OBSTACLES`, inside `PLAY_TOP`/`PLAY_RIGHT`, on open
+ground (below), and `TOWER_GAP` from its neighbours. `--dump-board` and `--fill-board`
+therefore sweep a lattice (`main.gd` `_buildable_lattice()`) instead of walking a cell list.
+
+**You cannot build on trees, cliffs or water, and that rule is read off the painting.**
+`python tools/build_mask.py <board.png>` writes `<board>_build.png`, a 1-texel-per-8px mask
+saying where there is open ground; `Game` loads it for the active board (`BUILD_MASKS`) and
+`can_build_at()` samples nine points around the tower's base against it. Re-run the tool
+after a repaint and the rule follows the art — there is nothing to re-measure by hand.
+
+Two things about it are load-bearing:
+
+- **The classifier is `g - b`, not "is it green".** Conifers are extremely green; what makes
+  a meadow a meadow is that it has almost no blue in it. Grass measures (110-128, 110-129,
+  22-28) and a tree (16, 30, 14), so green-over-blue separates them cleanly where a plain
+  green test cannot. `build_mask.py`'s docstring has the rest.
+- **An explicit `active_build_zones` allowlist WINS OUTRIGHT over the mask**, it does not
+  intersect with it. The tutorial draws rings around six pockets and means exactly those;
+  intersecting the two silently moved the tutorial's own spots and broke a lesson, which is
+  how this rule was found.
+
+The cost is measured, not guessed. On the winding board the mask takes buildable spots from
+**156 to 29**, and road coverage from 94%/89% (Water/Fire) to **84%/74%** — a third of the
+road now has no tower that can reach it, which is the point of terrain and not a bug. Re-run
+`--dump-board` after any change to the mask, the thresholds, or the art.
 
 The road that came before it was **one inward turn of the original's spiral**, ported from
 the map's own pathing data — `python tools/extract_w3x.py "<map>.w3x" pathing` prints the
@@ -209,20 +243,22 @@ Two boundaries worth keeping straight:
 source on its first `_recompute()` — so there is no back-fill step to forget.
 
 [scripts/main.gd](godottowerdefense/scripts/main.gd) is the level wiring hub — placement,
-upgrade, sell, the roguelite choice, and all signal connections.
+upgrade, fusion, sell, and all signal connections. Every one of those actions is reported by
+[scripts/tower_panel.gd](godottowerdefense/scripts/tower_panel.gd) and *performed* by Main,
+so exactly one file mutates a tower.
 
 To add content, add a **data row**, not a scene or script:
 
 | Adding a… | Goes in |
 |---|---|
 | Tower | `Game.TOWER_DEFS` + its id in `Game.TOWER_ORDER` **to make it buildable** |
-| Roguelite upgrade | `Game.UPGRADE_POOL` (stats it may touch: `TowerMods.fold`) |
-| Permanent upgrade | `Game.WORKSHOP_DEFS` — effects must be **per-level steps**, not totals |
+| Fusion (dual / triple / Pure) | a row in `Game.FUSIONS`, keyed by its element names **sorted and joined with `+`** (`fusion_key()` builds the same key from a tower's element set, which is what makes Fire+Water and Water+Fire one tower). It replaces the base definition rather than layering over it, so the row must be complete: `damage_tiers`, `range`, `interval`, `color`, `names`, `desc`. **No code change** — the payload fields are the ones `projectile.gd` already reads |
+| Permanent upgrade | `Game.WORKSHOP_DEFS` — effects must be **per-level steps**, not totals. This is the only thing left that writes `TowerMods` |
 | Saved field | a key in the relevant `Save` section; bump `SAVE_VERSION` + add a `_migrate` branch if the shape changes |
 | Wave (first 20 only) | `Game.WAVES` — past that, waves are generated |
+| Avatar boss wave | a `Game.WAVES` row with `boss_rule: "element_avatar"` and **no `element`**, plus its wave number in `Balance.ELEMENT_BOSS_WAVES`. The element is drawn per run from `Run.boss_elements`; the two lists must stay the same length or a boss wave silently gets a neutral avatar |
 | Creep archetype | `Game.WAVE_TYPES` |
-| Tower behavior (beam/charge/…) | a `TowerBehavior` subclass + a case in `Tower._make_behavior` — but only if the CONTROL FLOW differs. An aura is data read by the neighbours; an on-kill payout is data read by the projectile. Of fifteen duals exactly one (Magic) needed a subclass |
-| Dual tower | a row in `Game.DUAL_RECIPES` + a `TOWER_DEFS` entry; it becomes buildable when `Run.element_level` reaches `DUAL_ELEMENT_LEVEL` in both its elements |
+| Tower behavior (beam/charge/…) | a `TowerBehavior` subclass + a case in `Tower._make_behavior` — but only if the CONTROL FLOW differs. An aura is data read by the neighbours; an on-kill payout is data read by the projectile. Of the eleven fusions, none needed a subclass |
 | Sound effect | a block in `audio.gd`'s `_build_all()` |
 | Painted creep | `assets/art/enemies/<archetype>.png`, named for its `Game.WAVE_TYPES` key (`normal.png`, `tank.png`, …). **No code change** — `sprites.gd` `enemy()` finds it and `enemy.gd` prefers it over the blob. Art faces SCREEN-LEFT and is mirrored by `_facing`; a boss is an archetype wearing a crown, not its own file. Numbered files (`normal_1.png`…`normal_6.png`) are an animation cycle of ANY length — `Sprites.pose_count()` counts them and both carriers divide their cycle by the answer, so re-animating a creep is a file copy; one file alone is a still. Only the `"air"` row in `WAVE_TYPES` flies, and its cycle is a WINGBEAT, not a stride. Generate sheets from [docs/creep-art-prompt.md](godottowerdefense/docs/creep-art-prompt.md) — one creature per sheet, one frame per row, TWELVE of them: the cycle is one stride played at the creep's own walking rate, so six frames measured 6.2 fps at wave 2 and the eye counts them |
 | Painted tower set | `assets/art/towers/<element>_1..5.png`, cut from one generated sheet by `python tools/cut_sprites.py <sheet.png> <out_dir> <element> 220`. **No code change** — `sprites.gd` picks the files up by name and `tower.gd` prefers them over the code art. Keep the sheet as `_source_<element>.png` beside them, and generate it from the template in [docs/tower-art-prompt.md](godottowerdefense/docs/tower-art-prompt.md) — **attach `board_source.png` to the prompt**; every set generated from words alone had to be redone |
@@ -311,6 +347,8 @@ rather than Pillow:
 
 ```
 python tools/trace_road.py                        # re-derive Game.PATH + OBSTACLES from the board art
+python tools/build_mask.py <board.png>            # where a tower may stand: open ground, not trees/cliffs/water
+python tools/water_mask.py <board.png> <mask.png> # where the water is, for map.gd's ripple shader
 python tools/cut_sprites.py <sheet> <dir> <name> <max_h>   # split a generated sheet into sprites
 python tools/key_white.py <in> <out>              # restore alpha to a sheet flattened onto white
 python tools/stitch_sheets.py <out> <a> <b>       # one cycle split across two files -> one sheet
@@ -344,10 +382,22 @@ reasoning about these numbers instead of reading them:
 - **`udg_HP_exponent_base = 1.23` in `war3map.j` is a decoy** — declared, never read. The
   real wave curve is `75 × 1.16^(n-1)`, baked into a separate unit type per level.
 
-Two deliberate departures from the map are marked in the code and must stay marked:
-`Balance.START_GOLD` (the map's 30 assumes towers are researched, not bought) and the
-slow/poison/splash payloads still riding on Water/Nature/Earth (the map puts those on
-dual towers, which we have not built).
+Three deliberate departures from the map are marked in the code and must stay marked:
+`Balance.START_GOLD` (the map's 30 assumes towers are researched, not bought); the
+slow/poison/splash payloads still riding on Water/Nature/Earth (the map puts those on the
+combination towers); and the **Pure** row in `Game.FUSIONS`, which is a four-element tower
+the map has no equivalent for — it has six elements and its recipes stop at three. Its
+`chaos` damage rule is ported, its name is borrowed from the map's own fifth single-element
+tier, but the tower itself is ours.
+
+The **combination numbers are not ported, and the reason is worth knowing**: the map's
+ladder is 50 → 175 → 788 → 3544 → 24444, some sixty times steeper than ours, and V2 already
+replaced the four base elements' stats with its own design values. So `Game.FUSIONS` takes
+the map's *identity and relative ordering* (Clay hits hardest of the duals, Roots barely
+damages at all, Infernal tops the triples) and re-derives the numbers on our scale. Every
+row records the map value it came from. What IS ported verbatim: the recipes, the tower
+names, the per-tier name ladder, the `chaos` attack type, the explicit cooldowns, and each
+ability — see docs/element-td-data.md §3.1.
 
 ## Further reading
 
@@ -355,13 +405,17 @@ dual towers, which we have not built).
   controls, scene trees, and the tuning table. **Keep it updated when gameplay changes**;
   it has gone stale before.
 - [godottowerdefense/docs/element-td-towers.md](godottowerdefense/docs/element-td-towers.md)
-  — the design target (6 elements, 15 duals, 20 triples) versus what's actually built
-  (6 elements; the duals exist as data but the combination mechanic does not).
+  — the map's full roster (6 elements, 15 duals, 20 triples). **Written before the cut to
+  four elements**, so read it as a description of the SOURCE, not of what is built: the port
+  now uses the four elements and the ten combinations that avoid Light and Darkness, plus
+  Pure. docs/element-td-data.md §3.1 is the table of what is actually in the game.
 - [godottowerdefense/docs/element-td-data.md](godottowerdefense/docs/element-td-data.md)
-  — every number extracted from the source maps, and how to re-derive it.
+  — every number extracted from the source maps, and how to re-derive it. §3.1 is the ten
+  combinations the port uses, with their real damage, cooldown, attack type and ability text.
 - [godottowerdefense/docs/tower-art-prompt.md](godottowerdefense/docs/tower-art-prompt.md)
   — the prompt template the six painted tower sets were generated from, and what each of
-  its constraints protects against downstream. Use it for the duals.
+  its constraints protects against downstream. The eleven fusions are all code art today;
+  this is the template if any of them is ever painted.
 - [godottowerdefense/docs/creep-art-prompt.md](godottowerdefense/docs/creep-art-prompt.md)
   — the same for a creep ANIMATION sheet: the six-frame run cycle, the wingbeat variant for
   Air, and why each constraint exists (the anchor, the per-creature height scaling, the row

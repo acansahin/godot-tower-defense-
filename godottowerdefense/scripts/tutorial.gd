@@ -183,9 +183,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	var tower := _tower_at(get_global_mouse_position())
 	if tower == null:
 		return
-	if tower != _water_tower or tower.is_sell_hit(get_global_mouse_position()):
+	# The sell "×" is gone from the tower body (upgrading, fusing and selling all live on the
+	# tower panel now), so the only thing left to reject here is a tap on the wrong tower.
+	if tower != _water_tower:
 		Audio.play("denied")
-		hint_label.text = "Tap the Water tower's body to upgrade. The red × sells towers during a real run."
+		hint_label.text = "Tap the Water tower to upgrade it."
 		return
 	if not _upgrade_water():
 		Audio.play("denied")
