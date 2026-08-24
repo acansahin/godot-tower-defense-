@@ -9,12 +9,12 @@ class_name Tower
 ## removed without the tower drifting.
 ##
 ## What a tower DOES with its frame lives behind TowerBehavior (see tower_behavior.gd) —
-## every tower today uses BoltBehavior, and an element that needs a structurally different
-## attack gets a new behavior rather than a branch in here.
+## every tower today uses BoltBehavior, and a tower that needs a structurally different
+## attack gets a new behavior rather than a conditional in here.
 
 ## Targeting is fixed to the enemy closest to the exit ("First"): that is what actually
 ## protects your lives — a nearly-escaped leader matters more than whatever wandered past
-## the muzzle. There is no per-tower target picker (clicking a tower upgrades it instead).
+## the muzzle. There is no per-tower target picker (clicking a tower opens its panel).
 
 var id: String = ""
 var display_name: String = ""
@@ -40,61 +40,69 @@ var execute_chance: float = 0.0      ## chance (0..1) to kill outright on hit; n
 var gold_on_kill: int = 0            ## extra gold when THIS tower lands the killing blow (Money).
 var life_on_kill_chance: float = 0.0 ## chance (0..1) that a kill returns one life (Life).
 
-# --- Branch payload (BUILD NEXT #5-#6, GAME_STRATEGY_V2.md §4) -----------------------------
-# Fire's burn (Blaze/Wildfire): a separate DoT channel from `poison_dps`/`poison_time` above,
-# because burn STACKS and poison does not — see Enemy.apply_burn / apply_poison.
+# --- Damage-over-time and debuff payload ----------------------------------------
+# Burn is a separate DoT channel from `poison_dps`/`poison_time` above, because burn STACKS
+# and poison does not — see Enemy.apply_burn / apply_poison. Lava (Fire+Earth) is the fusion
+# that carries it, on top of base Fire; the stacking, spreading, crack and knockback fields
+# below have no producer in Game.FUSIONS today and are kept for the same reason
+# execute_chance and gold_on_kill are: a payload the data may switch on.
 var burn_dps: float = 0.0
 var burn_time: float = 0.0
 var burn_max_stacks: int = 1
-var burn_spread_radius: float = 0.0   ## Wildfire: also applies (at half power) within this radius.
-var burn_doubles_at_max: bool = false ## Cinderheart: burn ticks 2x once stacked to burn_max_stacks.
-var burn_spreads_on_death: bool = false  ## Firestorm (simplified — see TOWER_BRANCHES comment).
+var burn_spread_radius: float = 0.0   ## Burn also applies (at half power) within this radius.
+var burn_doubles_at_max: bool = false ## Burn ticks 2x once stacked to burn_max_stacks.
+var burn_spreads_on_death: bool = false  ## A burning death lights its neighbours.
 var poison_ignores_matchup: bool = false ## Nature's THORN: poison bypasses Game.element_mult entirely.
-var poison_spreads_on_death: bool = false  ## Plague: poison passes to the nearest survivor on death.
-var crack_bonus: float = 0.0          ## Siege: +this fraction of damage taken from ALL sources.
+var poison_spreads_on_death: bool = false  ## Poison passes to the nearest survivor on death.
+var crack_bonus: float = 0.0          ## Armor crack: +this fraction of damage taken from ALL sources.
 var crack_time: float = 0.0
-var crack_spread_radius: float = 0.0  ## Sunder: crack also spreads within this radius.
-var knockback_chance: float = 0.0     ## Undertow: chance per hit to push the target back.
+var crack_spread_radius: float = 0.0  ## Crack also spreads within this radius.
+var knockback_chance: float = 0.0     ## Chance per hit to push the target back.
 var knockback_distance: float = 0.0
-var knockback_chill_on_land: bool = false  ## Riptide: applies this tower's slow on landing.
-var chill_pulse_every: int = 0        ## Glacier: every Nth shot also chills everyone in range.
-var no_attack: bool = false           ## Grove: never acquires a target or fires.
-var _shots_fired: int = 0             ## Counts toward chill_pulse_every; never resets.
-## "a" or "b" once chosen at Lv3 (branch_choice.gd), "" before then. Persists for the rest of
-## the tower's life — there is no respec (GAME_STRATEGY_V2.md §4.6: "Kararı kararsızlaştırır").
-var branch: String = ""
+var knockback_chill_on_land: bool = false  ## Applies this tower's slow where the target lands.
+var _shots_fired: int = 0             ## Counts toward overclock_every; never resets.
+# --- Fusion payload -------------------------------------------------------------------
+## Every element this tower carries, its own first, in the order they were absorbed. This
+## IS the tower's identity: one entry means a base Game.TOWER_DEFS tower, two/three/four mean
+## the matching Game.FUSIONS row. Never shrinks — absorbing an element is permanent, the same
+## rule the branch choice it replaces had (GAME_STRATEGY_V2.md §4.6).
+var elements: Array[String] = []
+## Clay: chance (0..1) that a hit applies the slow at all. 1.0 = every hit, which is what
+## every other slow in the game does and therefore the default.
+var slow_chance: float = 1.0
+## Chaos-type damage (Infernal, Rainbow, Pure): Game.element_mult_best is skipped and the
+## matchup is a flat 1.0 — no armour resists it and none amplifies it either.
+var ignores_matchup: bool = false
+## Pure only: this tower's control payload ignores Enemy.cc_immune (the wave-10 boss and the
+## `immune` archetype). Passed down to the projectile and on into apply_slow/stun/knockback.
+var pierces_rules: bool = false
+## Flesh Golem: permanent damage added per kill this tower lands. Accumulates in `_kills`,
+## which is the ONE piece of tower state _recompute() reads but does not derive — it is a
+## record of what happened, not a stat, so rebuilding from the definition cannot recover it.
+var damage_per_kill: float = 0.0
+var _kills: int = 0
 
-# --- Card payload (BUILD NEXT #9, GAME_STRATEGY_V2.md §6.3) --------------------------------
-# Everything below is folded from Run.mods_for() in _recompute(), same as damage/range/etc
-# above it — these just have no branch-data equivalent, since a card is run-wide rather than
-# a per-tower choice.
-var overclock_every: int = 0          ## Overclock: every Nth shot deals double damage.
-var groundwork: bool = false          ## Groundwork: Earth hits flying, splash halved.
-var target_lowest_hp: bool = false    ## Deadeye: targets lowest HP instead of furthest along.
-var burn_slow_factor: float = 1.0     ## Backdraft: burn also applies this slow (1.0 = off).
-var chill_burn_mult: float = 1.0      ## STEAM: this tower's burn vs a chilled target.
-var chill_hit_mult: float = 1.0       ## EROSION: this tower's direct hits vs a chilled target.
-var vs_flying_mult: float = 1.0       ## Spore: damage multiplier vs flying targets.
+# --- Run-wide modifiers, folded from Run.mods_for() in _recompute() --------------
+# Everything below arrives through the fold rather than through the DEFINITION, which is
+# what separates it from every field above: a fusion changes what this tower IS, while these
+# apply to whole classes of tower at once. Only the Workshop writes them today.
+var overclock_every: int = 0          ## Every Nth shot deals double damage.
+var groundwork: bool = false          ## Ground-only towers hit flying, splash halved.
+var target_lowest_hp: bool = false    ## Target lowest HP instead of furthest along.
+var burn_slow_factor: float = 1.0     ## Burn also applies this slow (1.0 = off).
+var chill_burn_mult: float = 1.0      ## This tower's burn vs a chilled target.
+var chill_hit_mult: float = 1.0       ## This tower's direct hits vs a chilled target.
+var vs_flying_mult: float = 1.0       ## Damage multiplier vs flying targets.
 
 ## The Game.TOWER_DEFS entry this tower was built from. Read-only (TOWER_DEFS is a const
 ## Dictionary, so Godot rejects writes to it) and re-read on every _recompute() — it is
 ## the single source of truth for the tower's base stats. Fields below Lv3 come straight from
-## here; Lv3+ layers Game.TOWER_BRANCHES[element][branch] on top — see _recompute().
+## here for an unfused tower, and from Game.FUSIONS once it carries two or more elements.
 var _def: Dictionary = {}
-## `_def` plus any branch overrides for the current level — see _recompute(). A real
-## Dictionary (not just the instance fields above) so a NEIGHBOUR's aura reach can read it
-## too, for a branch-granted aura (Grove) that has no equivalent in `_def` alone.
+## A working copy of `_def` — see _recompute(). A real Dictionary (not just the instance
+## fields above) so a NEIGHBOUR's aura reach can read this tower's CURRENT identity, which
+## for Sun and Well is a fusion row rather than the base element they were built as.
 var _eff: Dictionary = {}
-
-# BLOOM / BEDROOT (BUILD NEXT #9): both use the same 140px adjacency radius the branch
-# system's own cross-element cards (§4.3's aside on Grove) already established as legible at
-# board scale. BEDROOT's payload has no exact number in GAME_STRATEGY_V2.md — chosen as half
-# of Nature's own Lv1 base (12 dps / 3s) so Earth gains a real but secondary poison, not a
-# second Nature tower.
-const BLOOM_BEDROOT_RADIUS := 140.0
-const BLOOM_POISON_MULT := 1.3
-const BEDROOT_POISON_DPS := 6.0
-const BEDROOT_POISON_TIME := 2.0
 
 ## Upgrade state. `level` is the ONLY upgrade state that exists: every stat above is
 ## derived from _def + level by _recompute(), never accumulated in place. That is what
@@ -118,16 +126,11 @@ var has_fired: bool = false
 const UPGRADE_ARROW_X := -38.0  ## Left of the stone base (r=30), still inside the 96px cell.
 const UPGRADE_CHEVRON_PERIOD := 1.4  ## Seconds for one chevron to drift up and fade out.
 
-# Sell button geometry (tower-local): a small red "×" tucked into the bottom-right corner
-# of the cell. Tapping it sells the tower; tapping anywhere else on the tower upgrades it.
-# Kept in the corner, clear of the barrel's swing and the level pips, and sized for touch.
-const SELL_BTN_POS := Vector2(30.0, 28.0)  ## Bottom-right of the base, inside the 96px cell.
-const SELL_BTN_RADIUS := 14.0              ## Drawn disc radius.
-## Tap radius, deliberately well past the drawn disc. This is the smallest target in the
-## game and it cannot get much bigger: it is a sub-region of a 96px cell, which is itself
-## only ~48 CSS px once the board is stretched onto a phone. If mis-taps (sell instead of
-## upgrade, or the reverse) prove annoying in play, the fix is a confirm step, not more px.
-const SELL_BTN_HIT := 26.0
+# The sell "×" that used to sit in the bottom-right of the cell is GONE. It was a 26px tap
+# target inside a 96px cell — roughly 13 CSS px once the board is stretched onto a phone, the
+# smallest thing in the game and the only one that could not be made bigger. Selling now
+# lives on the tower panel (tower_panel.gd) along with upgrading and fusing, which is also
+# the only place with room to show what a fusion would cost and what it would produce.
 
 var _behavior: TowerBehavior = null  ## What this tower does with its frame; see tower_behavior.gd.
 var _target: Enemy = null           ## Held between frames; see _find_target().
@@ -169,23 +172,14 @@ func set_highlighted(value: bool) -> void:
 	_highlighted = value
 	queue_redraw()
 
-## True when `world_pos` lands on the sell "×" (bottom-right corner). Main tests this on a
-## click to decide sell vs. upgrade. No rotation/scale on the tower, so world = pos + local.
-func is_sell_hit(world_pos: Vector2) -> bool:
-	return world_pos.distance_to(global_position + SELL_BTN_POS) <= SELL_BTN_HIT
-
 ## Configures this tower from a Game.TOWER_DEFS id. Call right after instantiate.
 func setup_def(def_id: String) -> void:
 	id = def_id
-	_def = Game.TOWER_DEFS[def_id]
-	# Identity + things that never scale with level.
-	display_name = _def.get("name", def_id)
-	element = _def.get("element", "")
-	element_color = _def.get("color", Color.WHITE)
-	can_hit_flying = _def.get("can_hit_flying", true)
-	build_cost = _def.get("cost", 40)
+	element = Game.TOWER_DEFS[def_id].get("element", "")
+	elements = [element] as Array[String]
+	build_cost = Game.TOWER_DEFS[def_id].get("cost", 40)
 	total_spent = build_cost
-	_behavior = _make_behavior(String(_def.get("behavior", "bolt")))
+	_behavior = _make_behavior(String(Game.TOWER_DEFS[def_id].get("behavior", "bolt")))
 	level = 1
 	_recompute()
 	queue_redraw()
@@ -199,27 +193,57 @@ static func _make_behavior(kind: String) -> TowerBehavior:
 		"charge": return ChargeBehavior.new()
 		_: return BoltBehavior.new()
 
-## Commits this tower to branch "a" or "b" for the rest of its life (branch_choice.gd calls
-## this once the player picks; --fill-board's auto-pick calls it directly). Public, unlike
-## _recompute(), because setting `branch` without also refreshing stats would leave the
-## tower showing pre-branch numbers until its next unrelated recompute.
-func set_branch(branch_id: String) -> void:
-	branch = branch_id
+## Absorbs `new_element` for the rest of this tower's life, turning it into the combination
+## its element set now names. Public, unlike _recompute(), because writing `elements`
+## without refreshing would leave the tower showing its old identity's numbers.
+##
+## Caller (main.gd) is responsible for the gold and for checking available_elements() first;
+## this guards only against a double-add, which would corrupt the fusion key.
+func add_element(new_element: String) -> void:
+	if new_element == "" or elements.has(new_element):
+		return
+	# Booked BEFORE the append, while fusion_cost() still reads the price of this step —
+	# afterwards it would quote the next one. Keeps sell_value() honest about the whole road
+	# the tower travelled, not just its build and upgrades.
+	total_spent += fusion_cost()
+	elements.append(new_element)
 	_recompute()
+	queue_redraw()
 
-## True if a tower of `element` stands within `radius` of this one. Used by BLOOM/BEDROOT
-## (_recompute() above) rather than folded into the branch/dual aura loop — see the comment
-## there for why they stay separate.
-func _has_neighbour_of(parent: Node, want_element: String, radius: float) -> bool:
-	var radius_sq := radius * radius
-	for node in parent.get_children():
-		var other := node as Tower
-		if other == null or other == self or not is_instance_valid(other):
-			continue
-		if other.element == want_element \
-				and global_position.distance_squared_to(other.global_position) <= radius_sq:
-			return true
-	return false
+## Gold to absorb the NEXT element. Indexed by how many elements the tower already has, so a
+## base tower (1) pays FUSION_COSTS[0], a dual (2) pays [1], a triple (3) pays [2].
+func fusion_cost() -> int:
+	var i := elements.size() - 1
+	if i < 0 or i >= Balance.FUSION_COSTS.size():
+		return 0
+	return int(Balance.FUSION_COSTS[i])
+
+## True while this tower can still absorb something: it is short of all four elements AND at
+## least one of the ones it lacks has had its avatar boss beaten.
+func can_fuse() -> bool:
+	return not available_elements().is_empty()
+
+## Elements this tower could absorb right now: unlocked by an avatar boss this run, and not
+## already carried. Derived on every call rather than cached, for the same reason tower stats
+## are — Run.unlocked_fusions grows mid-run and a cached list would go stale silently.
+func available_elements() -> Array:
+	var out: Array = []
+	for e in Run.unlocked_fusions:
+		if not elements.has(String(e)):
+			out.append(String(e))
+	return out
+
+## The FUSIONS row this tower's element set names, or {} while it is still a base tower.
+func fusion_def() -> Dictionary:
+	return Game.fusion_def(elements)
+
+## Counts a kill this tower landed, for Flesh Golem's permanent growth. A no-op (beyond the
+## counter) for every other tower, so projectile.gd can call it unconditionally.
+func note_kill() -> void:
+	_kills += 1
+	if damage_per_kill > 0.0:
+		_recompute()
+		queue_redraw()
 
 func can_upgrade() -> bool:
 	return level < Balance.MAX_LEVEL
@@ -250,20 +274,25 @@ func upgrade() -> void:
 ## x5 steps (x10 into Pure) and multiplying step by step keeps the result byte-identical
 ## to the table in docs/element-td-data.md. It runs at most four times.
 func _recompute() -> void:
-	# --- effective def: base + branch overrides (BUILD NEXT #5) -----------------
-	# Lv1-2 (branch == "" or level < 3) is exactly _def. From Lv3 the chosen branch's `lv3`
-	# fields overwrite matching keys; `lv4`/`lv5` layer on top again as the tower keeps
-	# climbing — each a plain Dictionary.merge(overwrite=true), so a branch only has to name
-	# the fields it actually changes. Cached on the instance (_eff) so OTHER towers' aura
-	# reads (below) see this tower's branch-aware stats too, not just its bare _def.
+	# --- which tower is this? ---------------------------------------------------
+	# The element SET picks the definition outright: one element is a base Game.TOWER_DEFS
+	# entry, two or more is the matching Game.FUSIONS row. This REPLACES the definition
+	# rather than layering over it — a Steam tower is Steam, not "Fire wearing Water", which
+	# is the map's own rule and what makes Fire+Water and Water+Fire the same tower.
+	#
+	# `_def` is re-read here rather than held from setup_def() precisely because it changes:
+	# absorbing an element is the one thing that swaps a standing tower's definition.
+	var fdef := Game.fusion_def(elements)
+	_def = fdef if not fdef.is_empty() else Game.TOWER_DEFS[id]
+	# Cached on the instance so OTHER towers' aura reads (below) see this tower's current
+	# identity, not the base element it was built as.
 	_eff = _def.duplicate(true)
-	if branch != "" and level >= 3:
-		var bdata: Dictionary = Game.TOWER_BRANCHES.get(element, {}).get(branch, {})
-		_eff.merge(bdata.get("lv3", {}), true)
-		if level >= 4:
-			_eff.merge(bdata.get("lv4", {}), true)
-		if level >= 5:
-			_eff.merge(bdata.get("lv5", {}), true)
+	# Identity follows the definition, so a fusion renames the tower and recolours it. A
+	# fused tower also climbs the map's own tier names as it levels (Steam -> Vapor ->
+	# Immolation), which Game.fusion_name spreads across our five levels.
+	display_name = Game.fusion_name(_def, level) if not fdef.is_empty() \
+			else String(_def.get("name", id))
+	element_color = _def.get("color", Color.WHITE)
 	# --- base: straight from the effective definition ---------------------------
 	damage = _eff.get("damage", 8.0)
 	# TOWER_DEFS stores range in Warcraft III units; this is the one place (with main.gd's
@@ -290,26 +319,29 @@ func _recompute() -> void:
 	execute_chance = _eff.get("execute_chance", 0.0)
 	gold_on_kill = int(_eff.get("gold_on_kill", 0))
 	life_on_kill_chance = _eff.get("life_on_kill_chance", 0.0)
+	slow_chance = _eff.get("slow_chance", 1.0)
+	ignores_matchup = _eff.get("ignores_matchup", false)
+	pierces_rules = _eff.get("pierces_rules", false)
+	damage_per_kill = _eff.get("damage_per_kill", 0.0)
 	crack_bonus = _eff.get("crack_bonus", 0.0)
 	crack_time = _eff.get("crack_time", 0.0)
 	crack_spread_radius = _eff.get("crack_spread_radius", 0.0)
 	knockback_chance = _eff.get("knockback_chance", 0.0)
 	knockback_distance = _eff.get("knockback_distance", 0.0)
 	knockback_chill_on_land = _eff.get("knockback_chill_on_land", false)
-	chill_pulse_every = int(_eff.get("chill_pulse_every", 0))
-	no_attack = _eff.get("no_attack", false)
 	can_hit_flying = _eff.get("can_hit_flying", true)
 	# --- level growth ----------------------------------------------------------
-	# An upgrade multiplies damage and NOTHING else — range and fire interval are fixed
-	# per element (or, from Lv3, per BRANCH — see above) for the rest of the run. That is
-	# the map's rule for range/interval, extended the same way GAME_STRATEGY_V2.md §2.3
-	# extends it: level always follows this same growth curve; only a branch may replace
+	# An upgrade multiplies damage and NOTHING else — range and fire interval belong to the
+	# definition, which is to say to the tower's element set, for as long as that set holds.
+	# That is the map's rule for range/interval, extended the same way GAME_STRATEGY_V2.md
+	# §2.3 extends it: level always follows this same growth curve; only a FUSION may replace
 	# what a tower IS.
 	#
-	# A def with a `damage_tiers` table is read straight out of it; the growth constants
-	# are only the fallback for the locked duals, which have no ported table yet. Either
-	# way `growth` ends up as "how much stronger than tier 1 this is", which is what the
-	# damage-over-time payloads ride.
+	# A def with a `damage_tiers` table is read straight out of it — every base element and
+	# every fusion row has one, so the growth-constant fallback below is now unreachable in
+	# practice and kept only so a def written without a table still scales rather than
+	# silently sitting at tier 1. Either way `growth` ends up as "how much stronger than tier
+	# 1 this is", which is what the damage-over-time payloads ride.
 	var growth := 1.0
 	var tiers: Array = _eff.get("damage_tiers", [])
 	if not tiers.is_empty():
@@ -321,13 +353,8 @@ func _recompute() -> void:
 		damage *= growth
 	poison_dps *= growth  # DoT scales with the tower's damage growth
 	burn_dps *= growth
-	# A branch's own flat multiplier on top of the shared growth curve (Siege's +60%
-	# damage, Blight's +80% poison) — never on the growth curve itself, so every tower of
-	# an element still climbs the identical 1.0/1.8/3.2/5.6/10.0 ladder from step 3.
-	damage *= float(_eff.get("damage_mult", 1.0))
-	poison_dps *= float(_eff.get("poison_dps_mult", 1.0))
 	# Ice's area-slow: single-target below Lv2, then widening (was _update_slow_splash).
-	# Reused from Lv5 by Earth's Fissure ultimate (TOWER_BRANCHES "slow_splash").
+	# Any def may switch it on with a "slow_splash" radius.
 	slow_splash_radius = 0.0
 	if level >= 2:
 		slow_splash_radius = float(_eff.get("slow_splash", 0.0)) \
@@ -384,19 +411,12 @@ func _recompute() -> void:
 	gold_on_kill += aura_gold_add
 	life_on_kill_chance = clampf(life_on_kill_chance + aura_life_chance_add, 0.0, 1.0)
 
-	# BLOOM / BEDROOT (BUILD NEXT #9, GAME_STRATEGY_V2.md §6.2): adjacency cards, run
-	# separately from the branch/dual aura loop above rather than folded into it — one is
-	# card-granted and keys off a SPECIFIC neighbour element, the other is branch-granted and
-	# applies to any neighbour, and a Nature tower can have Grove's aura AND be BEDROOT's
-	# beneficiary at once, so they cannot share one provider slot.
-	if parent != null:
-		if element == "nature" and Run.has_card("bloom") \
-				and _has_neighbour_of(parent, "water", BLOOM_BEDROOT_RADIUS):
-			poison_dps *= BLOOM_POISON_MULT
-		if element == "earth" and Run.has_card("bedroot") \
-				and _has_neighbour_of(parent, "nature", BLOOM_BEDROOT_RADIUS):
-			poison_dps = BEDROOT_POISON_DPS
-			poison_time = BEDROOT_POISON_TIME
+	# --- Flesh Golem's accumulated kills ----------------------------------------
+	# The one stat that is not derived. Applied AFTER the level growth and the aura so it is
+	# a flat floor the tower has earned rather than something the multipliers compound, and
+	# BEFORE the run modifiers below so the Workshop's damage bonus still covers it.
+	if damage_per_kill > 0.0:
+		damage += damage_per_kill * float(_kills)
 
 	# --- run modifiers ---------------------------------------------------------
 	# The payoff for rebuilding rather than accumulating: these are applied fresh every
@@ -435,20 +455,17 @@ func _recompute() -> void:
 	_range_sq = tower_range * tower_range
 
 ## Gold returned when this tower is sold: everything sunk into it if it never got a shot
-## off, most of it (Balance.SELL_REFUND) otherwise — or always everything, run-long, with
-## Salvage (GAME_STRATEGY_V2.md §6.3, BUILD NEXT #9). See has_fired.
+## off, most of it (Balance.SELL_REFUND) otherwise. See has_fired. `total_spent` includes
+## fusion costs, so selling a Pure tower refunds against the whole road it travelled.
 func sell_value() -> int:
-	var full := not has_fired or Run.has_card("salvage")
-	var refund := Balance.SELL_REFUND_UNFIRED if full else Balance.SELL_REFUND
+	var refund := Balance.SELL_REFUND_UNFIRED if not has_fired else Balance.SELL_REFUND
 	return int(total_spent * refund)
 
 func _process(delta: float) -> void:
 	# A behavior with no notion of a target (an aura, an economy building) skips the scan
-	# entirely rather than paying for one and discarding it.
-	# Grove (GAME_STRATEGY_V2.md §4.3, "SAVAŞMAZ, DESTEKLER") never acquires a target: it is
-	# pure aura, read by neighbours in _recompute() above, and firing is the one thing
-	# `no_attack` turns off rather than overrides.
-	var target: Enemy = _find_target() if (_behavior.wants_target() and not no_attack) else null
+	# entirely rather than paying for one and discarding it. Sun and Well carry auras but do
+	# still shoot, so today every tower on the board takes the true branch.
+	var target: Enemy = _find_target() if _behavior.wants_target() else null
 	# Ease the barrel toward the target every frame (independent of the cooldown).
 	if target != null:
 		var to := target.global_position - global_position
@@ -515,18 +532,9 @@ func fire_bolt(target: Enemy, damage_mult: float = 1.0) -> void:
 	_recoil = 1.0
 	Audio.play_tower_fire(id, element)
 	_shots_fired += 1
-	# Glacier: every Nth shot ALSO chills everyone currently in range — a tower-triggered AoE
-	# pulse, not a projectile payload, since it fires alongside the normal bolt rather than
-	# instead of it and has no single point of impact to spread from.
-	if chill_pulse_every > 0 and _shots_fired % chill_pulse_every == 0 and slow_time > 0.0:
-		for e in EnemyIndex.query(global_position, tower_range):
-			var enemy := e as Enemy
-			if enemy != null and enemy.is_alive() \
-					and (not enemy.is_flying or can_hit_flying):
-				enemy.apply_slow(slow_factor, slow_time)
-	# Overclock (GAME_STRATEGY_V2.md §6.3, BUILD NEXT #9): every Nth shot deals double
-	# damage. Folded into `damage_mult` — the SAME parameter Magic's charge behavior already
-	# uses to vary one shot — rather than a separate field, so the two never need to agree on
+	# Overclock: every Nth shot deals double damage. Folded into `damage_mult` — the SAME
+	# parameter Magic's charge behavior already uses to vary one shot — rather than a
+	# separate field, so the two never need to agree on
 	# which wins if a future behavior someday wants both at once.
 	if overclock_every > 0 and _shots_fired % overclock_every == 0:
 		damage_mult *= 2.0
@@ -537,6 +545,13 @@ func fire_bolt(target: Enemy, damage_mult: float = 1.0) -> void:
 	var p := _proj_pool.acquire() as Projectile
 	p.color = element_color
 	p.element = element
+	p.elements = elements
+	p.ignores_matchup = ignores_matchup
+	p.pierces_rules = pierces_rules
+	p.slow_chance = slow_chance
+	# Only handed over when this tower actually grows from kills, so every other bolt leaves
+	# the field null and skips the validity check on the kill path entirely.
+	p.source_tower = self if damage_per_kill > 0.0 else null
 	p.hits_flying = can_hit_flying
 	p.splash_radius = splash_radius
 	p.splash_factor = splash_factor
@@ -611,13 +626,16 @@ func _draw() -> void:
 		draw_arc(Vector2.ZERO, tower_range, 0.0, TAU, 48, Color(ec.r, ec.g, ec.b, 0.12), 2.0, true)
 	# Painted sprite if this element and tier have been drawn; the code art below is the
 	# fallback, and it is what the board still looks like everywhere the art has not landed.
-	var art := Sprites.tower(element, level)
+	# Only ever for an UNFUSED tower: the painted sets are per base element, and a Steam tower
+	# wearing the painted Fire art would be the one place in the game where what you see and
+	# what the tower is disagree. Every fusion is code art, drawn in its own colour.
+	var art := Sprites.tower(element, level) if elements.size() == 1 else null
 	if art != null:
 		_draw_sprite(art)
 		if element == "fire":
 			_draw_fire_flame()
 		_draw_level_pips(element_color.lightened(0.35))
-		_draw_sell_button()
+		_draw_element_dots()
 		return
 	# Flat drop shadow under the base.
 	draw_set_transform(Vector2(0, 24), 0.0, Vector2(1.0, 0.45))
@@ -635,8 +653,8 @@ func _draw() -> void:
 	# something else entirely. Everything above and below is common to every tower.
 	_behavior.draw_turret(self)
 	_draw_level_pips(element_color.lightened(0.35))
-	# Drawn last so it stays tappable even when the barrel swings over the corner.
-	_draw_sell_button()
+	# Drawn last so the barrel cannot swing over it.
+	_draw_element_dots()
 
 ## Hangs the painted tower off its ground anchor, so the base sits on the spot the tower
 ## occupies and the tower grows UPWARD as it is upgraded — which is where a tall sprite has
@@ -707,15 +725,23 @@ func draw_barrel() -> void:
 		draw_string(font, tip + Vector2(-7, 7), display_name.substr(0, 1),
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 21, Color(0.08, 0.08, 0.10))
 
-## Small red "×" at the bottom-right corner: the sell control. A tap here sells the tower
-## (Main routes it via is_sell_hit); a tap anywhere else on the tower upgrades it.
-func _draw_sell_button() -> void:
-	var c := SELL_BTN_POS
-	draw_circle(c, SELL_BTN_RADIUS, Color(0.70, 0.16, 0.16, 0.95))
-	draw_arc(c, SELL_BTN_RADIUS, 0.0, TAU, 16, Color(0, 0, 0, 0.45), 2.0, true)
-	var s := 5.4
-	draw_line(c + Vector2(-s, -s), c + Vector2(s, s), Color(1, 1, 1, 0.95), 3.0, true)
-	draw_line(c + Vector2(-s, s), c + Vector2(s, -s), Color(1, 1, 1, 0.95), 3.0, true)
+## The elements this tower carries, as a row of coloured dots above the base — one for each,
+## in absorb order, in that element's own colour. Replaces the sell "×" that used to sit in
+## this corner of the cell.
+##
+## An unfused tower draws nothing: a single dot on every tower on the board would be noise,
+## and the tower's whole silhouette is already that colour. So the row appearing at all IS
+## the signal that this tower has been fused, and its length says how far.
+func _draw_element_dots() -> void:
+	if elements.size() < 2:
+		return
+	var spacing := 11.0
+	var start_x := -(elements.size() - 1) * spacing * 0.5
+	for i in elements.size():
+		var c := Vector2(start_x + i * spacing, -34.0)
+		var col: Color = Game.ELEMENT_COLORS.get(elements[i], Color.WHITE)
+		draw_circle(c, 4.6, Color(0, 0, 0, 0.45))
+		draw_circle(c, 3.6, col)
 
 ## Upgrade hint, shown only while another level exists and is affordable: a slim green
 ## arrow bobbing gently to the tower's left. Purely a signal — the upgrade action is a

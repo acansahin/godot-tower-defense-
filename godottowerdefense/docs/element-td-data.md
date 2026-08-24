@@ -120,6 +120,53 @@ Costs: **1017** → **5317**.
 | Water + Nature + Darkness | Drowning | Davey Jones' | splash |
 | Earth + Nature + Darkness | Crypt | Tomb | — |
 
+### 3.1 The ten combinations the port actually uses
+
+Cutting the roster to four elements (GAME_STRATEGY_V2.md §2) closes the combination table
+exactly: of the 15 duals and 20 triples above, **exactly 6 and 4** avoid Light and Darkness,
+and those ten are the whole of `Game.FUSIONS`. Nothing was dropped to make it fit and
+nothing was invented to fill a gap. The four-element **Pure** tower is ours — the map has
+six elements and its recipes stop at three, so a four-element row has no source entry.
+
+`dmg` and `cd` below are read straight out of the object data
+(`extract_w3x.py <map> towers`). A **bold** `cd` is one the map really carries; the rest are
+absent because the tower inherits its cooldown from a Warcraft III base unit that lives in
+`war3.mpq`, not in the map — the same hole that made the duals' range and interval ours
+rather than the map's. `type` is the Warcraft III attack type (`ua1t`).
+
+| Set | Names | dmg | cd | type | Ability, verbatim from the tooltip |
+|---|---|---|---|---|---|
+| Water + Earth | Clay → Golem → Living Statue | 600 | **1.05** | siege | "Throws clumps of clay at enemies, with a chance to slow" |
+| Fire + Earth | Lava → Magma → Volcano | 751 | — | siege | "Siege with added incinerate damage. Attacks land and air units" |
+| Fire + Nature | Sun → Solar → Temple of Sol | 600 | — | — | "Medium damage tower, also give a bonus to the damage of nearby Tidal Towers" |
+| Fire + Water | Steam → Vapor → Immolation | 150 | — | normal | "Blasts all nearby units with steam that gradually reduces health" |
+| Water + Nature | Well → Spring → Waterfall | 350 | — | normal | "Supporting tower that has the Spring Forward ability which adds speed to nearby towers" |
+| Earth + Nature | Roots → Brambles → Entangling | 100 | **8.10** | magic | "Slowing tower that casts Entangling Roots on ground enemies. Attacks land units" |
+| Water + Fire + Earth | Infernal → Chaos | 3750 | **1.20** | **chaos** | "Strong tower with high chaos-type damage" |
+| Water + Fire + Nature | Rainbow → Spectrum | 3250 | **1.10** | **chaos** | "Chaos-damage multi-color attacking tower. Very strong" |
+| Fire + Earth + Nature | Dinosaur → Fossil | 2000 | — | normal | "Has the ability to devour enemies which stay in its belly until they are gradually digested" |
+| Water + Earth + Nature | Flesh Golem → Living Flesh | 1350 | **0.90** | — | "-Moving Tower- Grows stronger with each unit it kills" |
+
+Three things in that table are load-bearing for the port:
+
+- **`chaos` is a real attack type in the map**, on Infernal and Rainbow. In Warcraft III it
+  deals 100% against every armour type. That is where the port's `ignores_matchup` comes
+  from and why the Pure tower's "nothing resists it" rule is not an invention.
+- **Lava and every triple say "Attacks land and air units."** Base Earth is ground-only, so
+  fusing it lifts that restriction — a reward straight out of the source rather than a
+  balance sweetener.
+- **Roots is a control tower, not a damage tower.** 100 damage on an 8.1s cooldown is 12 DPS
+  against a base element's ~60. The port keeps the ratio and not the number: 8.1s is
+  unplayable at our pace, so it uses 2.2s and scales the damage down to match.
+
+Two caveats about re-running the extraction:
+
+- `cmd_towers` prints `-` for range and `0.00` for cooldown wherever the field is inherited,
+  and computes DPS as 0 from it. Those zeros are missing data, not measurements.
+- `cmd_recipes` truncates the tooltip at 70 characters (`role[:70]` in `extract_w3x.py`).
+  The full text is in the map; the ability column above was read by printing
+  `tip_extended` without the slice.
+
 ## 4. Waves — 60 levels
 
 **Hit points: `hp(n) = 75 × 1.16^(n-1)`.** Level 1 is 75, level 60 is 476 522, and the

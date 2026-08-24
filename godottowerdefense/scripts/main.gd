@@ -14,24 +14,16 @@ const SHAKE_DECAY := 26.0  ## Pixels of camera shake bled off per second.
 @onready var hud: HUD = $UI/HUD
 @onready var palette = $UI/TowerPalette
 @onready var end_screen: EndScreen = $UI/EndScreen
-@onready var upgrade_choice: UpgradeChoice = $UI/UpgradeChoice
-@onready var branch_choice: BranchChoice = $UI/BranchChoice
-@onready var element_choice: ElementChoice = $UI/ElementChoice
+@onready var tower_panel: TowerPanel = $UI/TowerPanel
 @onready var camera: Camera2D = $Camera2D
 @onready var preview = $Preview  ## Drag ghost.
 
 var _drag_kind: String = ""  ## Tower type being dragged from the palette ("" = none).
 var _hovered: Tower = null   ## Tower under the mouse, drawn with a clear range ring.
 var _shake: float = 0.0      ## Current camera shake magnitude in px; decays to 0.
-var _auto_pick: bool = false ## Harness only (--fill-board/--auto-pick): auto-resolve upgrade AND branch choices.
-## The tower waiting on a Lv3 branch pick, or null. Set right before branch_choice.show_choices()
-## and read back in _on_branch_chosen — the popup itself only reports WHICH branch, not for
-## which tower, since (unlike the roguelite choice) this decision belongs to one specific tower.
-var _pending_branch_tower: Tower = null
-var _auto_pick_branch_toggle: int = 0  ## Alternates "a"/"b" for --fill-board's branch auto-pick.
-## Monoculture card awaiting its element sub-choice, or {} — see _on_upgrade_chosen /
-## _on_element_chosen. Same one-in-flight-at-a-time pattern as _pending_branch_tower.
-var _pending_monoculture_card: Dictionary = {}
+## Harness only (--fill-board/--auto-pick): buy every fusion a tower is offered as soon as it
+## is affordable, so an unattended run exercises the whole ladder up to Pure.
+var _auto_pick: bool = false
 ## Standard mode's one board (GAME_STRATEGY_V2.md §28 Phase 1: "1 harita", BUILD NEXT #8).
 ## `Game.use_board_for_wave()`'s 10-wave winding->spiral->s rotation (Game.BOARD_SEQUENCE)
 ## is now Endless-only infrastructure, unreached from here — same treatment step 4 gave
@@ -70,12 +62,12 @@ func _ready() -> void:
 	palette.drag_started.connect(_on_drag_started)
 	Game.shake_requested.connect(_add_shake)
 
-	# Roguelite choice. Main owns the pause so there is exactly one place that decides
-	# whether the run is running — the choice screen itself only reports what was picked.
-	wave_manager.choice_due.connect(_on_choice_due)
-	upgrade_choice.chosen.connect(_on_upgrade_chosen)
-	branch_choice.chosen.connect(_on_branch_chosen)
-	element_choice.chosen.connect(_on_element_chosen)
+	# The tower panel only reports what was pressed; spending the gold and changing the board
+	# stays here, so there is exactly one place that mutates a tower.
+	tower_panel.upgrade_pressed.connect(_on_panel_upgrade)
+	tower_panel.fusion_pressed.connect(_on_panel_fusion)
+	tower_panel.sell_pressed.connect(_on_panel_sell)
+	Run.fusion_unlocked.connect(_on_fusion_unlocked)
 
 	# Frame the WHOLE world, once. There is no panning: a tower defense you have to scroll
 	# is one where the leak that just cost you a life happened somewhere you were not
@@ -108,24 +100,22 @@ func _ready() -> void:
 		_air_pose()
 	if OS.get_cmdline_user_args().has("--boss-pose"):
 		_boss_pose()
-	# TEMPORARY: answers the roguelite choice screen for you. Not decoration for --shot: the
-	# choice screen pauses the tree, and a paused tree stops the SceneTree timers every
-	# delayed harness waits on — so an unattended run simply stops at wave 3 and every later
-	# `--shot:N` silently never fires. --fill-board turns this on for itself; anything else
-	# that wants to watch a late wave has to ask.
+	# TEMPORARY: buys every fusion the moment it is unlocked and affordable, so an unattended
+	# run climbs the ladder to Pure instead of finishing on four base towers. Nothing pauses
+	# the tree any more (the three popups that did are gone), so unlike the old card screen
+	# this is no longer required just to keep a delayed `--shot:N` alive.
 	if OS.get_cmdline_user_args().has("--auto-pick"):
 		_auto_pick = true
 	if OS.get_cmdline_user_args().has("--dump-waves"):
 		_dump_waves()
-	if OS.get_cmdline_user_args().has("--dump-mods"):
-		_dump_mods()
 	if OS.get_cmdline_user_args().has("--dump-board"):
 		_dump_board()
-	if OS.get_cmdline_user_args().has("--test-sell-hit"):
-		call_deferred("_test_sell_hit")
-	# TEMPORARY: pops the choice screen immediately, so its _draw can be exercised in a
-	# rendered run without first playing three waves. Headless never calls _draw at all, so
-	# nothing else in the suite would catch a broken card layout.
+	if OS.get_cmdline_user_args().has("--dump-fusions"):
+		_dump_fusions()
+	if OS.get_cmdline_user_args().has("--dump-bosses"):
+		_dump_bosses()
+	if OS.get_cmdline_user_args().has("--dump-matchup"):
+		_dump_matchup()
 	if OS.get_cmdline_user_args().has("--dump-meta"):
 		_dump_meta()
 	# TEMPORARY: rewinds the "last seen" stamp so the NEXT launch collects an offline
@@ -135,19 +125,8 @@ func _ready() -> void:
 		Meta.last_seen -= 4 * 3600
 		Meta._persist()
 		print("--- clock rewound 4h; relaunch to collect ---")
-	if OS.get_cmdline_user_args().has("--show-choice"):
-		_on_choice_due(30)  # late wave: exercises the higher-rarity cards and NEW TOWER
-	for arg in OS.get_cmdline_user_args():
-		# `--show-branch-choice` (default "fire") or `--show-branch-choice:water` etc. — pops
-		# the Lv3 branch popup so its _draw() can be exercised without playing a tower to
-		# level 3 first. Mirrors --show-choice above.
-		if String(arg).begins_with("--show-branch-choice"):
-			var parts := String(arg).split(":")
-			branch_choice.show_choices(parts[1] if parts.size() > 1 else "fire")
-		# `--show-element-choice` — pops Monoculture's sub-choice popup (BUILD NEXT #9) so its
-		# _draw() can be exercised without rolling it out of the card pool first.
-		if String(arg) == "--show-element-choice":
-			element_choice.show_choices()
+	if OS.get_cmdline_user_args().has("--show-fusion-panel"):
+		call_deferred("_show_fusion_panel")
 	for arg in OS.get_cmdline_user_args():
 		if String(arg).begins_with("--shot"):
 			# `--shot` grabs the opening board; `--shot:20` waits 20 seconds first, which is
@@ -241,74 +220,198 @@ func _save_screenshot(delay: float, file := "shot.png") -> void:
 		return
 	print("--- SHOT: ", ProjectSettings.globalize_path(path))
 
-## TEMPORARY verification harness for the roguelite modifier layer. Proves the three things
-## that would otherwise only show up as a vague "the cards feel like they do nothing":
-##   1. a card actually moves the stat it claims to, by the amount it claims;
-##   2. an element-scoped card touches ONLY that element;
-##   3. removing it returns the tower exactly to baseline — the whole point of rebuilding
-##      stats instead of accumulating them, and the one thing playing can never check.
-func _dump_mods() -> void:
-	var probe := func(label: String) -> void:
-		var line := label.rpad(22)
-		for tid in Game.TOWER_ORDER:
-			var t := TOWER.instantiate() as Tower
-			towers_root.add_child(t)
-			t.setup_def(String(tid))
-			line += "%s dmg=%.3f int=%.4f rng=%.1f slowt=%.2f burnt=%.2f  " \
-					% [tid, t.damage, t.fire_interval, t.tower_range, t.slow_time, t.burn_time]
-			t.queue_free()
-		print(line)
+## TEMPORARY verification harness for the fusion ladder. Replaces the old --dump-mods, which
+## measured the roguelite card pool that no longer exists.
+##
+## Prints every one of Game.FUSIONS' eleven rows at every level, plus the base tower it grew
+## from, so the whole table can be read as a ladder rather than eleven unrelated entries. The
+## DPS-vs-base column is the one that matters for balance: a dual should sit meaningfully
+## above a base tower of the same level, a triple above a dual, and Pure above everything —
+## if that ordering ever breaks, it breaks here rather than three hours into a playtest.
+##
+## Also asserts every FUSIONS key actually resolves. A typo'd key ("earth+watr") would make
+## Tower._recompute silently fall back to the base definition, so the tower would keep
+## working, keep its old stats, and pocket the player's gold — the hardest kind of bug to see
+## by playing.
+func _dump_fusions() -> void:
+	print("--- FUSION DUMP BEGIN ---")
+	# Reference DPS per level for a plain base tower, averaged over the four elements. Every
+	# fusion below is reported as a multiple of this, which is what makes the numbers
+	# comparable at all — the four elements have very different interval/damage shapes.
+	var base_dps := PackedFloat32Array()
+	var per_element: Array = []
+	for _lv in Balance.MAX_LEVEL:
+		base_dps.append(0.0)
+	for tid in Game.TOWER_ORDER:
+		# ONE tower per element, walked up its levels — not a fresh tower per level. A fresh
+		# one per level leaves the earlier ones parented (queue_free only takes effect at the
+		# end of the frame) and every probe sits at the same position, so they end up inside
+		# each other's aura radius and the "base" reference reads high. That is exactly the
+		# kind of quiet 4% the DPS ratios below would then be measured against.
+		var t := TOWER.instantiate() as Tower
+		towers_root.add_child(t)
+		t.setup_def(String(tid))
+		var row := String(tid).rpad(21)
+		for lv in Balance.MAX_LEVEL:
+			t.level = lv + 1
+			t._recompute()
+			var dps := _tower_dps(t)
+			base_dps[lv] += dps / float(Game.TOWER_ORDER.size())
+			row += "  L%d %7.1f" % [lv + 1, dps]
+		per_element.append(row)
+		towers_root.remove_child(t)
+		t.queue_free()
+	for row in per_element:
+		print(row)
+	var base_line := "base (mean of 4)     ".rpad(21)
+	for lv in Balance.MAX_LEVEL:
+		base_line += "  L%d %7.1f" % [lv + 1, base_dps[lv]]
+	print(base_line)
 
-	print("--- MOD DUMP BEGIN ---")
-	Run.reset(1)
-	probe.call("baseline")
-	# One card from each new BUILD NEXT #9 shape: an element-scoped mult-op stat (wick,
-	# burn_time), an element-scoped add-op stat (permafrost, slow_time), a global add-op stat
-	# (long_sight, range) and a global mult-op stat (bulwark, damage).
-	Run.grant(_pool_entry("wick"))
-	probe.call("+wick")
-	Run.grant(_pool_entry("permafrost"))
-	probe.call("+permafrost")
-	Run.grant(_pool_entry("long_sight"))
-	probe.call("+long_sight")
-	Run.grant(_pool_entry("bulwark"))
-	probe.call("+bulwark")
-	Run.reset(1)
-	# Monoculture's real path (main.gd _on_upgrade_chosen -> element_choice ->
-	# _on_element_chosen), driven directly rather than through the UI — proves the
-	# per-effect element override (run.gd's _effect_applies) actually lands +50%/-20% on the
-	# right towers instead of just rendering the popup correctly.
-	_on_upgrade_chosen(_pool_entry("monoculture"))
-	_on_element_chosen("fire")
-	probe.call("+monoculture:fire")
-	Run.reset(1)
-	probe.call("after reset")
-	# Roster sanity: BUILD NEXT #2 removed the dual-recipe gate (owning both elements of a
-	# pair used to add a fifth+ tower to the palette), so buildable_towers() should now be
-	# nothing more than the four base elements, stable across a reset.
-	print("roster @start:        %s" % str(Run.buildable_towers()))
-	Run.reset(1)
-	print("roster after reset:   %s" % str(Run.buildable_towers()))
-	print("gold/kill before: %d" % Run.bonus_gold_per_kill())
-	Run.grant(_pool_entry("prospector"))
-	Run.grant(_pool_entry("prospector"))
-	print("gold/kill after 2x Prospector: %d" % Run.bonus_gold_per_kill())
-	# Frontload's kill_gold_mult (BUILD NEXT #9) — separate global fold from the flat
-	# bonus_gold_per_kill above; see run.gd's kill_gold_mult() comment for why they must not
-	# collapse into one number.
-	print("kill gold mult before: %.2f" % Run.kill_gold_mult())
-	Run.grant(_pool_entry("frontload"))
-	print("kill gold mult after Frontload: %.2f" % Run.kill_gold_mult())
-	# Offer sanity: no duplicates within one offer, and nothing offered past its stack cap.
-	Run.reset(7)
-	for w in [3, 9, 30]:
-		var opts := Run.roll_choices(w)
+	# Sorted so duals, then triples, then Pure come out in a stable order run to run —
+	# Dictionary iteration order is insertion order here, but sorting makes the output
+	# diffable against a stored baseline even if the table is later reordered.
+	var keys: Array = Game.FUSIONS.keys()
+	keys.sort()
+	for key in keys:
+		var els: Array = String(key).split("+")
+		var def: Dictionary = Game.FUSIONS[key]
+		var t := TOWER.instantiate() as Tower
+		# Parked far off the board and detached below, for the same reason the base loop is
+		# careful: Sun and Well ARE auras, and eleven probes stacked at the origin would buff
+		# each other into numbers no real board could produce.
+		t.position = Vector2(-9000.0, -9000.0)
+		towers_root.add_child(t)
+		t.setup_def(String(els[0]))
+		for i in range(1, els.size()):
+			t.add_element(String(els[i]))
+		# The key round-trip: if fusion_key() disagrees with the table's own key, the tower
+		# just built is NOT the tower this row describes.
+		if Game.fusion_key(t.elements) != String(key):
+			push_error("FUSION KEY MISMATCH: table '%s' vs tower '%s'"
+					% [key, Game.fusion_key(t.elements)])
+		if t.fusion_def().is_empty():
+			push_error("FUSION UNRESOLVED: '%s' fell back to the base definition" % key)
+		var line := ("%d %s" % [els.size(), String(key)]).rpad(21)
+		for lv in range(1, Balance.MAX_LEVEL + 1):
+			t.level = lv
+			t._recompute()
+			line += "  L%d %7.1f x%.1f" % [lv, _tower_dps(t), _tower_dps(t) / base_dps[lv - 1]]
+		t.level = 1
+		t._recompute()
+		print(line)
+		print("      %s  rng=%.0f int=%.2f fly=%s%s%s"
+				% [Game.fusion_name(def, 1).rpad(14), t.tower_range, t.fire_interval,
+					"y" if t.can_hit_flying else "n",
+					"  CHAOS" if t.ignores_matchup else "",
+					"  PIERCES" if t.pierces_rules else ""])
+		# Every name the ladder will show, so a three-name dual and a two-name triple can be
+		# seen splitting across five levels the way fusion_name() intends.
 		var names := PackedStringArray()
-		for o in opts:
-			names.append("%s(%s)" % [String((o as Dictionary)["name"]),
-					String((o as Dictionary)["rarity"])])
-		print("offer @w%-3d %s" % [w, ", ".join(names)])
-	print("--- MOD DUMP END ---")
+		for lv in range(1, Balance.MAX_LEVEL + 1):
+			names.append(Game.fusion_name(def, lv))
+		print("      names: %s" % ", ".join(names))
+		towers_root.remove_child(t)
+		t.queue_free()
+	print("--- FUSION DUMP END ---")
+
+## Damage per second including the damage-over-time channels, which is the only honest way to
+## compare Roots (huge interval, tiny damage, all control) against Infernal (raw damage) or
+## Steam (half its output is a poison tick).
+func _tower_dps(t: Tower) -> float:
+	var dps := t.damage / maxf(t.fire_interval, 0.001)
+	return dps + t.poison_dps + t.burn_dps
+
+## TEMPORARY verification harness for the avatar boss draw. Prints Run.boss_elements for a
+## spread of run seeds and checks the two properties the fusion ladder depends on: every
+## element appears exactly once (so no element is unreachable and none is offered twice), and
+## the seed actually determines the order.
+##
+## The second one is the reason this exists. Array.shuffle() uses the GLOBAL RNG, so an
+## implementation that reached for it would still print four distinct elements — it would just
+## print a DIFFERENT four every launch for the same seed, and nothing else in the game would
+## ever notice.
+func _dump_bosses() -> void:
+	print("--- BOSS ORDER DUMP BEGIN ---")
+	var first_pass: Array = []
+	for seed_value in range(20):
+		Run.reset(seed_value)
+		var order: Array = Run.boss_elements.duplicate()
+		first_pass.append(order)
+		var seen := {}
+		for e in order:
+			seen[e] = true
+		var ok := order.size() == Game.TOWER_ORDER.size() \
+				and seen.size() == Game.TOWER_ORDER.size()
+		if not ok:
+			push_error("BOSS ORDER: seed %d produced %s" % [seed_value, str(order)])
+		var waves := PackedStringArray()
+		for i in Balance.ELEMENT_BOSS_WAVES.size():
+			waves.append("w%d=%s" % [int(Balance.ELEMENT_BOSS_WAVES[i]),
+					Run.boss_element_for_wave(int(Balance.ELEMENT_BOSS_WAVES[i]))])
+		print("seed %-3d %s" % [seed_value, " ".join(waves)])
+	# Replay: same seeds, same orders, or the run seed is not really driving this.
+	for seed_value in range(20):
+		Run.reset(seed_value)
+		if Run.boss_elements != first_pass[seed_value]:
+			push_error("BOSS ORDER NOT REPRODUCIBLE: seed %d gave %s then %s"
+					% [seed_value, str(first_pass[seed_value]), str(Run.boss_elements)])
+	print("--- BOSS ORDER DUMP END ---")
+
+## TEMPORARY verification harness for the matchup half of the fusion ladder. Prints
+## Game.element_mult_best for every element set against every armour element.
+##
+## This is the table that has to be read before arguing about Pure's balance: it is the proof
+## that a four-element tower is never resisted, and the place a broken ring shows up as a 0.85
+## in a row that should have none.
+func _dump_matchup() -> void:
+	print("--- MATCHUP DUMP BEGIN ---")
+	var header := "set".rpad(28)
+	for armor in Game.TOWER_ORDER:
+		header += "vs %-8s" % String(armor)
+	print(header + "vs neutral")
+	var sets: Array = []
+	for e in Game.TOWER_ORDER:
+		sets.append([String(e)])
+	var keys: Array = Game.FUSIONS.keys()
+	keys.sort()
+	for key in keys:
+		sets.append(Array(String(key).split("+")))
+	for s in sets:
+		var line := ("+".join(PackedStringArray(s))).rpad(28)
+		var worst := 99.0
+		for armor in Game.TOWER_ORDER:
+			var m := Game.element_mult_best(s, String(armor))
+			worst = minf(worst, m)
+			line += "%-11.2f" % m
+		line += "%.2f" % Game.element_mult_best(s, "")
+		print(line)
+		# A four-element set covers the whole ring by construction; anything less cannot.
+		if s.size() == Game.TOWER_ORDER.size() and worst < Game.ELEMENT_STRONG:
+			push_error("PURE RESISTED: full set fell to x%.2f, expected x%.2f"
+					% [worst, Game.ELEMENT_STRONG])
+	print("--- MATCHUP DUMP END ---")
+
+## TEMPORARY verification harness: stands one tower on an empty board, unlocks two elements
+## and opens its panel, so the panel's _draw() can be photographed without playing to an
+## avatar boss first. Pair with --shot and WITHOUT --headless — _draw never runs headless.
+##   Godot.exe --path <project> res://scenes/Main.tscn -- --show-fusion-panel --shot:1
+func _show_fusion_panel() -> void:
+	wave_manager.set_process(false)
+	Game.add_gold(2000)
+	var t := TOWER.instantiate() as Tower
+	t.setup_def("fire")
+	t.position = Vector2(Game.WORLD_SIZE.x * 0.42, Game.WORLD_SIZE.y * 0.62)
+	towers_root.add_child(t)
+	# upgrade(), not `t.level = 3`: level alone leaves total_spent at the build cost, and the
+	# panel's sell row would then quote a refund no real Lv3 tower would ever offer.
+	t.upgrade()
+	t.upgrade()
+	# Two unlocked, one still locked, so the panel shows both an offered row and the shape of
+	# the ladder above it.
+	Run.unlock_fusion("nature")
+	Run.unlock_fusion("water")
+	tower_panel.open_for(t)
 
 ## TEMPORARY verification harness for meta progression. Checks the things that only show up
 ## across an app restart or a wall-clock change, neither of which is testable by playing:
@@ -367,13 +470,6 @@ func _costs(id: String) -> Array:
 	for lv in 5:
 		out.append(Balance.workshop_cost(int(d["base_cost"]), float(d["cost_growth"]), lv))
 	return out
-
-func _pool_entry(id: String) -> Dictionary:
-	for u in Game.UPGRADE_POOL:
-		if String((u as Dictionary)["id"]) == id:
-			return u
-	push_error("no such upgrade: " + id)
-	return {}
 
 ## TEMPORARY verification harness for the endless wave generator. Prints the definition of
 ## each wave, marks where the hand-authored seed table hands over, and — the part that
@@ -440,9 +536,9 @@ func _air_pose() -> void:
 		if i % 2 == 1:
 			e.take_damage(150.0)
 
-## TEMPORARY verification harness: stages both bosses' rules (GAME_STRATEGY_V2.md §10.4,
-## BUILD NEXT #7) on an empty board so cc_immune's ward and rotating_armor's icon/ring can be
-## photographed without playing to wave 10 or 20 first. Pair with --shot, WITHOUT --headless:
+## TEMPORARY verification harness: stages all THREE boss rules on an empty board so
+## cc_immune's ward, rotating_armor's icon/ring and the avatar's element sigil can be
+## photographed without playing to their waves first. Pair with --shot, WITHOUT --headless:
 ##   Godot.exe --path <project> res://scenes/Main.tscn -- --boss-pose --shot --shot:6
 ## (the second shot is timed past ROTATING_ARMOR_PERIOD so the ring/icon is caught having
 ## already turned over at least once). Delete this and its call above once photographed.
@@ -452,10 +548,16 @@ func _boss_pose() -> void:
 	var rules := [
 		{"element": "water", "rule": "control_immune"},
 		{"element": "fire", "rule": "rotating_armor"},
+		# The avatar is the one whose mark the player MUST read — it names a reward that is
+		# lost if the boss walks off the end — so it is the one most worth photographing.
+		{"element": "nature", "rule": "element_avatar"},
 	]
 	for i in rules.size():
 		var e := enemy_scene.instantiate() as Enemy
-		e.setup(2000.0, 20.0, 50, Balance.BOSS_TINT)
+		var avatar := String(rules[i]["rule"]) == "element_avatar"
+		e.setup(2000.0, 20.0, 50,
+				Game.ELEMENT_COLORS.get(rules[i]["element"], Balance.BOSS_TINT) if avatar
+				else Balance.BOSS_TINT)
 		e.kind = "tank"
 		e.radius = Balance.BOSS_RADIUS
 		e.is_boss = true
@@ -463,6 +565,7 @@ func _boss_pose() -> void:
 		match String(rules[i]["rule"]):
 			"control_immune": e.cc_immune = true
 			"rotating_armor": e.rotating_armor = true
+			"element_avatar": e.avatar_element = String(rules[i]["element"])
 		enemies_root.add_child(e)
 		var step := int(float(Game.active_path.size() - 2) * float(i + 1) / float(rules.size() + 1)) + 1
 		e.set_progress(step)
@@ -510,6 +613,12 @@ func _fill_board() -> void:
 		print("--- RUN %s: wave %d | best %d | essence %d | runs %d | elapsed %.1fs (%.1fmin) ---"
 				% [outcome, Game.wave_reached, Meta.best_wave, Meta.essence, Meta.total_runs,
 					elapsed_s, elapsed_s / 60.0])
+		# The avatar bosses are the whole reward loop, and a filled board kills all four
+		# without the player noticing — so say out loud which ones actually paid out. A run
+		# that reached wave 20 with fewer than four here means a boss leaked, or the
+		# was_killed / wave-clear plumbing came apart.
+		print("--- FUSIONS UNLOCKED: %s (order was %s) ---"
+				% [str(Run.unlocked_fusions), str(Run.boss_elements)])
 	Game.game_over.connect(func() -> void: report.call("OVER"))
 	Game.victory.connect(func() -> void: report.call("WON"))
 	var i := 0
@@ -522,15 +631,26 @@ func _fill_board() -> void:
 		t.setup_def(kind)
 		t.position = spot
 		towers_root.add_child(t)
-		# Max them out: Ice's area-slow (and the frost ring it spawns) only exists from
-		# Lv2, so a board of Lv1 towers would never touch that path.
+		# Max them out: the area-slow (and the frost ring it spawns) only exists from Lv2, so
+		# a board of Lv1 towers would never touch that path.
 		while t.can_upgrade():
 			t.upgrade()
-			# --fill-board bypasses _upgrade_tower() (it grants a gold lump instead of
-			# spending exact costs), so the Lv3 branch trigger there never fires — do it
-			# here instead, alternating so both branches of every element get exercised.
-			if t.level == 3 and t.branch == "":
-				t.set_branch("a" if (i % 2 == 0) else "b")
+		# Every fourth tower is walked all the way up the fusion ladder to Pure, and the rest
+		# are spread across base / dual / triple, so one run exercises every row of
+		# Game.FUSIONS rather than the four base elements over and over. add_element is called
+		# directly, bypassing the avatar-boss gate — no boss has been fought at wave 0, and the
+		# point here is to put every combination on the board, not to replay how they unlock.
+		# Divided by the roster size, NOT `i % 4`: the element above is picked with `i % 4` too,
+		# so sharing the modulus locked each element to one depth forever — Water was always
+		# left unfused and Fire/Nature/Earth were never seen maxed in their own painted art.
+		var depth := (i / Game.TOWER_ORDER.size()) % 4  # 0 base, 1 dual, 2 triple, 3 Pure
+		var added := 0
+		for candidate in Game.TOWER_ORDER:
+			if added >= depth:
+				break
+			if not t.elements.has(String(candidate)):
+				t.add_element(String(candidate))
+				added += 1
 		i += 1
 	print("--- FILL BOARD: placed %d towers, all at max level ---" % i)
 
@@ -803,27 +923,11 @@ func _tower_at(world_pos: Vector2) -> Tower:
 			best = t
 	return best
 
-## The red sell disc sits outside the 30px body radius, so it needs its own hit pass before
-## `_tower_at()`. Pick the nearest disc if two touch; tower spacing normally keeps them apart,
-## but nearest is deterministic at the boundary and avoids selling a neighbour by child order.
-func _sell_button_at(world_pos: Vector2) -> Tower:
-	var best: Tower = null
-	var best_d := INF
-	for child in towers_root.get_children():
-		var tower := child as Tower
-		if tower == null or not tower.is_sell_hit(world_pos):
-			continue
-		var distance := world_pos.distance_to(tower.global_position + Tower.SELL_BTN_POS)
-		if distance < best_d:
-			best = tower
-			best_d = distance
-	return best
+# --- Click a tower: open its panel ---------------------------------------------
 
-# --- Click a tower: upgrade it, or sell it via the corner "×" -------------------
-
-## A left click / tap on a tower upgrades it — unless it landed on the tower's sell "×",
-## which sells instead. Clicking bare ground does nothing. Every action lives on the tower
-## itself now (no info panel), which keeps the whole board tappable on a phone.
+## A left click / tap on a tower opens the tower panel above it (upgrade / fuse / sell).
+## Clicking bare ground does nothing here — the panel handles its own dismissal, and it
+## accepts the click that closes it so this never runs for the same press.
 func _unhandled_input(event: InputEvent) -> void:
 	if Game.is_over or _drag_kind != "":
 		return
@@ -833,16 +937,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	_handle_tower_click(get_global_mouse_position())
 
 func _handle_tower_click(world: Vector2) -> void:
-	# Sell discs extend beyond the tower body's click radius. Test them first or a click on
-	# the visible × is rejected as bare ground before `is_sell_hit()` ever gets a chance.
-	var tower := _sell_button_at(world)
-	if tower != null:
-		_sell_tower(tower)
-		return
-	tower = _tower_at(world)
+	var tower := _tower_at(world)
 	if tower == null:
+		tower_panel.close()
 		return
-	_upgrade_tower(tower)
+	tower_panel.open_for(tower)
 
 ## Upgrades the tower if another level exists and the gold is there; a denied buzz otherwise,
 ## so a mistap on a maxed / too-expensive tower gives feedback instead of doing nothing.
@@ -855,33 +954,43 @@ func _upgrade_tower(tower: Tower) -> void:
 	# around it — not just the tower that was tapped.
 	Game.towers_changed.emit()
 	Audio.play("upgrade")
-	# Lv3 is a branch, not a stat step (GAME_STRATEGY_V2.md §4, BUILD NEXT #5) — the tower
-	# already climbed to level 3 above, using its base (unbranched) stats for this one frame;
-	# the popup decides which branch it settles into from here. `branch == ""` guards against
-	# re-asking if a future respec-adjacent feature ever calls _upgrade_tower on an already-
-	# branched Lv3+ tower.
-	if tower.level == 3 and tower.branch == "":
-		if _auto_pick:
-			# Harnesses (--fill-board) alternate so both branches of every element actually
-			# get played, rather than every tower defaulting to the same half of the roster.
-			tower.set_branch("a" if (_auto_pick_branch_toggle % 2 == 0) else "b")
-			_auto_pick_branch_toggle += 1
-			return
-		_pending_branch_tower = tower
-		get_tree().paused = true
-		hud.set_input_blocked(true)
-		branch_choice.show_choices(tower.element)
 
-## branch_choice.gd reports back which branch (never for which tower — see
-## _pending_branch_tower), so this is also where the interactive path un-pauses; the harness
-## path in _upgrade_tower above never pauses in the first place and never reaches here.
-func _on_branch_chosen(branch_id: String) -> void:
-	if _pending_branch_tower != null and is_instance_valid(_pending_branch_tower):
-		_pending_branch_tower.set_branch(branch_id)
-		Game.towers_changed.emit()  # a newly-branched Grove's aura must reach its neighbours now
-	_pending_branch_tower = null
-	hud.set_input_blocked(false)
-	get_tree().paused = false
+## Absorbs `element` into `tower`, turning it into whatever combination its element set now
+## names. The gold and the board-wide refresh live here rather than in Tower.add_element for
+## the same reason upgrading does: one place mutates a tower, and the panel only reports.
+func _fuse_tower(tower: Tower, element: String) -> void:
+	if not tower.available_elements().has(element) or not Game.spend_gold(tower.fusion_cost()):
+		Audio.play("denied")
+		return
+	tower.add_element(element)
+	# Sun and Well ARE auras, and a tower that just became one has to reach its neighbours
+	# immediately — the same reason upgrading emits this.
+	Game.towers_changed.emit()
+	Audio.play("upgrade")
+
+# --- Tower panel callbacks ------------------------------------------------------
+
+func _on_panel_upgrade(tower: Tower) -> void:
+	if tower == null or not is_instance_valid(tower):
+		return
+	_upgrade_tower(tower)
+
+func _on_panel_fusion(tower: Tower, element: String) -> void:
+	if tower == null or not is_instance_valid(tower):
+		return
+	_fuse_tower(tower, element)
+
+func _on_panel_sell(tower: Tower) -> void:
+	if tower == null or not is_instance_valid(tower):
+		return
+	_sell_tower(tower)
+
+## An avatar boss went down. The banner is the whole announcement — there is no popup and
+## nothing to dismiss, because the reward is not a choice: the element is simply available
+## from now on, in every tower's panel.
+func _on_fusion_unlocked(element: String) -> void:
+	hud.set_hint("%s unlocked — tap a tower to fuse" % element.capitalize())
+	Audio.play("upgrade")
 
 ## Removes the tower and refunds the gold sunk into it — all of it if the tower never fired,
 ## most of it otherwise (see Tower.sell_value / Tower.has_fired).
@@ -896,88 +1005,6 @@ func _sell_tower(tower: Tower) -> void:
 	# from a tower that no longer exists.
 	towers_root.remove_child(tower)
 	Game.towers_changed.emit()
-
-## Harness for the exact regression: the sell centre is 41px from the tower centre and is
-## therefore intentionally outside `_tower_at()`'s 30px body. It must still resolve through
-## `_sell_button_at()`, refund the tower and detach it from the board.
-func _test_sell_hit() -> void:
-	var tower := TOWER.instantiate() as Tower
-	tower.setup_def("fire")
-	tower.position = Vector2(640, 360)
-	towers_root.add_child(tower)
-	var sell_point := tower.global_position + Tower.SELL_BTN_POS
-	if _tower_at(sell_point) != null or _sell_button_at(sell_point) != tower:
-		push_error("Sell hit harness: visible × did not resolve independently of tower body")
-		return
-	var gold_before := Game.gold
-	var expected_refund := tower.sell_value()
-	_handle_tower_click(sell_point)
-	if tower.get_parent() != null or Game.gold != gold_before + expected_refund:
-		push_error("Sell hit harness: sale did not detach tower and refund exact value")
-		return
-	var upgrade_target := TOWER.instantiate() as Tower
-	upgrade_target.setup_def("water")
-	upgrade_target.position = Vector2(740, 360)
-	towers_root.add_child(upgrade_target)
-	var upgrade_cost := upgrade_target.upgrade_cost()
-	gold_before = Game.gold
-	_handle_tower_click(upgrade_target.global_position)
-	if upgrade_target.level != 2 or Game.gold != gold_before - upgrade_cost:
-		push_error("Sell hit harness: body click no longer upgrades normally")
-		return
-	towers_root.remove_child(upgrade_target)
-	upgrade_target.queue_free()
-	print("--- SELL HIT OK: outside body, refund=%d, body upgrade=ok ---" % expected_refund)
-
-# --- Roguelite choice ----------------------------------------------------------
-
-## A wave interval elapsed: roll three cards and stop the run while the player decides.
-func _on_choice_due(wave: int) -> void:
-	if Game.is_over:
-		return  # the last enemy leaked as the wave cleared; the run summary wins
-	var options := Run.roll_choices(wave)
-	if options.is_empty():
-		return  # pool exhausted — never block the run over a missing reward
-	if _auto_pick:
-		# Harness only: nothing is going to tap a card in a headless run, and a paused tree
-		# is indistinguishable from a hang. Take the first offer and carry on.
-		print("choice @w%d -> %s" % [wave, String(options[0].get("name", "?"))])
-		_on_upgrade_chosen(options[0])
-		return
-	get_tree().paused = true
-	hud.set_input_blocked(true)
-	upgrade_choice.show_choices(options)
-
-## Monoculture's sub-choice (GAME_STRATEGY_V2.md §6.3, BUILD NEXT #9) is the one card whose
-## effects depend on a choice made AFTER the card itself is picked, so it cannot just call
-## Run.grant() here like every other card does.
-func _on_upgrade_chosen(upgrade: Dictionary) -> void:
-	if upgrade.get("needs_element_choice", false):
-		_pending_monoculture_card = upgrade
-		if _auto_pick:
-			# Harness only: nothing is going to tap an element card in a headless run.
-			_on_element_chosen(String(Game.TOWER_ORDER[0]))
-			return
-		element_choice.show_choices()
-		return  # tree stays paused; _on_element_chosen finishes the job below
-	Run.grant(upgrade)
-	hud.set_input_blocked(false)
-	get_tree().paused = false
-
-## Builds Monoculture's actual effects list now that an element was picked — one effect at
-## +50% for it, three more at -20% each for the others, using the per-effect `element`
-## override run.gd's _effect_applies() reads (see its own comment for why that exists).
-func _on_element_chosen(element: String) -> void:
-	var effects: Array = []
-	for el in Game.TOWER_ORDER:
-		effects.append({"stat": "damage", "op": "mult",
-				"value": 1.5 if el == element else 0.8, "element": el})
-	var final_card: Dictionary = _pending_monoculture_card.duplicate()
-	final_card["effects"] = effects
-	_pending_monoculture_card = {}
-	Run.grant(final_card)
-	hud.set_input_blocked(false)
-	get_tree().paused = false
 
 func _on_game_over() -> void:
 	Audio.play("gameover")

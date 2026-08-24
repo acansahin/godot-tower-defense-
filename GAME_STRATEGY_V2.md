@@ -2330,8 +2330,20 @@ biten ve **rekabetçi her modda sıfırlanan** bir sistem. Bu, "dolaylı savaş 
 
 # BUILD NEXT
 
-Onaydan sonra yapılacak ilk **10 geliştirme görevi**, sırayla. **Hiçbiri henüz yapılmadı.**
+Onaydan sonra yapılacak ilk **10 geliştirme görevi**, sırayla.
 Sıralamanın mantığı: **önce silme, sonra sayı, sonra yapı, en son ölçme.**
+
+> **Durum: 1-10 arası tamamlandı** (commit `7129e1e`, "Implement GAME_STRATEGY_V2's BUILD
+> NEXT queue (steps 2-10)"). Bu satır uzun süre "hiçbiri henüz yapılmadı" dedi çünkü doküman
+> iş yapılmadan önce yazıldı ve sonra güncellenmedi — aşağıdaki tabloyu bir yapılacaklar
+> listesi değil, yapılanın kaydı olarak okuyun.
+>
+> **#11 — Füzyon merdiveni (bu queue'nun dışında, sonradan eklendi).** Adım #5-#6'nın Lv3
+> a/b branch sistemi ve #9'un 22 kartlık havuzu **kaldırıldı**; yerlerine kaynak maptan
+> çıkarılan bir kombinasyon merdiveni geçti: 1 element = temel kule, 2 = ikili (6 tane),
+> 3 = üçlü (4 tane), 4 = Pure. Cross-element güç artık kartla çekilmiyor, dalga 3/7/11/15'te
+> gelen **element avatar boss'ları** yenilerek kazanılıyor ve kule kule, altınla satın
+> alınıyor. Ayrıntı: `Game.FUSIONS`, `docs/element-td-data.md` §3.1.
 
 | # | Görev | Dokunulan dosyalar | Boyut |
 |---|---|---|---|

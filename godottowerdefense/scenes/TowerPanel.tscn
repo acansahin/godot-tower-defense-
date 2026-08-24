@@ -1,8 +1,8 @@
 [gd_scene load_steps=2 format=3]
 
-[ext_resource type="Script" path="res://scripts/upgrade_choice.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/tower_panel.gd" id="1"]
 
-[node name="UpgradeChoice" type="Control"]
+[node name="TowerPanel" type="Control"]
 process_mode = 3
 layout_mode = 3
 anchor_right = 1.0

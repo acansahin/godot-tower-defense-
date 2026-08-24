@@ -252,47 +252,45 @@ func wave_reward(wave: int) -> int:
 func spawn_interval(wave: int) -> float:
 	return maxf(SPAWN_INTERVAL_MIN, SPAWN_INTERVAL_START - wave * SPAWN_INTERVAL_DECAY)
 
-# --- Roguelite choices ---------------------------------------------------------
+# --- Element avatar bosses and the fusion ladder --------------------------------
+#
+# These four waves used to be CHOICE_WAVES, where a three-card roguelite screen appeared.
+# The cards are gone: cross-element power is no longer drawn from a pool, it is TAKEN off a
+# boss. Each of these waves carries an `element_avatar` boss (Game.WAVES) whose element is
+# one of the four, drawn per run in a random order (Run.boss_elements). Kill it and that
+# element unlocks for fusion for the rest of the run; leak it and you get nothing.
+#
+# The wave numbers are unchanged, and for the reason they were chosen in the first place:
+# each sits just before a difficulty step, and 15 is five waves short of the last so the
+# closing stretch tests what the player built rather than handing them one more thing.
 
-## A choice is offered after each of these waves is cleared. Explicit list (was every 3rd
-## wave via CHOICE_EVERY) per GAME_STRATEGY_V2.md §5, BUILD NEXT #3: the flat cadence put a
-## card on wave 20, the Standard run's last wave, with no wave left for it to affect — an
-## error repeated four times in V1's own doc. Every entry here sits just before a difficulty
-## step (first real test, first boss, the finale) so a card reads as preparation, not filler,
-## and 15 is deliberately five waves short of the last wave so the run's closing stretch
-## tests mastery of what the player already picked rather than teaching one more thing.
-## Past wave 15, no more choices are offered until BUILD NEXT #4/#8 define what Endless
-## mode's own cadence should be — Standard's own card count and length are fixed by this
-## list, not by an ongoing formula.
-const CHOICE_WAVES: Array = [3, 7, 11, 15]
-const CHOICE_COUNT := 3   ## Cards offered per choice.
+## Waves carrying an element avatar boss. Kept in step with Game.WAVES' four
+## `boss_rule: "element_avatar"` rows — the list here is what wave_manager checks, the rows
+## there are what actually spawn, and they must not drift apart.
+const ELEMENT_BOSS_WAVES: Array = [3, 7, 11, 15]
 
-## Relative odds per rarity before the wave drift below.
-const RARITY_WEIGHTS := {
-	"common": 60.0, "rare": 25.0, "epic": 12.0, "legendary": 3.0,
-}
-## How far each rarity sits above common; multiplies the drift.
-const RARITY_TIER := {
-	"common": 0, "rare": 1, "epic": 2, "legendary": 3,
-}
-## Each wave nudges the better rarities up, so a deep run stops offering the same commons.
-## At wave 30 this is roughly rare x1.5, epic x1.9, legendary x2.4 — a real shift without
-## making legendaries routine.
-const RARITY_WAVE_DRIFT := 0.015
+## Avatar bosses are deliberately softer than the two set-piece bosses (BOSS_HP_MULT 8.0).
+## There are four of them rather than two, the first arrives on wave 3 when START_GOLD has
+## paid for maybe two towers, and losing one costs the player a whole element for the run —
+## which is punishment enough without also costing five lives.
+const ELEMENT_BOSS_HP_MULT := 5.0
+const ELEMENT_BOSS_REWARD_MULT := 8
+const ELEMENT_BOSS_LIFE_COST := 3
 
-## Display colours per rarity, used by the choice cards.
-const RARITY_COLORS := {
-	"common": Color(0.72, 0.76, 0.82),
-	"rare": Color(0.38, 0.68, 1.00),
-	"epic": Color(0.72, 0.45, 1.00),
-	"legendary": Color(1.00, 0.72, 0.22),
-}
-
-## Weight for `rarity` when choosing at `wave`.
-func rarity_weight(rarity: String, wave: int) -> float:
-	var base: float = float(RARITY_WEIGHTS.get(rarity, 1.0))
-	var tier: float = float(RARITY_TIER.get(rarity, 0))
-	return base * (1.0 + RARITY_WAVE_DRIFT * float(wave) * tier)
+## Gold to absorb the 2nd, 3rd and 4th element into a tower — the dual, the triple and Pure.
+## Scaled from the map's own 275 / 1017 combination costs against its 50-gold base tower
+## (docs/element-td-data.md §2, §3); the map has no four-element tower, so Pure's is set to
+## roughly double the triple, which is what the map's own tier-to-tier steps do at the top.
+##
+## Sized against `--fill-board`'s own income measurement: ~3.7k gold banked by wave 15 (when
+## the last avatar boss falls and Pure first becomes possible) and ~7.1k across the full 20,
+## on a maxed board that leaks nothing — so an UPPER bound on what a real player has. Against
+## that, walking one tower all the way to Pure costs 480 (maxed base) + 1480 (fusions) = 1960,
+## about a quarter of the run: reachable, and a real commitment rather than a default.
+##
+## Still unproven by PLAY. Nothing simulates a player's gradual build-up, so the numbers above
+## are a ceiling, not a budget — these three are the values most likely to move.
+const FUSION_COSTS: Array = [160, 420, 900]
 
 # --- Meta progression ----------------------------------------------------------
 
@@ -329,10 +327,10 @@ func workshop_cost(base_cost: int, cost_growth: float, level: int) -> int:
 
 # --- Branch mechanics (BUILD NEXT #5-#6) ----------------------------------------
 
-## Undertow (Water branch B): minimum seconds between two knockbacks on the SAME enemy.
-## GAME_STRATEGY_V2.md §4.3's own stated reason: without it, several Undertow towers can
+## Knockback: minimum seconds between two knockbacks on the SAME enemy.
+## GAME_STRATEGY_V2.md §4.3's own stated reason: without it, several such towers can
 ## juggle one enemy in place forever, which is a lock rather than the "buys distance"
-## identity the branch is for.
+## identity the payload is for.
 const KNOCKBACK_COOLDOWN := 2.0
 
 # --- Boss (was wave_manager.gd:24-31) ------------------------------------------

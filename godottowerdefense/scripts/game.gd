@@ -291,6 +291,31 @@ const OBSTACLES: Array = [
 	[Vector2(315, 715), 176.0],   # the lake and the pool the waterfall drops into
 ]
 
+## Fraction of TOWER_RADIUS the footprint test reaches out to. A tower is drawn much taller
+## than it is wide and its base is smaller than the 30px click disc, so testing the full
+## radius would refuse a spot whose visible ground is perfectly clear. 0.7 asks "is the base
+## on grass", not "is the whole click target".
+const FOOTPRINT_PROBE := 0.35
+
+## True when the ground under a tower's base is open on every side, not just at its centre.
+## A centre-only test lets a tower sit on the last grass texel with three quarters of its
+## base buried in a tree, which reads as a bug whichever way the player looks at it.
+##
+## Eight points around the base plus the centre. Nine samples of a 209x117 image is nothing,
+## and the alternative — a distance transform baked into the mask — would move the same
+## decision somewhere the player cannot see it.
+func _footprint_is_open(pos: Vector2) -> bool:
+	if active_build_mask == null:
+		return true
+	if not is_open_ground(pos):
+		return false
+	var reach := TOWER_RADIUS * FOOTPRINT_PROBE
+	for i in 8:
+		var a := TAU * float(i) / 8.0
+		if not is_open_ground(pos + Vector2(cos(a), sin(a)) * reach):
+			return false
+	return true
+
 ## True when a tower of TOWER_RADIUS may stand here. `others` is every tower already on the
 ## board (main passes its Towers node's children); pass an empty array to ask only about
 ## the terrain, which is what the coverage harness does.
@@ -305,8 +330,13 @@ func can_build_at(pos: Vector2, others: Array = []) -> bool:
 		if pos.distance_to(entry[0]) < float(entry[1]) + TOWER_RADIUS:
 			return false
 	# A board may expose only a few painted clearings. The main board leaves this empty and
-	# keeps free placement; the training board fills it so its dense forest really is closed
-	# ground instead of merely looking closed.
+	# lets the terrain mask below decide; the training board fills it so its lesson really is
+	# about the six pockets it draws rings around.
+	#
+	# An explicit allowlist WINS OUTRIGHT over the derived mask rather than intersecting with
+	# it. The two answer different questions — "where does this lesson want a tower" versus
+	# "where is the ground actually clear" — and intersecting them silently moved the
+	# tutorial's own spots, which showed up as a lesson that could no longer be completed.
 	if not active_build_zones.is_empty():
 		var inside_zone := false
 		for entry in active_build_zones:
@@ -315,6 +345,8 @@ func can_build_at(pos: Vector2, others: Array = []) -> bool:
 				break
 		if not inside_zone:
 			return false
+	elif not _footprint_is_open(pos):
+		return false
 	for other in others:
 		if other != null and pos.distance_to(other.position) < TOWER_GAP:
 			return false
@@ -366,15 +398,17 @@ func can_build_at(pos: Vector2, others: Array = []) -> bool:
 ## 1.0/1.8/3.2/5.6/10.0 growth shape (§4.2) from each element's own new Lv1 base, rounded by
 ## hand the same way the WC3 Pure-tier numbers were — see the comment below this table.
 ##
-## From Lv3, a tower's stats also depend on Game.TOWER_BRANCHES[element][branch] — see
-## Tower._recompute() and BUILD NEXT #5's branch-choice popup. Lv1-2 (no branch chosen yet)
-## always uses the bare entry below.
+## These four entries describe an UNFUSED tower. The moment a tower absorbs a second element
+## it stops reading this table entirely and reads Game.FUSIONS instead — see Tower._recompute,
+## which picks the definition from the tower's element set rather than layering one over the
+## other.
 const TOWER_DEFS := {
 	"fire": {
 		"name": "Fire", "cost": 50, "color": Color(0.95, 0.45, 0.18), "element": "fire",
 		"damage_tiers": [10, 18, 32, 56, 100],
 		"range": 485.7, "interval": 0.40,      # range: 170px = 485.7 * 0.35
-		# Burn: 4 dps, 2s, 1 stack (Blaze/Wildfire change this from Lv3 — see TOWER_BRANCHES).
+		# Burn: 4 dps over 2s, on every hit. Lava (Fire+Earth) inherits this channel and
+		# deepens it; see FUSIONS.
 		"burn_dps": 4.0, "burn_time": 2.0, "burn_max_stacks": 1,
 	},
 	"water": {
@@ -388,7 +422,8 @@ const TOWER_DEFS := {
 		"damage_tiers": [12, 22, 38, 67, 120],
 		"range": 628.6, "interval": 0.90,      # range: 220px = 628.6 * 0.35
 		"poison_dps": 12.0, "poison_time": 3.0,
-		# Base THORN identity, both branches inherit it (GAME_STRATEGY_V2.md §3.1): poison
+		# Base THORN identity, and every fusion carrying Nature inherits it
+		# (GAME_STRATEGY_V2.md §3.1): poison
 		# ignores the element matchup entirely (unlike every other payload in the game,
 		# direct hits included) and, like all damage, blocks this tick's regen — see
 		# Enemy.take_damage's regen-block, which already fires for poison ticks with no
@@ -420,116 +455,225 @@ const TOWER_DEFS := {
 ## The buildable roster, in palette order. Cut from six elements to four in the V2 redesign
 ## (see GAME_STRATEGY_V2.md §2, BUILD NEXT #2): Light and Darkness are retired as a *role*,
 ## not deleted — their TOWER_DEFS entries and painted art stay in the repo, unreferenced,
-## for the Phase 4 return GAME_STRATEGY_V2.md §28 describes. The fifteen dual towers and
-## Lightning went the same way as the dual mechanic they depended on (see ELEMENT_BEATS and
-## the removed DUAL_RECIPES/DUAL_ELEMENT_LEVEL below) — cross-element play becomes a card
-## effect (Run/UPGRADE_POOL), not a second tier of buildable towers.
+## for the Phase 4 return GAME_STRATEGY_V2.md §28 describes.
+##
+## This is the BUILDABLE roster and it is the whole of it: cross-element towers are never
+## bought from the palette, they are grown out of a tower already standing on the board by
+## absorbing elements an avatar boss unlocked — see FUSIONS below. So the six duals, four
+## triples and Pure are real towers with real map-ported identities, and none of them adds a
+## palette slot.
 ## Ordered around the damage circle (see ELEMENT_BEATS) rather than alphabetically, so the
 ## palette itself teaches which element answers which.
 const TOWER_ORDER: Array = ["water", "fire", "nature", "earth"]
 
-# --- Tower branches (BUILD NEXT #5-#6) ------------------------------------------
-# Every element splits into two branches at Lv3 (GAME_STRATEGY_V2.md §4, §4.3): a two-card
-# popup (branch_choice.gd, shown from main.gd's _upgrade_tower once a tower reaches level 3)
-# sets Tower.branch to "a" or "b" for the rest of the run. From then on Tower._recompute()
-# layers this entry's `lv3` fields over the base TOWER_DEFS entry, then `lv4`/`lv5` as the
-# tower keeps levelling — a plain Dictionary.merge(overwrite=true) each step, so any field
-# the branch does not mention keeps its base/lower-tier value. `lv1_2` fields (currently
-# unused) are reserved for a branch that needs to differ before Lv3, which none do.
+# --- Fusion towers: the combination ladder --------------------------------------
+# Replaces the Lv3 a/b branch system. A tower does not pick a flavour of itself any more;
+# it ABSORBS other elements and becomes a different tower. The set of elements it carries
+# is its whole identity:
 #
-# Levelling stays "seviye sadece hasarı değiştirir; branch her şeyi değiştirebilir" (§2.3):
-# the 1.0/1.8/3.2/5.6/10.0 damage growth from TOWER_DEFS.damage_tiers is untouched by branch
-# choice — a branch instead multiplies the RESULT via `damage_mult`, so Siege's "+60%
-# damage" stacks on top of the same ladder every tower climbs, rather than replacing it.
+#   1 element  -> TOWER_DEFS      the four base towers
+#   2 elements -> FUSIONS         six duals   (all six exist in the source map)
+#   3 elements -> FUSIONS         four triples (all four exist in the source map)
+#   4 elements -> FUSIONS         Pure — the one entry the map does NOT have
 #
-# No stat here is WC3-derived; every number is GAME_STRATEGY_V2.md §4.3's own design value,
-# already in the units _recompute() reads them in (seconds, px, 0..1 chance/factor) — none
-# of them go through Balance.WC3_RANGE_SCALE. The mechanic each branch is actually FOR
-# (burn stacking, knockback, armor-crack, the Grove aura) is new engine-side machinery in
-# enemy.gd / tower.gd / projectile.gd, listed in each branch's comment; the stats here are
-# only the part a plain override can express.
-const TOWER_BRANCHES := {
-	"fire": {
-		"a": {
-			"id": "blaze", "name": "Blaze", "desc": "Faster. Burn stacks up to 3x",
-			# Burn now stacks instead of just refreshing (Enemy.apply_burn/_burn_stacks).
-			"lv3": {"interval": 0.28, "burn_max_stacks": 3},
-			# Cinderheart: at 3 stacks, burn ticks twice as fast (Enemy._burn_doubles_at_max).
-			"lv5": {"burn_doubles_at_max": true},
-		},
-		"b": {
-			"id": "wildfire", "name": "Wildfire", "desc": "Burn spreads to nearby enemies",
-			# Burn also catches enemies within 70px at half power on every hit
-			# (Projectile._apply_burn_splash).
-			"lv3": {"burn_spread_radius": 70.0},
-			# Firestorm: simplified from §4.3's persistent 4s ground patch — GDScript's
-			# scene-tree lifecycle makes a standalone hazard object real scope on its own, and
-			# an instant transfer reads the same in practice (a burning kill sets nearby
-			# enemies alight) without a new autonomous node type. Documented, not hidden: see
-			# BUILD NEXT #6 notes in the design memory.
-			"lv5": {"burn_spreads_on_death": true},
-		},
+# ORDER DOES NOT MATTER, exactly as in the map: Fire absorbing Water and Water absorbing
+# Fire both produce Steam. The key is therefore the element names SORTED and joined with
+# "+" (see fusion_key), which is why every key below reads alphabetically rather than in
+# the palette's ring order.
+#
+# WHERE THE DATA COMES FROM. The recipes, the tower names, the tier names and the ability
+# text are all READ from ELEMENT TD.w3x, not invented — `python tools/extract_w3x.py
+# "<map>" recipes` prints them, and docs/element-td-data.md §2/§3 writes them up. Our four
+# elements happen to close the table exactly: of the map's 15 duals and 20 triples, exactly
+# 6 and 4 avoid Light and Darkness, and those are all ten rows below. Nothing was dropped
+# and nothing was made up to fill a gap.
+#
+# WHERE THE NUMBERS DO NOT. The map's own damage/cooldown values cannot be used directly:
+# GAME_STRATEGY_V2.md §4.3 already replaced the four base elements' stats with its own
+# design values, and the map's cost curve (50 -> 175 -> 788 -> 3544) is some sixty times
+# steeper than ours. So the map supplies IDENTITY and RELATIVE ORDER — Clay hits hardest of
+# the duals, Roots barely damages at all, Infernal tops the triples — and each row's Lv1 DPS
+# is then set on our scale, where a base tower's Lv1 is ~25 DPS. Each row's comment records
+# the map value it was derived from so the derivation stays auditable.
+#
+# `interval` is the map's own cooldown wherever the object data actually carries one (Clay
+# 1.05, Infernal 1.20, Rainbow 1.10, Flesh Golem 0.90); the rest inherit from a Warcraft III
+# base unit and simply are not in the map, so those are the mean of the parents' intervals.
+# `range` is likewise the mean of the parent elements' reach, in the WC3-unit field every
+# other range read site expects (px / Balance.WC3_RANGE_SCALE = 0.35).
+#
+# `damage_tiers` follows the same 1.0/1.8/3.2/5.6/10.0 growth every tower in the game climbs
+# (§4.2) — fusing changes what a tower IS, levelling still only changes how hard it hits.
+#
+# `names` is the map's own tier ladder for that combination, spread across our five levels
+# by fusion_name(): three names (a dual) split 1-2 / 3-4 / 5, two names (a triple) split
+# 1-3 / 4-5, one name never changes. Free identity depth, straight out of the source.
+const FUSIONS := {
+	# --- Duals (2 elements) --------------------------------------------------------
+	## map: Clay Tower, 600 dmg @ 1.05s (the cooldown IS in the object data here).
+	## "Throws clumps of clay at enemies, with a chance to slow." The chance is what
+	## slow_chance exists for — every other slow in the game lands on every hit.
+	"earth+water": {
+		"name": "Clay", "names": ["Clay", "Golem", "Living Statue"],
+		"color": Color(0.80, 0.62, 0.45),
+		"damage_tiers": [47, 85, 150, 263, 470],
+		"range": 585.714, "interval": 1.05,        # 205px = mean(water 210, earth 200)
+		"slow_chance": 0.35, "slow_factor": 0.65, "slow_time": 1.5,
+		"desc": "Chance to slow. The hardest-hitting dual",
 	},
-	"water": {
-		"a": {
-			"id": "glacier", "name": "Glacier", "desc": "Deeper chill. Pulses every 4th shot",
-			"lv3": {"slow_factor": 0.55, "chill_pulse_every": 4},
-			# Absolute Zero reuses the existing generic stun_chance/stun_time payload — a
-			# freeze IS a stun as far as Enemy/Projectile are concerned, just named for what
-			# it looks like on Water.
-			"lv5": {"stun_chance": 0.15, "stun_time": 1.0},
-		},
-		"b": {
-			"id": "undertow", "name": "Undertow", "desc": "Chance to push enemies back",
-			# 2s per-enemy cooldown and boss immunity are enforced engine-side
-			# (Enemy.apply_knockback / Projectile._apply), not data here.
-			"lv3": {"knockback_chance": 0.25, "knockback_distance": 60.0},
-			"lv5": {"knockback_distance": 120.0, "knockback_chill_on_land": true},
-		},
+	## map: Lava Tower, 751 dmg, siege + msplash, "Siege with added incinerate damage."
+	## The tooltip says ATTACKS LAND AND AIR — so fusing Earth into Lava lifts Earth's
+	## ground-only restriction. That reward is the map's, not ours.
+	"earth+fire": {
+		"name": "Lava", "names": ["Lava", "Magma", "Volcano"],
+		"color": Color(0.92, 0.35, 0.20),
+		"damage_tiers": [59, 106, 189, 330, 590],
+		"range": 528.571, "interval": 1.4,         # 185px = mean(fire 170, earth 200)
+		"splash_radius": 110.0, "splash_factor": 0.55,
+		"burn_dps": 14.0, "burn_time": 3.0,        # incinerate
+		"can_hit_flying": true,
+		"desc": "Splash plus burn — and it can hit flyers",
 	},
-	"earth": {
-		"a": {
-			"id": "quake", "name": "Quake", "desc": "Bigger splash. Every hit staggers",
-			# Stagger reuses the generic stun payload at a short, always-on duration.
-			"lv3": {"splash_radius": 140.0, "stun_chance": 1.0, "stun_time": 0.4},
-			# Fissure reuses the EXISTING slow_splash mechanism (already "the slow also
-			# spreads to this radius") — no new engine code, just filling in the fields Ice
-			# used to.
-			"lv5": {"slow_splash": 140.0, "slow_factor": 0.7, "slow_time": 2.0},
-		},
-		"b": {
-			"id": "siege", "name": "Siege", "desc": "Smaller splash. Cracks armor",
-			"lv3": {"splash_radius": 50.0, "damage_mult": 1.6},
-			# The crack (+25% damage taken from ALL sources, 3s) is written up in §4.3 as
-			# switching on at Lv4, not Lv3 — the only branch whose mechanic has its own
-			# internal level gate rather than turning on wholesale at Lv3.
-			"lv4": {"crack_bonus": 0.25, "crack_time": 3.0},
-			# Sunder: the crack also spreads to enemies within 80px when applied.
-			"lv5": {"crack_spread_radius": 80.0},
-		},
+	## map: Sun Tower, 600 dmg. "Medium damage tower, also give a bonus to the damage of
+	## nearby Tidal Towers." Tidal is a Light+Dark+Water triple we will never have, so the
+	## aura is generalised to every neighbouring tower — the same adaptation the six-element
+	## build made for Moon/Sun, kept because a buff nobody can receive is not a tower.
+	"fire+nature": {
+		"name": "Sun", "names": ["Sun", "Solar", "Temple of Sol"],
+		"color": Color(1.0, 0.78, 0.30),
+		"damage_tiers": [49, 88, 157, 274, 490],
+		"range": 557.143, "interval": 1.3,         # 195px = mean(fire 170, nature 220)
+		"aura_stat": "damage", "aura_radius": 170.0, "aura_mult": 1.15,
+		"desc": "+15% damage to every tower within 170px",
 	},
-	"nature": {
-		"a": {
-			"id": "blight", "name": "Blight", "desc": "Stronger poison that never expires",
-			# "Kendini yeniler" needs no new code: apply_poison() already extends the timer
-			# (maxf) on every hit, so a target the tower keeps hitting never sees it lapse.
-			"lv3": {"poison_dps_mult": 1.8, "poison_time": 8.0},
-			# Plague: a poisoned enemy that dies passes its poison to the nearest survivor.
-			"lv5": {"poison_spreads_on_death": true},
-		},
-		"b": {
-			"id": "grove", "name": "Grove", "desc": "Doesn't attack. Empowers nearby towers",
-			# no_attack stops Tower._process from ever asking for a target — see the
-			# aura_stat pattern this reuses (Tower._recompute's neighbour loop), extended
-			# with two fields (aura_gold_add, aura_life_chance_add) that pattern never
-			# needed before because no earlier aura granted more than one stat at once.
-			"lv3": {"no_attack": true, "aura_stat": "attack_speed", "aura_radius": 160.0,
-					"aura_mult": 1.15},
-			"lv4": {"aura_gold_add": 1},
-			"lv5": {"aura_damage_mult": 1.12, "aura_life_chance_add": 0.03},
-		},
+	## map: Steam Tower, 150 dmg, msplash. "Blasts all nearby units with steam that
+	## gradually reduces health" — an area hit (splash) plus a damage-over-time (poison).
+	"fire+water": {
+		"name": "Steam", "names": ["Steam", "Vapor", "Immolation"],
+		"color": Color(0.70, 0.82, 0.95),
+		"damage_tiers": [13, 23, 42, 73, 130],
+		"range": 542.857, "interval": 0.4,         # 190px = mean(fire 170, water 210)
+		"splash_radius": 80.0, "splash_factor": 0.5,
+		"poison_dps": 16.0, "poison_time": 2.5,
+		"desc": "Fast area steam that keeps eating health",
+	},
+	## map: Well Tower, 350 dmg. "Supporting tower that has the Spring Forward ability
+	## which adds speed to nearby towers." Reuses the same aura machinery as Sun.
+	"nature+water": {
+		"name": "Well", "names": ["Well", "Spring", "Waterfall"],
+		"color": Color(0.45, 0.85, 0.80),
+		"damage_tiers": [30, 54, 96, 168, 300],
+		"range": 614.286, "interval": 1.0,         # 215px = mean(water 210, nature 220)
+		"aura_stat": "attack_speed", "aura_radius": 170.0, "aura_mult": 1.15,
+		"desc": "+15% attack speed to every tower within 170px",
+	},
+	## map: Roots Tower, 100 dmg @ 8.10s, magic, "casts Entangling Roots on ground enemies.
+	## Attacks land units." An 8.1s cooldown is unplayable at our pace, so the earlier port's
+	## 2.2 is kept — the LOW DAMAGE / HIGH CONTROL identity is what carries over, not the
+	## number. Entangle is a root, and a root is our stun payload.
+	"earth+nature": {
+		"name": "Roots", "names": ["Roots", "Brambles", "Entangling"],
+		"color": Color(0.45, 0.60, 0.28),
+		"damage_tiers": [18, 32, 58, 101, 180],
+		"range": 600.0, "interval": 2.2,           # 210px = mean(nature 220, earth 200)
+		"stun_chance": 0.5, "stun_time": 1.2,
+		"can_hit_flying": false,
+		"desc": "Roots ground enemies in place. Barely damages",
+	},
+
+	# --- Triples (3 elements) ------------------------------------------------------
+	## map: Infernal Tower, 3750 dmg @ 1.20s, attack_type=CHAOS. "Strong tower with high
+	## chaos-type damage." Chaos in Warcraft III is 100% against every armour type — which
+	## is exactly what ignores_matchup does here. The hardest hitter of the four triples.
+	"earth+fire+water": {
+		"name": "Infernal", "names": ["Infernal", "Chaos"],
+		"color": Color(0.85, 0.25, 0.35),
+		"damage_tiers": [102, 184, 326, 571, 1020],
+		"range": 552.381, "interval": 1.2,         # 193px = mean(fire, water, earth)
+		"ignores_matchup": true, "can_hit_flying": true,
+		"desc": "Chaos damage — no armour resists it",
+	},
+	## map: Rainbow Tower, 3250 dmg @ 1.10s, attack_type=CHAOS. "Chaos-damage multi-color
+	## attacking tower. Very strong." Same rule as Infernal, faster and slightly softer.
+	"fire+nature+water": {
+		"name": "Rainbow", "names": ["Rainbow", "Spectrum"],
+		"color": Color(0.85, 0.55, 0.95),
+		"damage_tiers": [88, 158, 282, 493, 880],
+		"range": 571.429, "interval": 1.1,         # 200px = mean(fire, water, nature)
+		"ignores_matchup": true, "can_hit_flying": true,
+		"desc": "Chaos damage, faster than Infernal",
+	},
+	## map: Dinosaur Tower, 2000 dmg. "Has the ability to devour enemies which stay in its
+	## belly until they are gradually digested." Devour needs no new mechanism: a long stun
+	## plus heavy poison IS "held still and digested". The visual (the creep drawn inside the
+	## tower) is deliberately skipped — it would be a new node type for one row.
+	"earth+fire+nature": {
+		"name": "Dinosaur", "names": ["Dinosaur", "Fossil"],
+		"color": Color(0.55, 0.70, 0.35),
+		"damage_tiers": [104, 187, 333, 582, 1040],
+		"range": 561.905, "interval": 1.6,         # 197px = mean(fire, nature, earth)
+		"stun_chance": 0.25, "stun_time": 1.5,
+		"poison_dps": 30.0, "poison_time": 4.0,
+		"can_hit_flying": true,
+		"desc": "Devours enemies: holds them still and digests",
+	},
+	## map: Flesh Golem Tower, 1350 dmg @ 0.90s, range 700 (one of the few explicit ones).
+	## "-Moving Tower- Grows stronger with each unit it kills." The tower does not move here
+	## (nothing in this game does), but the growth is the interesting half and it is real:
+	## damage_per_kill accumulates for the rest of the tower's life.
+	"earth+nature+water": {
+		"name": "Flesh Golem", "names": ["Flesh Golem", "Living Flesh"],
+		"color": Color(0.80, 0.45, 0.50),
+		"damage_tiers": [54, 97, 173, 302, 540],
+		"range": 600.0, "interval": 0.9,           # 210px = mean(water, nature, earth)
+		"damage_per_kill": 0.5, "can_hit_flying": true,
+		"desc": "+0.5 damage permanently for every kill it lands",
+	},
+
+	# --- Pure (4 elements) ---------------------------------------------------------
+	## NOT A MAP TOWER. The map has six elements and its recipes stop at three, so a
+	## four-element combination has no source entry. The NAME is borrowed from the map's own
+	## fifth single-element tier ("Pure Fire", 24444 gold), which is the vocabulary it uses
+	## for a tower at the end of its road.
+	##
+	## Its rule is the reason the whole ladder exists: holding all four elements means
+	## element_mult_best always finds the element the target is weak to, so no armour ever
+	## resists it, and pierces_rules lets its payload through Enemy.cc_immune (the wave-10
+	## boss and the `immune` archetype) as well. Nothing in the game reduces a Pure tower.
+	"earth+fire+nature+water": {
+		"name": "Pure", "names": ["Pure"],
+		"color": Color(1.0, 1.0, 0.95),
+		"damage_tiers": [91, 164, 291, 510, 910],
+		"range": 571.429, "interval": 0.7,         # 200px = mean of all four
+		"ignores_matchup": true, "pierces_rules": true, "can_hit_flying": true,
+		"desc": "Pure damage. No armour, no immunity stops it",
 	},
 }
+
+## The FUSIONS key for a set of elements: sorted, joined with "+". A tower's element list is
+## built by appending, so it arrives in pick order — sorting here is what makes Fire+Water
+## and Water+Fire the same tower, which is the map's own rule.
+func fusion_key(elements: Array) -> String:
+	var sorted_els: Array = elements.duplicate()
+	sorted_els.sort()
+	return "+".join(PackedStringArray(sorted_els))
+
+## The combination definition for `elements`, or {} for a single element (or a set with no
+## entry, which cannot happen with four elements but is not worth crashing over).
+func fusion_def(elements: Array) -> Dictionary:
+	if elements.size() < 2:
+		return {}
+	return FUSIONS.get(fusion_key(elements), {})
+
+## The name a fused tower shows at `level`: the map's own tier ladder for that combination,
+## spread over our five levels. Three names (a dual) split 1-2 / 3-4 / 5; two names (a
+## triple) split 1-3 / 4-5; one name never changes. Integer division does the whole job.
+func fusion_name(def: Dictionary, level: int) -> String:
+	var names: Array = def.get("names", [])
+	if names.is_empty():
+		return String(def.get("name", "?"))
+	var i: int = (level - 1) * names.size() / Balance.MAX_LEVEL
+	return String(names[clampi(i, 0, names.size() - 1)])
 
 # --- Wave definitions ----------------------------------------------------------
 # Each wave picks an archetype from WAVE_TYPES; its stats = the base scaling
@@ -570,14 +714,20 @@ const WAVE_TYPES := {
 ## and all Air waves stay neutral so element colour doesn't clash with the archetype tint.
 ## "art" / "name" may override only the painted creature and preview label while keeping
 ## the `type` archetype's combat stats — wave 1 uses the familiar tutorial Scout this way.
+##
+## The four `element_avatar` rows (waves 3, 7, 11, 15 — Balance.ELEMENT_BOSS_WAVES) carry NO
+## `element` on purpose: theirs is drawn per run from Run.boss_elements and filled in by
+## wave_manager._start_wave, so a run's four avatar bosses are the four elements in a random
+## order. Beating one unlocks that element for fusion (Run.unlock_fusion), which is the only
+## way cross-element power enters a run now — see FUSIONS above.
 const WAVES: Array = [
 	{"type": "normal", "art": "tutorial", "name": "Scout", "count": 0.65}, # 1
 	{"type": "normal"},                                # 2  — a real wave, still gentle
-	{"type": "fast"},                                  # 3  — speed
+	{"type": "fast", "boss": true, "boss_rule": "element_avatar"},   # 3  — speed + AVATAR 1
 	{"type": "swarm"},                                 # 4  — numbers
 	{"type": "normal", "element": "fire"},             # 5  — first armour element
 	{"type": "air"},                                   # 6  — flyers: ground-only towers miss
-	{"type": "immune", "element": "nature"},           # 7  — slow/stun stop working
+	{"type": "immune", "boss": true, "boss_rule": "element_avatar"}, # 7  — CC off + AVATAR 2
 	{"type": "fast", "element": "earth"},              # 8
 	{"type": "regen", "element": "water"},             # 9  — must out-damage the heal
 	# boss_rule (GAME_STRATEGY_V2.md §10.4, BUILD NEXT #7): the ONE question each boss asks.
@@ -585,11 +735,11 @@ const WAVES: Array = [
 	# see Enemy.cc_immune) rather than to one named kind, so a future control type is covered
 	# automatically instead of needing its own exemption listed here.
 	{"type": "tank", "boss": true, "element": "water", "boss_rule": "control_immune"},# 10 — FIRST BOSS
-	{"type": "split", "element": "nature"},            # 11 — splitters
+	{"type": "split", "boss": true, "boss_rule": "element_avatar"},  # 11 — split + AVATAR 3
 	{"type": "tank", "element": "earth"},              # 12
 	{"type": "air"},                                   # 13
 	{"type": "immune", "element": "water"},            # 14
-	{"type": "fast", "element": "fire"},               # 15
+	{"type": "fast", "boss": true, "boss_rule": "element_avatar"},   # 15 — AVATAR 4, the last
 	{"type": "regen", "element": "nature"},            # 16
 	{"type": "split", "element": "earth"},             # 17
 	{"type": "swarm", "element": "water"},             # 18
@@ -598,110 +748,6 @@ const WAVES: Array = [
 	# Game.TOWER_ORDER's ring, starting here at "fire" — asks whether the run invested in one
 	# element or spread across all four, which the first boss never asked.
 	{"type": "swarm", "boss": true, "element": "fire", "boss_rule": "rotating_armor"},# 20 — SECOND BOSS, then the generator
-]
-
-# --- Roguelite upgrade pool ----------------------------------------------------
-# Offered three at a time between waves; the player keeps one, and it lasts the run.
-# Adding an upgrade is a row here — Run folds the effects generically and the choice
-# screen renders whatever it is handed, so neither needs to know this one exists.
-#
-# Fields:
-#   id          unique; also the key stacking is counted against
-#   name/desc   what the card shows. `desc` must state the real number — a card whose
-#               text and effect disagree is worse than no card
-#   rarity      common | rare | epic | legendary (weights live in Balance)
-#   effects     list of {stat, op, value}; see TowerMods.fold for the stats
-#   element     optional — restrict to towers of this damage element
-#   tower       optional — restrict to this exact tower id
-#   unlock      optional — grants a tower id instead of applying effects
-#   max_stacks  optional (default 1) — how many times it may be taken in one run
-#   min_wave    optional — not offered before this wave
-#
-# An entry with neither `element` nor `tower` applies to every tower, which is why the
-# global ones cost a higher rarity than their single-element equivalents.
-## The 22-card pool BUILD NEXT #9 replaces the interim step-2 prune with (GAME_STRATEGY_V2.md
-## §6.3): 8 tower-mechanic cards, 6 cross-element synergy cards, 4 economy cards, 4 run-
-## identity cards. Every card here is genuinely new relative to the old pool — this is a
-## wholesale replacement, not an extension, because the interim pool's flat "+25% damage to
-## one element" cards were explicitly a step-2 placeholder for this step to retire.
-##
-## Most of the new stats (burn_time, slow_time, vs_flying, burn_slow, overclock_every,
-## groundwork, target_lowest_hp, chill_burn, chill_hit) are TowerMods.fold cases; MAGMA,
-## EMBERSEED, BLOOM, BEDROOT and SALVAGE carry no `effects` at all — they gate purely on
-## Run.has_card(id) at the engine call site that needs them (tower.gd's BLOOM/BEDROOT aura
-## scan, enemy.gd's EMBERSEED spread, projectile.gd's MAGMA refresh and Aftershock echo,
-## tower.gd's Salvage-equivalent check lives in Tower.sell_value — see BUILD NEXT #9 notes
-## in the design memory for the full engine-side map).
-const UPGRADE_POOL: Array = [
-	# --- Mekanik (8) -------------------------------------------------------------
-	{"id": "wick", "name": "Wick", "rarity": "common", "max_stacks": 1,
-		"element": "fire", "desc": "Fire's burn lasts twice as long",
-		"effects": [{"stat": "burn_time", "op": "mult", "value": 2.0}]},
-	{"id": "permafrost", "name": "Permafrost", "rarity": "common", "max_stacks": 3,
-		"element": "water", "desc": "Water's chill lasts 1.5s longer",
-		"effects": [{"stat": "slow_time", "op": "add", "value": 1.5}]},
-	{"id": "long_sight", "name": "Long Sight", "rarity": "common", "max_stacks": 3,
-		"desc": "All towers gain +25 range",
-		"effects": [{"stat": "range", "op": "add", "value": 25.0}]},
-	{"id": "backdraft", "name": "Backdraft", "rarity": "rare", "max_stacks": 1,
-		"element": "fire", "desc": "Fire's burn also slows the target by 15%",
-		"effects": [{"stat": "burn_slow", "op": "mult", "value": 0.85}]},
-	{"id": "aftershock", "name": "Aftershock", "rarity": "rare", "max_stacks": 1,
-		"element": "earth", "desc": "Earth's splash lands again 0.3s later at 40% power"},
-	{"id": "spore", "name": "Spore", "rarity": "rare", "max_stacks": 1,
-		"element": "nature", "desc": "Nature towers deal +60% damage to flying enemies",
-		"effects": [{"stat": "vs_flying", "op": "mult", "value": 1.6}]},
-	{"id": "overclock", "name": "Overclock", "rarity": "epic", "max_stacks": 1,
-		"desc": "Every tower's 5th shot deals double damage",
-		"effects": [{"stat": "overclock_every", "value": 5.0}]},
-	{"id": "groundwork", "name": "Groundwork", "rarity": "legendary", "max_stacks": 1,
-		"element": "earth", "desc": "Earth can now hit flying enemies, but its splash radius is halved",
-		"effects": [{"stat": "groundwork", "value": 1.0}]},
-
-	# --- Cross-element (6) — GAME_STRATEGY_V2.md §6.2 ---------------------------
-	{"id": "steam", "name": "Steam", "rarity": "rare", "max_stacks": 1,
-		"element": "fire", "desc": "Fire's burn deals +50% damage to chilled enemies",
-		"effects": [{"stat": "chill_burn", "op": "mult", "value": 1.5}]},
-	{"id": "erosion", "name": "Erosion", "rarity": "rare", "max_stacks": 1,
-		"element": "earth", "desc": "Earth deals +40% damage to chilled enemies",
-		"effects": [{"stat": "chill_hit", "op": "mult", "value": 1.4}]},
-	{"id": "magma", "name": "Magma", "rarity": "epic", "max_stacks": 1,
-		"desc": "Earth's splash refreshes the burn on any enemy it hits"},
-	{"id": "embers_eed", "name": "Emberseed", "rarity": "epic", "max_stacks": 1,
-		"desc": "A poisoned enemy dying while burning spreads its poison to three neighbours instead of one"},
-	{"id": "bloom", "name": "Bloom", "rarity": "rare", "max_stacks": 1,
-		"desc": "Nature towers within 140px of a Water tower tick their poison 30% faster"},
-	{"id": "bedroot", "name": "Bedroot", "rarity": "rare", "max_stacks": 1,
-		"desc": "Earth towers within 140px of a Nature tower also spread poison"},
-
-	# --- Ekonomi (4) -------------------------------------------------------------
-	{"id": "prospector", "name": "Prospector", "rarity": "common", "max_stacks": 5,
-		"desc": "+2 gold for every enemy killed",
-		"effects": [{"stat": "gold_per_kill", "op": "add", "value": 2.0}]},
-	{"id": "foreman", "name": "Foreman", "rarity": "common", "max_stacks": 1,
-		"desc": "Upgrades cost 20% less",
-		"effects": [{"stat": "upgrade_cost_mult", "value": 0.8}]},
-	{"id": "salvage", "name": "Salvage", "rarity": "rare", "max_stacks": 1,
-		"desc": "Selling a tower always refunds it in full"},
-	{"id": "compound", "name": "Compound", "rarity": "epic", "max_stacks": 1,
-		"desc": "Wave-end interest rises from 5% to 8%",
-		"effects": [{"stat": "interest_rate_add", "value": 0.03}]},
-
-	# --- Run kimliği (4) ----------------------------------------------------------
-	{"id": "deadeye", "name": "Deadeye", "rarity": "epic", "max_stacks": 1,
-		"desc": "All towers now target the enemy with the LEAST health",
-		"effects": [{"stat": "target_lowest_hp", "value": 1.0}]},
-	{"id": "bulwark", "name": "Bulwark", "rarity": "epic", "max_stacks": 1,
-		"grant_lives": 5,
-		"desc": "+5 lives right now, but all towers deal 10% less damage",
-		"effects": [{"stat": "damage", "op": "mult", "value": 0.9}]},
-	{"id": "monoculture", "name": "Monoculture", "rarity": "legendary", "max_stacks": 1,
-		"needs_element_choice": true,
-		"desc": "Choose an element: it deals +50% damage, the other three deal -20%"},
-	{"id": "frontload", "name": "Frontload", "rarity": "legendary", "max_stacks": 1,
-		"grant_gold": 300,
-		"desc": "+300 gold right now, but every kill's bounty is reduced by 25%",
-		"effects": [{"stat": "kill_gold_mult", "value": 0.75}]},
 ]
 
 # --- Workshop: permanent upgrades ----------------------------------------------
@@ -774,6 +820,27 @@ func element_mult(atk: String, def: String) -> float:
 		return ELEMENT_WEAK
 	return 1.0
 
+## The matchup for a tower carrying a SET of elements: the best its set can manage against
+## this armour. This one function is what makes the fusion ladder mean something beyond raw
+## damage — the tower brings whichever of its elements the target is weakest to:
+##
+##   1 element  -> identical to element_mult, so an unfused tower is unchanged
+##   2 elements -> covers two of the four armour elements at ELEMENT_STRONG
+##   3 elements -> three
+##   4 elements -> all four. Every armour element is beaten by exactly one of ours, so a Pure
+##                 tower can never be resisted. That is the whole of "nothing reduces Pure
+##                 damage" — no separate damage path, just a set that covers the ring.
+##
+## Called from projectile.gd's three matchup sites. A tower whose def sets `ignores_matchup`
+## (the chaos-type triples) skips this entirely and uses a flat 1.0.
+func element_mult_best(elements: Array, def: String) -> float:
+	if def == "" or elements.is_empty():
+		return 1.0
+	var best := 0.0
+	for e in elements:
+		best = maxf(best, element_mult(String(e), def))
+	return best
+
 ## The active difficulty (GAME_STRATEGY_V2.md §12, BUILD NEXT #8): "normal" or "easy", a key
 ## into Balance.RULESETS. Picked on the menu (see menu.gd) before Main even loads, read by
 ## reset() below for start gold/lives and by wave_manager.gd for the HP/count scaling — it is
@@ -833,6 +900,21 @@ var active_path: Array = []
 var active_obstacles: Array = []
 var active_build_zones: Array = []
 var active_board_id: String = ""
+## The active board's open-ground mask: white where a tower may stand, black over trees,
+## cliffs and water. Derived from the painting by `python tools/build_mask.py <board.png>`
+## and sampled by can_build_at(); null for a board that has none, which keeps free placement.
+##
+## An Image rather than a Texture2D because this is read on the CPU. `get_image()` hands back
+## whatever the importer produced, and on the Android export that is an ETC2-compressed
+## image whose get_pixel() does not work — hence the decompress in _load_build_mask().
+var active_build_mask: Image = null
+
+## Board paintings that carry an open-ground mask beside them. A board absent from this table
+## simply has no mask and keeps free placement, so adding one is dropping a `_build.png` next
+## to the art and adding a line here.
+const BUILD_MASKS := {
+	"winding": "res://assets/art/maps/winding_forest_close_v1_build.png",
+}
 
 ## Cumulative distance from active_path[0] to each waypoint. Towers
 ## rank enemies by how far along the road they are (the First / Last targeting modes)
@@ -889,6 +971,7 @@ func configure_board(path: Array, obstacles: Array = [], build_zones: Array = []
 	active_path = path.duplicate(true)
 	active_obstacles = obstacles.duplicate(true)
 	active_build_zones = build_zones.duplicate(true)
+	active_build_mask = _load_build_mask(board_id)
 	_path_cum = PackedFloat32Array()
 	_path_cum.resize(active_path.size())
 	for i in range(1, active_path.size()):
@@ -896,6 +979,42 @@ func configure_board(path: Array, obstacles: Array = [], build_zones: Array = []
 				+ (active_path[i] as Vector2).distance_to(active_path[i - 1])
 	active_board_id = board_id
 	board_changed.emit(active_board_id)
+
+## Loads `board_id`'s open-ground mask, or null if it has none. Called once per board swap,
+## never per placement check.
+func _load_build_mask(board_id: String) -> Image:
+	var path := String(BUILD_MASKS.get(board_id, ""))
+	if path == "" or not ResourceLoader.exists(path):
+		return null
+	var tex := load(path) as Texture2D
+	if tex == null:
+		push_warning("Game: build mask '%s' did not load as a texture" % path)
+		return null
+	var img := tex.get_image()
+	if img == null:
+		push_warning("Game: build mask '%s' has no image" % path)
+		return null
+	# The Android export compresses textures (project.godot's import_etc2_astc), and
+	# get_pixel() on a compressed Image returns garbage rather than failing loudly — which
+	# would show up as a board that is buildable everywhere on the phone and nowhere else.
+	if img.is_compressed():
+		img.decompress()
+	return img
+
+## True when the painting has open ground at `pos` — grass, not canopy, cliff or water.
+## Always true for a board with no mask, so an unmasked board keeps free placement.
+##
+## The mask is far coarser than the board (one texel per 8px block), so this samples the
+## texel containing `pos` rather than interpolating: the majority filter in build_mask.py
+## already removed the single-block noise that interpolation would otherwise be smoothing.
+func is_open_ground(pos: Vector2) -> bool:
+	if active_build_mask == null:
+		return true
+	var w := active_build_mask.get_width()
+	var h := active_build_mask.get_height()
+	var x := clampi(int(pos.x / WORLD_SIZE.x * float(w)), 0, w - 1)
+	var y := clampi(int(pos.y / WORLD_SIZE.y * float(h)), 0, h - 1)
+	return active_build_mask.get_pixel(x, y).r > 0.5
 
 ## Samples a smooth centre-line through a traced control polyline. Four subdivisions keep
 ## adjacent waypoints close enough that Enemy's linear movement looks curved, without

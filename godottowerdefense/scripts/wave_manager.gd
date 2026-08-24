@@ -15,9 +15,6 @@ signal wave_starting(number: int)
 signal wave_started(number: int)
 signal wave_preview(text: String, color: Color)  ## Describes the next wave for the HUD.
 signal prep_started                ## The between-waves gap began (send-early available).
-## A roguelite choice is owed for clearing `wave`. Emitted rather than acted on, because
-## pausing the run is Main's business — WaveManager only knows that a wave ended.
-signal choice_due(wave: int)
 
 const ENEMY := preload("res://scenes/Enemy.tscn")
 
@@ -45,6 +42,14 @@ var _kind: String = ""          ## Which WAVE_TYPES key that is; picks the paint
 var _art_kind: String = ""      ## Optional wave-level painted sprite override.
 var _element: String = ""       ## The current wave's armor element ("" = neutral).
 var _lives_at_start: int = 0    ## Lives when the wave began (for the leak-free bonus).
+## True once this wave's avatar boss has been KILLED. Reset at the start of every wave, and
+## the only thing that unlocks an element for fusion. It exists because Enemy.removed fires
+## for a leak exactly as it does for a death — without this flag a player who let the boss
+## walk off the end would be rewarded identically to one who killed it.
+var _avatar_defeated: bool = false
+## Gold when the previous wave began, so --fill-board can report income per wave rather than
+## a running total dominated by its own placement grant. Harness bookkeeping only.
+var _gold_at_last_wave: int = 0
 var _generator: WaveGenerator = null  ## Supplies every wave past the seed table.
 ## Cache of generated definitions, keyed by wave number. The generator is pure so this is
 ## only a speed-up, not a correctness fix — but a wave gets asked for at least twice (once
@@ -119,18 +124,32 @@ func _start_wave() -> void:
 	_interval = Balance.spawn_interval(_wave)
 	_to_spawn = _spawn_count(_wave, _type_def, def)
 	# Element waves colour the body by element; neutral waves keep the archetype colour.
+	# An avatar-boss wave carries no `element` in the table on purpose — it takes this run's
+	# draw instead (Run.boss_elements), which is what makes the four avatars arrive in a
+	# different order every run. The whole wave takes that element, not just the boss, so the
+	# colour of what is walking down the road tells the player which fusion is at stake.
 	_element = String(def.get("element", ""))
+	if _element == "" and String(def.get("boss_rule", "")) == "element_avatar":
+		_element = Run.boss_element_for_wave(_wave)
 	if _element != "":
 		_tint = Game.ELEMENT_COLORS.get(_element, Color.WHITE)
 	else:
 		_tint = _type_def.get("color", Color.WHITE)
 	_lives_at_start = Game.lives
+	_avatar_defeated = false
 	if OS.get_cmdline_user_args().has("--fill-board"):
 		var art_note := " art=%s" % _art_kind if _art_kind != _kind else ""
-		print("wave %d: %s%s el=%s%s  hp=%.0f spd=%.0f count=%d" % [_wave,
+		# `earned` is the CHANGE since the last wave began, not Game.gold: --fill-board grants
+		# a million-gold lump so placement never fails, and printing the absolute would be a
+		# column of 1000119, 1000209, ... that reads like an economy and measures nothing. The
+		# delta is real income — kill bounties, the leak-free bonus and interest — and since a
+		# maxed board leaks nothing, it is the best upper bound the harness suite has on what a
+		# run can afford. Nothing simulates a PLAYER's gradual build-up, so it is only that.
+		print("wave %d: %s%s el=%s%s  hp=%.0f spd=%.0f count=%d  earned=%+d" % [_wave,
 				String(def["type"]), art_note,
-				String(def.get("element", "-")), "  BOSS" if def.get("boss", false) else "",
-				_hp, _spd, _to_spawn])
+				_element if _element != "" else "-", "  BOSS" if def.get("boss", false) else "",
+				_hp, _spd, _to_spawn, Game.gold - _gold_at_last_wave])
+		_gold_at_last_wave = Game.gold
 	Audio.play("wave_start")
 	wave_started.emit(_wave)
 	wave_preview.emit(_preview_text(_wave + 1), _preview_color(_wave + 1))
@@ -224,20 +243,37 @@ func _preview_color(n: int) -> Color:
 ## slow/stun/knockback and already carries its own full visual (Enemy._draw_ward), so the
 ## boss needed no new mechanism, just the existing flag. "rotating_armor" (Uyanmış Muhafız,
 ## wave 20) sets Enemy.rotating_armor, which cycles armor_element on its own from there.
+## "element_avatar" (waves 3/7/11/15) is the fusion ladder's gate: killing it unlocks its
+## element. Its combat rule needs no code at all — its armor_element IS its element, so the
+## matchup table already makes it demand the counter element and shrug off the one it beats.
 func _spawn_boss(def: Dictionary) -> void:
 	if Game.is_over:
 		return
+	var rule := String(def.get("boss_rule", ""))
+	var avatar := rule == "element_avatar"
 	var boss := ENEMY.instantiate() as Enemy
-	boss.setup(_hp * Balance.BOSS_HP_MULT, _spd * Balance.BOSS_SPEED_MULT,
-			_reward * Balance.BOSS_REWARD_MULT, Balance.BOSS_TINT)
+	# Avatar bosses are deliberately softer than the two set-piece bosses: four of them, the
+	# first on wave 3, and losing one already costs an element for the whole run.
+	var hp_mult := Balance.ELEMENT_BOSS_HP_MULT if avatar else Balance.BOSS_HP_MULT
+	var reward_mult := Balance.ELEMENT_BOSS_REWARD_MULT if avatar else Balance.BOSS_REWARD_MULT
+	boss.setup(_hp * hp_mult, _spd * Balance.BOSS_SPEED_MULT,
+			_reward * reward_mult,
+			Game.ELEMENT_COLORS.get(_element, Balance.BOSS_TINT) if avatar else Balance.BOSS_TINT)
 	boss.armor_element = _element
 	boss.kind = _art_kind  # a boss is an archetype wearing a crown, not a creature of its own
 	boss.radius = Balance.BOSS_RADIUS
-	boss.life_cost = Balance.BOSS_LIFE_COST
+	boss.life_cost = Balance.ELEMENT_BOSS_LIFE_COST if avatar else Balance.BOSS_LIFE_COST
 	boss.is_boss = true
-	match String(def.get("boss_rule", "")):
+	match rule:
 		"control_immune": boss.cc_immune = true
 		"rotating_armor": boss.rotating_armor = true
+		"element_avatar": boss.avatar_element = _element
+	if avatar:
+		# Captured by the lambda so the handler knows WHICH enemy reported in — plain
+		# `removed` says only that something left play, and a leak emits it exactly as a
+		# death does. `boss` is still a live node when the signal fires (Enemy emits before
+		# queue_free), which is why reading the flag here is safe.
+		boss.removed.connect(func() -> void: _avatar_defeated = boss.was_killed)
 	boss.removed.connect(_on_enemy_removed)
 	enemies_root.add_child(boss)
 	Audio.play("boss_spawn")
@@ -249,20 +285,21 @@ func _on_enemy_removed() -> void:
 		return
 	# Wave is cleared once nothing is left to spawn and nothing is alive.
 	if _to_spawn <= 0 and _alive <= 0:
+		# The avatar's reward is paid on wave CLEAR, not on the boss's own death, so the
+		# element arrives at the moment the player is free to spend it — during prep, with
+		# the panel one tap away — rather than mid-fight.
+		if _avatar_defeated:
+			Run.unlock_fusion(_element)
+			_avatar_defeated = false
 		_grant_wave_rewards()
 		# Standard mode ends in a win here (GAME_STRATEGY_V2.md §11.1, BUILD NEXT #4) — no
-		# next wave queued, no choice offered for a wave the run will not see. Past this
-		# point WaveGenerator (the endless tail past Game.WAVES) is unreachable from a
-		# Standard run; it stays in the codebase for the Endless mode BUILD NEXT #8 adds.
+		# next wave queued. Past this point WaveGenerator (the endless tail past Game.WAVES)
+		# is unreachable from a Standard run; it stays in the codebase for the Endless mode
+		# BUILD NEXT #8 adds.
 		if _wave >= Game.STANDARD_WAVES:
 			Game.declare_victory()
 			return
-		# Queue the next wave first, then ask for the choice. The prep timer is a node, so
-		# it stops with the tree while the choice screen is up and resumes with whatever is
-		# left when the player picks — they get their full build time either way.
 		_queue_next_wave()
-		if Balance.CHOICE_WAVES.has(_wave):
-			choice_due.emit(_wave)
 
 ## Leak-free bonus + interest on banked gold, granted when a wave is cleared.
 func _grant_wave_rewards() -> void:

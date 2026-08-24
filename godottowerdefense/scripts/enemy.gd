@@ -66,6 +66,15 @@ var armor_element: String = ""  ## Element matchup vs tower damage element ("" =
 var rotating_armor: bool = false
 var _armor_rotate_timer: float = 0.0
 const ROTATING_ARMOR_PERIOD := 5.0
+## The element an avatar boss embodies (waves 3/7/11/15). Purely a DRAWING flag: the rule
+## that makes an avatar interesting is already carried by armor_element, which the matchup
+## table reads without knowing anything about bosses. This just says "put its sigil up so the
+## player can see which fusion is on the table."
+var avatar_element: String = ""
+## True once this enemy died rather than reaching the end. `removed` fires for both, so this
+## is the only way to tell a kill from a leak — which is what decides whether an avatar
+## boss pays out its element (see WaveManager._spawn_boss).
+var was_killed: bool = false
 ## Which WAVE_TYPES archetype this is ("normal", "fast", …). Set by WaveManager; the only
 ## thing that reads it is the painted sprite lookup, which is why an unset one is harmless.
 var kind: String = ""
@@ -102,7 +111,7 @@ var _slow_factor: float = 1.0
 var _slow_time: float = 0.0
 var _poison_dps: float = 0.0
 var _poison_time: float = 0.0
-var _poison_spreads: bool = false  ## Plague (Nature Lv5): re-applied to a neighbour on death.
+var _poison_spreads: bool = false  ## Re-applied to a neighbour on death.
 var _stun_time: float = 0.0
 var _regen_block: float = 0.0  ## Counts down after damage; regen is paused while > 0.
 var _flash: float = 0.0        ## 1 -> 0 white pop after a direct hit.
@@ -115,11 +124,11 @@ var _burn_stacks: int = 0
 var _burn_dps_per_stack: float = 0.0
 var _burn_time: float = 0.0
 var _burn_max_stacks: int = 1
-var _burn_doubles_at_max: bool = false  ## Cinderheart (Fire Lv5).
+var _burn_doubles_at_max: bool = false  ## Burn ticks 2x once at the stack cap.
 var _burn_spreads: bool = false         ## Firestorm (Fire Lv5, simplified — see Tower.
 var _crack_time: float = 0.0
 var _crack_bonus: float = 0.0           ## Fraction of EXTRA damage taken from all sources.
-var _knockback_cd: float = 0.0          ## Undertow: 2s per-enemy cooldown, decremented in _tick_status.
+var _knockback_cd: float = 0.0          ## Knockback: 2s per-enemy cooldown, decremented in _tick_status.
 
 # --- Layer repaint helpers -----------------------------------------------------
 # Each guards against being called before _ready() has built the layers (make_flying is
@@ -147,16 +156,20 @@ func flash() -> void:
 	_repaint_body()
 
 ## Slows to `factor` of base speed for `time` seconds. Strongest slow wins.
-func apply_slow(factor: float, time: float) -> void:
-	if cc_immune:
+##
+## `pierce` is the Pure tower's rule (Tower.pierces_rules): it ignores cc_immune outright.
+## The three control entry points here all take it, so "nothing stops a Pure tower" is one
+## flag threaded through three guards rather than a rule each of them has to know about.
+func apply_slow(factor: float, time: float, pierce: bool = false) -> void:
+	if cc_immune and not pierce:
 		return
 	_slow_factor = minf(_slow_factor, factor)
 	_slow_time = maxf(_slow_time, time)
 	_repaint_overlay()
 
 ## Freezes the enemy in place for `time` seconds (longest stun wins).
-func apply_stun(time: float) -> void:
-	if cc_immune:
+func apply_stun(time: float, pierce: bool = false) -> void:
+	if cc_immune and not pierce:
 		return
 	_stun_time = maxf(_stun_time, time)
 	_repaint_overlay()
@@ -171,17 +184,17 @@ func apply_poison(dps: float, time: float, spreads_on_death: bool = false) -> vo
 	_poison_spreads = _poison_spreads or spreads_on_death
 	_repaint_overlay()
 
-## Fire's burn (Blaze/Wildfire branches): unlike poison, stacks — up to `max_stacks` — rather
+## Fire's burn: unlike poison, it stacks — up to `max_stacks` — rather
 ## than just taking the strongest single application. Each stack adds its own `dps_per_stack`
 ## to the total tick; refreshing an existing stack (rather than adding a new one once at cap)
-## still extends the timer, so a Blaze that keeps landing hits does not let the burn lapse
+## still extends the timer, so a tower that keeps landing hits does not let the burn lapse
 ## just because it is already at 3.
 ##
 ## Deliberately NOT gated on cc_immune, matching apply_poison above for the same reason
 ## (§3.1: burn is damage, not control) — this was wrongly gated when first written (BUILD
 ## NEXT #5-6) and is fixed here while touching neighbouring code (BUILD NEXT #9). It also
 ## matters for Boss 1 (control_immune, BUILD NEXT #7): its rule is "no slow/freeze/knockback/
-## stagger", never "no damage-over-time" — the old gate silently made Blaze and Wildfire
+## stagger", never "no damage-over-time" — the old gate silently made every burning tower
 ## useless against it.
 func apply_burn(dps_per_stack: float, time: float, max_stacks: int, doubles_at_max: bool,
 		spreads_on_death: bool) -> void:
@@ -194,7 +207,7 @@ func apply_burn(dps_per_stack: float, time: float, max_stacks: int, doubles_at_m
 	_burn_spreads = _burn_spreads or spreads_on_death
 	_repaint_overlay()
 
-## Siege's armor crack: `bonus` extra damage taken from EVERY source (not just Siege's own
+## Armor crack: `bonus` extra damage taken from EVERY source (not just the cracking tower's own
 ## hits) for `time` seconds. Strongest/longest wins, same rule as slow and stun.
 func apply_crack(bonus: float, time: float) -> void:
 	_crack_bonus = maxf(_crack_bonus, bonus)
@@ -206,11 +219,11 @@ func apply_crack(bonus: float, time: float) -> void:
 # per-tower stat can express — so these are the two public reads projectile.gd needs instead
 # of reaching into the underscore-prefixed fields directly.
 
-## True while this enemy is chilled (Water's slow, any branch). STEAM/EROSION key off this.
+## True while this enemy is chilled (any slow payload). Conditional damage bonuses key off this.
 func is_chilled() -> bool:
 	return _slow_time > 0.0
 
-## True while this enemy is actively burning (Fire's DoT, either branch).
+## True while this enemy is actively burning (any burn payload).
 func is_burning() -> bool:
 	return _burn_time > 0.0
 
@@ -223,11 +236,11 @@ func refresh_burn(time: float) -> void:
 		_burn_time = maxf(_burn_time, time)
 		_repaint_overlay()
 
-## Undertow: shoves this enemy `distance` px back along the road it just walked. Bosses are
+## Knockback: shoves this enemy `distance` px back along the road it just walked. Bosses are
 ## immune (never called for one — see Projectile._apply) and a per-enemy cooldown stops a
-## single enemy from being juggled in place forever by several Undertow towers.
-func apply_knockback(distance: float) -> bool:
-	if cc_immune or _knockback_cd > 0.0 or is_boss:
+## single enemy from being juggled in place forever by several towers at once.
+func apply_knockback(distance: float, pierce: bool = false) -> bool:
+	if (cc_immune and not pierce) or _knockback_cd > 0.0 or is_boss:
 		return false
 	var remaining := distance
 	# Walk backward along the same waypoint list _move() walks forward along, symmetric to
@@ -256,7 +269,7 @@ func set_progress(index: int) -> void:
 func progress() -> float:
 	return Game.path_progress(_target_index, global_position)
 
-## The `count` closest other living enemies within `radius`, nearest first. Used by Plague's
+## The `count` closest other living enemies within `radius`, nearest first. Used by the poison
 ## death-time poison transfer (count 1, or 3 with EMBERSEED — GAME_STRATEGY_V2.md §6.2,
 ## BUILD NEXT #9); a plain sort since this fires once per death, not per frame, and `count`
 ## is always small.
@@ -469,7 +482,7 @@ func _tick_status(delta: float) -> void:
 			_repaint_overlay()
 	if _burn_time > 0.0:
 		_burn_time -= delta
-		# Cinderheart (Fire Lv5): at the stack cap, the whole pile ticks twice as fast —
+		# At the stack cap, the whole pile ticks twice as fast —
 		# implemented as double damage per tick rather than double tick rate, which is the
 		# same total DPS without needing a second timer.
 		var tick_mult := 2.0 if (_burn_doubles_at_max and _burn_stacks >= _burn_max_stacks) else 1.0
@@ -528,7 +541,7 @@ func take_damage(amount: float) -> void:
 	if _dead:
 		return
 	_regen_block = Balance.REGEN_DELAY  # any hit — including a poison/burn tick — suspends regen
-	# Siege's crack: applies to EVERY source of damage while active, not just Siege's own
+	# The armor crack applies to EVERY source of damage while active, not just the cracking tower's own
 	# hits — that is the whole point of "cracks the armor" over a private damage bonus.
 	var dealt := amount * (1.0 + _crack_bonus) if _crack_time > 0.0 else amount
 	health -= dealt
@@ -536,26 +549,30 @@ func take_damage(amount: float) -> void:
 	if health <= 0.0:
 		_die()
 
-## Search radius for Plague's nearest-survivor poison transfer — generous enough to usually
+## Search radius for the nearest-survivor poison transfer — generous enough to usually
 ## find someone on a real board without scanning the whole enemies group (see EnemyIndex).
 const PLAGUE_SEARCH_RADIUS := 400.0
 ## Firestorm's death-AoE radius (simplified from a persistent ground patch — see
-## Game.TOWER_BRANCHES's fire.b.lv5 comment). Matches Wildfire's own Lv3 spread radius since
+## a burning death lights its neighbours). Kept at the same radius the burn spread uses since
 ## Firestorm is Wildfire's ultimate and reads as "the same fire, once more, on the way out".
 const FIRESTORM_RADIUS := 70.0
 
 func _die() -> void:
 	_dead = true
+	# Set before anything else can bail: `removed` is emitted at the end of this function and
+	# for a leak alike, and an avatar boss's whole reward hangs on which of the two it was.
+	was_killed = true
 	# Plague (Nature Lv5): a poisoned enemy passes its poison to the nearest survivor.
 	# Checked BEFORE `_dead` matters to anyone else — is_alive() already reads false for
 	# this enemy by the time any of this runs, so `_die()` itself is exempt from its own gate.
 	if _poison_spreads and _poison_time > 0.0:
-		# EMBERSEED (Fire+Nature overlap, GAME_STRATEGY_V2.md §6.2, BUILD NEXT #9): dying
-		# poisoned AND burning spreads the poison to three neighbours instead of one.
-		var count := 3 if (is_burning() and Run.has_card("embers_eed")) else 1
+		# Three neighbours if it died burning as well as poisoned, one otherwise — the two
+		# damage-over-time channels compounding on death, which is what a Fire/Nature tower
+		# (Dinosaur, or a Lava standing beside a poisoner) is set up to arrange.
+		var count := 3 if is_burning() else 1
 		for victim in _nearest_others(PLAGUE_SEARCH_RADIUS, count):
 			victim.apply_poison(_poison_dps, _poison_time, true)
-	# Firestorm (Fire Lv5, simplified — see Game.TOWER_BRANCHES): a burning death also lights
+	# A burning death also lights
 	# every enemy within FIRESTORM_RADIUS, instead of leaving a timed ground patch behind.
 	if _burn_spreads and _burn_time > 0.0:
 		for e in EnemyIndex.query(global_position, FIRESTORM_RADIUS):
@@ -856,7 +873,7 @@ func _draw_crown(ci: CanvasItem) -> void:
 ## its own; this is the small mark that also sits with the health bar, and the ONLY visible
 ## cue rotating_armor gets beyond the ground ring changing colour every 5s on its own.
 func _draw_boss_rule_icon(ci: CanvasItem) -> void:
-	if not (cc_immune or rotating_armor):
+	if not (cc_immune or rotating_armor or avatar_element != ""):
 		return
 	var pos := Vector2(_visual_dx(), _head_y() - 34.0)
 	if cc_immune:
@@ -870,6 +887,16 @@ func _draw_boss_rule_icon(ci: CanvasItem) -> void:
 		for i in 4:
 			var a := _anim_phase * 2.0 + i * TAU / 4.0
 			ci.draw_circle(pos + Vector2(cos(a), sin(a)) * 11.0, 2.0, ec)
+	else:
+		# An avatar's sigil: a solid element disc inside a slowly breathing ring. Deliberately
+		# the LOUDEST of the three marks, because unlike the other two it is not describing a
+		# combat rule the player will discover by fighting — it is naming a reward that
+		# disappears if this thing walks off the end of the road.
+		var ec: Color = Game.ELEMENT_COLORS.get(avatar_element, Color.WHITE)
+		var pulse := 1.0 + 0.12 * sin(_anim_phase * 2.4)
+		ci.draw_circle(pos, 9.0 * pulse, Color(ec.r, ec.g, ec.b, 0.30))
+		ci.draw_circle(pos, 5.5, ec)
+		ci.draw_arc(pos, 11.0 * pulse, 0.0, TAU, 24, Color(ec.r, ec.g, ec.b, 0.85), 2.0, true)
 
 ## The cc-immune marker: a pale daylight sphere with the creep standing INSIDE it.
 ##
