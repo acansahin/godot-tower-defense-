@@ -32,8 +32,9 @@ Usage::
 
     python tools/build_mask.py <board.png> [mask.png]
 
-With no output path it writes `<board>_build.png` beside the board, which is where
-`Game.build_mask_for()` looks for it.
+With no output path it writes `<board>_build.png` beside the board. Point `Game.BUILD_MASKS`
+at it by board id — that table is the only thing that has to know the mask exists, and a
+board missing from it simply keeps free placement.
 """
 
 from __future__ import annotations
