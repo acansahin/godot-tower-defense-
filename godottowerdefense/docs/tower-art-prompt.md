@@ -3,8 +3,11 @@
 The six element towers were painted one set at a time, each from a single generated sheet of
 five tiers. The first pass used tall, element-specific silhouettes; after the Water redesign
 all six were moved to the same broad, ground-hugging fortress language so they sit naturally
-on the board. This file is the recipe, kept because fifteen dual towers still draw the code
-art and will need it.
+on the board.
+
+The eleven **fusion** towers (six duals, four triples, Pure — see `Game.FUSIONS`) are the
+roster this recipe is now being used for. Steam is painted; the other ten still draw the code
+art. Read "Fusion sheets" below before generating one — the method changed in two ways.
 
 The pipeline around it is in [CLAUDE.md](../../CLAUDE.md) ("Painted tower set"); this file is
 only the prompt.
@@ -148,8 +151,81 @@ Each of these cost a sheet, or was caught just before it did.
   every rule, plus dark accents — slate roofs, shadowed arches, deep-set windows — so a pale
   building holds its edges against the map's pale road.
 
+## Fusion sheets
+
+Two things about the recipe changed when the fusion roster started being painted, and both
+come from the game having moved on rather than from the art.
+
+**Attach the WINDING board, not `board_source.png`.** A Standard run plays entirely on
+`assets/art/maps/winding_forest_close_v1.png` (`main.gd` `STANDARD_BOARD`). `board_source.png`
+is the spiral board, which nothing in a Standard run reaches any more. Attach the board the
+tower will actually stand on.
+
+**Attach the two PARENT sheets as well.** The original six only had to match the board. A
+fusion has to match the board *and* the roster already on it, and it has to read as both of
+its parents at a glance rather than as a muddy average of them — so attach
+`_source_<parent>.png` for each element in the combination and ask the generator to take the
+masonry and palette cues from them. Steam took the grey-tan waterworks and blue channels from
+Water and the dark forge stone, iron and furnace glow from Fire, and it reads as both.
+
+**Naming.** `Tower.art_key()` looks a fused tower's set up under the combination's FIRST name,
+lower-cased, spaces to underscores — `steam_1.png` … `steam_5.png`, `flesh_golem_1.png`, and
+so on. Never the per-tier name: one set of five files covers all five levels, exactly as an
+element's does, and the tower still renames itself to Vapor and Immolation as it climbs. An
+unpainted combination has no files, `Sprites.tower()` returns null, and the code art draws —
+the same fallback that let the six element sets land one at a time.
+
+**Let the silhouette step where the NAME steps.** A dual carries three names over five levels
+(1-2 / 3-4 / 5) and a triple two (1-3 / 4-5). Asking for a visible structural change at those
+exact tiers costs nothing and makes the rename land as something the player can see.
+
+### What the Steam pilot measured
+
+Generated in one pass from the template plus the two changes above, and it passed every
+constraint the earlier sets had to be re-generated to meet:
+
+| Check | Target | Steam |
+|---|---|---|
+| Ground anchor off its own centre | ~0% (shipped sets 47-52%) | 49 / 49 / 50 / 50 / 50% |
+| Width : height | 0.95-1.55 | 1.09-1.15 |
+| Canvas | 1774x887, 2:1 | exact |
+| Thin effect above the masonry | under a quarter | top 12-15% |
+
+One near miss worth carrying into the next ten: the prompt asks for **60 px** between towers
+and the sheet came back with **40 / 40 / 49 / 39**. It cut correctly anyway — `cut_sprites.py`
+splits on any fully empty column, and its `MIN_RUN` filters narrow INK runs (specks), not
+gaps — but 39 px is close enough to nothing that a slightly wider tier-5 skirt would have
+merged two towers into one sprite. Keep asking for 60.
+
+### Per-fusion traps
+
+Each inherits its parents' traps from the section above, and adds its own.
+
+- **Lava** (fire+earth) — fire's rule wins: the stone must be **dark**, or orange on the
+  map's warm green and tan has nothing to separate it.
+- **Sun** (fire+nature) — gold is the Light trap. Needs dark accents or it breaks the muted
+  register. Nature's canopy ban also applies.
+- **Clay** (water+earth) and **Well** (water+nature) — both land near the existing grey
+  masonry. Clay especially: the roster's closest pair is already nature/earth, and Clay is a
+  third grey building. Lean hard on the wet clay ochre and the blue channels.
+- **Roots** (earth+nature) — the canopy ban **doubled**. The map is full of pine; a tower
+  crowned with foliage reads as scenery, not as a building.
+- **Rainbow / Spectrum** — the highest risk in the roster. Multi-colour against a deliberately
+  muted board. Keep the prism desaturated and let the masonry carry the mass.
+- **Dinosaur / Fossil** — must be a BUILDING with bone and fossil set into its stone, not a
+  creature. Everything else in the roster is architecture.
+- **Flesh Golem / Living Flesh** — red risks reading as an enemy. Keep it a fortress with
+  veined stone, not a body.
+- **Pure** — the strictest version of every Light rule: pale stone, prismatic core, and dark
+  slate, shadowed arches and deep-set windows so it holds its edges against the pale road.
+
 ## Watch list
 
 With every tower now built from the map's grey masonry, **nature and earth are the closest
 pair in the roster**. They separate by growth, banner colour and earth's battered low-slung
 walls, but if two towers get confused in play it will be these.
+
+**Steam and Water** are the second pair to watch, and the first one the fusion roster
+created: both are blue-topped stone. Steam separates by its copper pipework and the orange
+furnace glow in its archway — at board scale that glow is doing most of the work, so no
+future fusion should take Steam's copper-and-orange combination.

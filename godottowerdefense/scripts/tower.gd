@@ -237,6 +237,18 @@ func available_elements() -> Array:
 func fusion_def() -> Dictionary:
 	return Game.fusion_def(elements)
 
+## The name `sprites.gd` looks its painted set up under: the element for a base tower, and
+## the combination's FIRST name for a fused one — "Steam", never "Vapor", so one set of five
+## files covers all five levels the way every element's does. Multi-word names take an
+## underscore ("flesh_golem"), which is what cut_sprites.py's own prefix argument produces.
+##
+## An unpainted combination simply has no files, Sprites.tower() returns null, and the code
+## art draws instead — the same fallback that let the six element sets land one at a time.
+func art_key() -> String:
+	if elements.size() < 2:
+		return element
+	return String(_def.get("name", "")).to_lower().replace(" ", "_")
+
 ## Counts a kill this tower landed, for Flesh Golem's permanent growth. A no-op (beyond the
 ## counter) for every other tower, so projectile.gd can call it unconditionally.
 func note_kill() -> void:
@@ -590,7 +602,7 @@ func fire_bolt(target: Enemy, damage_mult: float = 1.0) -> void:
 ## feet. Other tower families retain their established origin until their own painted
 ## sockets are measured.
 func _projectile_origin() -> Vector2:
-	if element == "fire" and Sprites.tower(element, level) != null:
+	if elements.size() == 1 and element == "fire" and Sprites.tower(art_key(), level) != null:
 		var tier := clampi(level, 1, FIRE_FLAME_BASE_Y.size()) - 1
 		var socket := Vector2(0.0,
 				float(FIRE_FLAME_BASE_Y[tier]) - float(FIRE_FLAME_HEIGHT[tier]) * 0.42)
@@ -624,15 +636,15 @@ func _draw() -> void:
 		draw_arc(Vector2.ZERO, tower_range, 0.0, TAU, 64, Color(ec.r, ec.g, ec.b, 0.50), 2.5, true)
 	else:
 		draw_arc(Vector2.ZERO, tower_range, 0.0, TAU, 48, Color(ec.r, ec.g, ec.b, 0.12), 2.0, true)
-	# Painted sprite if this element and tier have been drawn; the code art below is the
-	# fallback, and it is what the board still looks like everywhere the art has not landed.
-	# Only ever for an UNFUSED tower: the painted sets are per base element, and a Steam tower
-	# wearing the painted Fire art would be the one place in the game where what you see and
-	# what the tower is disagree. Every fusion is code art, drawn in its own colour.
-	var art := Sprites.tower(element, level) if elements.size() == 1 else null
+	# Painted sprite if this tower's art has been drawn; the code art below is the fallback,
+	# and it is what the board still looks like everywhere the art has not landed.
+	var art := Sprites.tower(art_key(), level)
 	if art != null:
 		_draw_sprite(art)
-		if element == "fire":
+		# The animated brazier belongs to the painted FIRE set specifically. A Steam tower
+		# built out of a Fire tower still reports element == "fire", so gating on the element
+		# alone would light a fire on top of a waterworks.
+		if elements.size() == 1 and element == "fire":
 			_draw_fire_flame()
 		_draw_level_pips(element_color.lightened(0.35))
 		_draw_element_dots()

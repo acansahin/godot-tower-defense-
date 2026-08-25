@@ -407,10 +407,14 @@ func _show_fusion_panel() -> void:
 	# panel's sell row would then quote a refund no real Lv3 tower would ever offer.
 	t.upgrade()
 	t.upgrade()
-	# Two unlocked, one still locked, so the panel shows both an offered row and the shape of
-	# the ladder above it.
+	# Three unlocked, one still locked, so the panel shows offered rows AND the locked line.
 	Run.unlock_fusion("nature")
 	Run.unlock_fusion("water")
+	Run.unlock_fusion("earth")
+	# Already fused once, which is the more interesting state to photograph: it proves the
+	# painted set of a COMBINATION is picked up (Tower.art_key) rather than the base element's,
+	# and the panel's rows are the triples above it rather than the duals below.
+	t.add_element("water")
 	tower_panel.open_for(t)
 
 ## TEMPORARY verification harness for meta progression. Checks the things that only show up
