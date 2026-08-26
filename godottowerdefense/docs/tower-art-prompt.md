@@ -6,7 +6,7 @@ all six were moved to the same broad, ground-hugging fortress language so they s
 on the board.
 
 The eleven **fusion** towers (six duals, four triples, Pure — see `Game.FUSIONS`) are the
-roster this recipe is now being used for. Steam is painted; the other ten still draw the code
+roster this recipe is now being used for. Steam and Lava are painted; the other nine still draw the code
 art. Read "Fusion sheets" below before generating one — the method changed in two ways.
 
 The pipeline around it is in [CLAUDE.md](../../CLAUDE.md) ("Painted tower set"); this file is
@@ -197,6 +197,36 @@ splits on any fully empty column, and its `MIN_RUN` filters narrow INK runs (spe
 gaps — but 39 px is close enough to nothing that a slightly wider tier-5 skirt would have
 merged two towers into one sprite. Keep asking for 60.
 
+### Checking a set landed, without hunting through a screenshot
+
+`--fill-board` now prints an ART TALLY after its placement line: every set standing on the
+board, how many of each, and `art*` / `art-` for whether `assets/art/towers` has the files.
+A new set is two or three towers out of 47, and "is it painted?" was being answered by
+zooming around a `--shot`. Read the tally first; take the shot to judge the art, not to find
+it.
+
+That line also exposed a harness bug the Lava pass tripped over: the element the harness
+added when fusing was the first one the tower was MISSING in `Game.TOWER_ORDER`, so every
+dual came out Steam, Well or Clay and every triple Rainbow or Infernal. Lava, Sun, Roots,
+Dinosaur and Flesh Golem were never built at all — `--fill-board` could not have shown the
+Lava art no matter how the sheet was cut. The scan now starts one past the base element and
+rotates that start every sixteenth tower, which covers all six duals and all four triples.
+
+### What Lava measured
+
+Second fusion painted, generated in one pass from the template plus the two changes above
+and the Fire/Earth trap notes. It needed no re-cut:
+
+| Check | Target | Lava |
+|---|---|---|
+| Ground anchor off its own centre | ~0% | 48.8 / 50.0 / 49.8 / 50.3 / 50.0% |
+| Width : height | 0.95-1.55 | 1.08-1.28 |
+| Canvas | 1774x887, 2:1 | exact |
+| Alpha | real transparency | RGBA, corners clear |
+
+It runs WIDER than Steam (1.28 against 1.15 at the low tiers) because the caldera cone
+flares at the foot, and it is the broadest set in the roster so far. Still inside the limit.
+
 ### Per-fusion traps
 
 Each inherits its parents' traps from the section above, and adds its own.
@@ -224,6 +254,12 @@ Each inherits its parents' traps from the section above, and adds its own.
 With every tower now built from the map's grey masonry, **nature and earth are the closest
 pair in the roster**. They separate by growth, banner colour and earth's battered low-slung
 walls, but if two towers get confused in play it will be these.
+
+**Lava and Fire** are the third pair, and the one the Lava sheet had to fight: both are
+orange-lit stone. They separate at board scale by VALUE, not hue — Lava is near-black basalt
+with magma seams reaching all the way down to its foot, Fire is warmer brown stone whose
+glow is concentrated in the brazier at the top. Fire also keeps its animated flame, which
+nothing else has. A future fusion that wants orange must go darker than Lava or lose to both.
 
 **Steam and Water** are the second pair to watch, and the first one the fusion roster
 created: both are blue-topped stone. Steam separates by its copper pipework and the orange

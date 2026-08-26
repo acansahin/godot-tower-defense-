@@ -55,7 +55,9 @@ cell count, and per element how much of the road one tower watches and how many 
 takes to watch 95% of it — plus a `raw` column measuring the same with the range cap
 lifted), `--fill-board` (a tower on every cell at max level, 8x speed, spread across the
 whole fusion ladder — a quarter stay base, a quarter become duals, then triples, then Pure —
-prints each wave with `earned=`, the gold gained since the previous wave began, and the
+prints an ART TALLY of every set standing on the board with `art*`/`art-` for whether it
+is painted — which is how a newly cut tower set is checked, since a new set is two or three
+towers out of 47 — then each wave with `earned=`, the gold gained since the previous wave began, and the
 run-over line with real WALL-CLOCK elapsed time plus which fusions unlocked. `earned` is a
 DELTA on purpose: this harness grants itself a million gold so placement never fails, so the
 absolute balance measures nothing while the delta is real income. Because a maxed board

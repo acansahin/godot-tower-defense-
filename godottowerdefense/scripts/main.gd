@@ -649,11 +649,20 @@ func _fill_board() -> void:
 		# left unfused and Fire/Nature/Earth were never seen maxed in their own painted art.
 		var depth := (i / Game.TOWER_ORDER.size()) % 4  # 0 base, 1 dual, 2 triple, 3 Pure
 		var added := 0
-		for candidate in Game.TOWER_ORDER:
+		for k in Game.TOWER_ORDER.size():
 			if added >= depth:
 				break
-			if not t.elements.has(String(candidate)):
-				t.add_element(String(candidate))
+		# WHICH extra elements, not just how many: scanning TOWER_ORDER from its start always
+		# took the first element the tower was missing, so every dual came out Steam, Well or
+		# Clay and every triple Rainbow or Infernal -- half the roster, including all of Lava,
+		# Sun, Roots, Dinosaur and Flesh Golem, was never built by the harness that claims to
+		# exercise every row. Start the scan one past the base element and rotate that start
+		# every fourth ROW (16 towers), which is independent of both the element and the depth:
+		var rot := i / (Game.TOWER_ORDER.size() * 4)
+			var at_k := (i + 1 + rot + k) % Game.TOWER_ORDER.size()
+			var candidate := String(Game.TOWER_ORDER[at_k])
+			if not t.elements.has(candidate):
+				t.add_element(candidate)
 				added += 1
 		i += 1
 	print("--- FILL BOARD: placed %d towers, all at max level ---" % i)
@@ -661,6 +670,22 @@ func _fill_board() -> void:
 ## Every position a tower could stand, swept on the tower spacing. Used by --fill-board and
 ## by --dump-board, which need "the set of places you may build" now that the board no
 ## longer keeps one.
+	# Which SETS are standing there, and whether each one is painted. --shot photographs a
+	# board of 47 towers where a single new set is three of them, so "did the art land?" was
+	# being answered by hunting through a screenshot. `art*` means assets/art/towers has the
+	# files and Sprites.tower() will find them; `art-` means the code art draws.
+	var tally: Dictionary = {}
+	for child in towers_root.get_children():
+		var tw := child as Tower
+		if tw == null:
+			continue
+		var key := tw.art_key()
+		tally[key] = int(tally.get(key, 0)) + 1
+	var keys := tally.keys()
+	keys.sort()
+	for key in keys:
+		var painted := ResourceLoader.exists("res://assets/art/towers/%s_5.png" % key)
+		print("    %-12s x%d  art%s" % [key, int(tally[key]), "*" if painted else "-"])
 func _buildable_lattice(step := -1.0) -> Array:
 	var pitch: float = Game.TOWER_GAP if step <= 0.0 else step
 	var out: Array = []
