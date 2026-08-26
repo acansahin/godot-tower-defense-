@@ -6,7 +6,7 @@ all six were moved to the same broad, ground-hugging fortress language so they s
 on the board.
 
 The eleven **fusion** towers (six duals, four triples, Pure — see `Game.FUSIONS`) are the
-roster this recipe is now being used for. Steam and Lava are painted; the other nine still draw the code
+roster this recipe is now being used for. Steam, Lava and Clay are painted; the other eight still draw the code
 art. Read "Fusion sheets" below before generating one — the method changed in two ways.
 
 The pipeline around it is in [CLAUDE.md](../../CLAUDE.md) ("Painted tower set"); this file is
@@ -226,6 +226,31 @@ and the Fire/Earth trap notes. It needed no re-cut:
 
 It runs WIDER than Steam (1.28 against 1.15 at the low tiers) because the caldera cone
 flares at the foot, and it is the broadest set in the roster so far. Still inside the limit.
+
+### What Clay measured, and the one constraint it missed
+
+| Check | Target | Clay |
+|---|---|---|
+| Ground anchor off its own centre | ~0% | 49.8 / 49.2 / 49.3 / 50.0 / 49.4% |
+| Width : height | 0.95-1.55 | 1.35 / 1.26 / 1.21 / 1.03 / **0.92** |
+| Canvas | 1774x887, 2:1 | exact |
+| Alpha | real transparency | RGBA, corners clear |
+
+Tier 5 came back at **0.92**, just under the floor, and the shape of the miss matters more
+than the number: the ratio falls monotonically across the ladder (1.35 -> 0.92), which is the
+set growing UPWARD at the top tiers — exactly what the shared broad silhouette exists to
+stop. The cause is the brief itself. Asking for a seated colossus at tier 5 asks for a
+figure, and a figure is taller than it is wide. It was shipped as it is: the game scales to a
+fixed HEIGHT, so a narrow tower takes less board rather than burying its neighbours, and at
+board scale it reads correctly beside Steam and Lava. **Any future tier-5 built around a
+figure needs the proportion written into the tier line, not just into the constraints list**
+— say the colossus is SEATED AND WIDE, its knees and shoulders forming terraces wider than
+it is tall.
+
+The colour trap it was written to dodge worked. Clay was the roster's third grey building
+waiting to happen; wet terracotta plus cyan channels separates it from Earth, Water and the
+map in one step, and it does not collide with Lava either — Lava is near-black with orange
+seams, Clay is warm ochre with cold water.
 
 ### Per-fusion traps
 
