@@ -10,9 +10,8 @@ roster this recipe is now being used for, and **they no longer follow the recipe
 Read "Fusions are named things" below before generating one: the six element towers keep the
 shared fortress language, and every fusion now takes its shape from ITS OWN NAME instead.
 
-Painted under the NEW name rule: Dinosaur, Steam, Lava. Painted under the OLD fusion recipe
-and queued to be redone: Clay, Sun, Well, Roots. Unpainted: Infernal, Rainbow, Flesh Golem,
-Pure.
+Painted under the NEW name rule: Dinosaur, Steam, Lava, Rainbow. Painted under the OLD fusion
+recipe and queued to be redone: Clay, Sun, Well, Roots. Unpainted: Infernal, Flesh Golem, Pure.
 
 The pipeline around it is in [CLAUDE.md](../../CLAUDE.md) ("Painted tower set"); this file is
 only the prompt.
@@ -245,6 +244,18 @@ The kerb is the volcano's version of the plinth rule, and it earns its place twi
 says a built thing rather than a boulder on a board already full of rocks, and being a plain
 even ring it is the reason the anchors are the best in the roster. **Where a named form has no
 natural symmetry, give it a symmetrical thing to stand in.**
+
+### What Rainbow measured, the one the board was least able to take
+
+Anchors 50.2 / 49.6 / 47.9 / 49.6 / 50.9%, every tier wider than tall at 1.18-1.35, cut in
+one pass. A ring of clear crystal slabs standing in a plain stone kerb with a low wide arc of
+split light across it — the same kerb trick as the volcano, and the same clean anchors.
+
+Multi-colour on a deliberately muted board was the standing risk in the roster, and what
+defused it was saying WHERE the colour may live rather than how much of it there may be:
+desaturated watercolour bands, and stone and crystal that stay COLOURLESS so the eye reads
+grey masonry plus one soft arc. It is now the brightest thing on the board and still in
+register. Asking merely for "muted colours" would have tinted the whole tower and lost it.
 
 ### A cutter bug this sheet found
 
