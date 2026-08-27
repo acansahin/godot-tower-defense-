@@ -10,8 +10,9 @@ roster this recipe is now being used for, and **they no longer follow the recipe
 Read "Fusions are named things" below before generating one: the six element towers keep the
 shared fortress language, and every fusion now takes its shape from ITS OWN NAME instead.
 
-Painted under the NEW name rule: Dinosaur, Steam, Lava, Rainbow. Painted under the OLD fusion
-recipe and queued to be redone: Clay, Sun, Well, Roots. Unpainted: Infernal, Flesh Golem, Pure.
+Painted under the NEW name rule: Dinosaur, Steam, Lava, Rainbow, Infernal. Painted under the
+OLD fusion recipe and queued to be redone: Clay, Sun, Well, Roots. Unpainted: Flesh Golem,
+Pure.
 
 The pipeline around it is in [CLAUDE.md](../../CLAUDE.md) ("Painted tower set"); this file is
 only the prompt.
@@ -256,6 +257,24 @@ defused it was saying WHERE the colour may live rather than how much of it there
 desaturated watercolour bands, and stone and crystal that stay COLOURLESS so the eye reads
 grey masonry plus one soft arc. It is now the brightest thing on the board and still in
 register. Asking merely for "muted colours" would have tinted the whole tower and lost it.
+
+### What Infernal measured, and the shape that separates it from Lava
+
+Anchors 47.9 / 54.4 / 51.0 / 49.2 / 50.0%, every tier wider than tall at 1.25-1.47, cut in
+one pass. A rift torn open in the ground inside a fallen ring of blackened blocks, chains
+staked across it, crimson light welling up out of the split.
+
+This one shares two elements with Lava and had to stay apart from it, and under the name rule
+the separation is FREE — the two names are different things, so the two silhouettes are
+different things. Lava is a cone that rises; Infernal is a hole that sinks. On the board they
+sit side by side and read instantly, which the old recipe could only have attempted through
+hue, since both would have been broad stone mounds. **Where two fusions share elements, the
+name rule does the work that a colour note used to have to do.**
+
+Its first attempt, generated before the name rule, is the cautionary one in this file: a
+stepped elemental cone with rocks hovering around an orb, measuring 0.91 down to 0.69 wide to
+tall with 20-37% of each sprite spent on floating debris. Both defects are now named in every
+prompt.
 
 ### A cutter bug this sheet found
 
