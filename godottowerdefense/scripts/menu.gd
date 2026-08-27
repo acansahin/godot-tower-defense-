@@ -1,11 +1,10 @@
 extends Node2D
 ## Title screen — this scene is `run/main_scene`, so it is what the game opens on.
 ## The backdrop is the very same map.gd used in-game, with a button panel over it.
-## Pressing Play opens Tutorial.tscn, which can teach the essentials or be skipped before
-## handing off to Main. That click also supplies the user gesture browsers require before
-## any audio is allowed to start.
+## Pressing Play hands off straight to Main. That click also supplies the user gesture
+## browsers require before any audio is allowed to start.
 
-const TUTORIAL_SCENE := "res://scenes/Tutorial.tscn"
+const GAME_SCENE := "res://scenes/Main.tscn"
 
 @onready var _center: CenterContainer = $UI/Root/Center
 @onready var _how_panel: CenterContainer = $UI/Root/HowPanel
@@ -94,9 +93,7 @@ func _on_workshop_closed() -> void:
 
 func _on_play() -> void:
 	Audio.play("build")
-	# Training owns its own temporary board profile and hands off to a fresh Main scene when
-	# complete. It always offers Skip, so returning players are one click from the run.
-	get_tree().change_scene_to_file(TUTORIAL_SCENE)
+	get_tree().change_scene_to_file(GAME_SCENE)
 
 func _on_how() -> void:
 	Audio.play("build")

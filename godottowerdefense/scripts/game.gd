@@ -10,7 +10,7 @@ signal lives_changed(amount: int)
 ## Standard run ends (GAME_STRATEGY_V2.md's BUILD NEXT #4): a run is no longer necessarily
 ## endless, so `wave_reached` is not always the whole story any more.
 signal game_over
-## The run ended in a win — the player cleared Game.STANDARD_WAVES. Fired by
+## The run ended in a win — the player cleared Balance.STANDARD_WAVES. Fired by
 ## Game.declare_victory(), never emitted alongside `game_over` for the same run.
 signal victory
 ## Camera kick in pixels. Broadcast here so an Enemy can ask for one without knowing
@@ -189,14 +189,6 @@ const WINDING_PATH: Array = [
 	Vector2(1378, 101), Vector2(1424, 55), Vector2(1536, 18), Vector2(1620, -28),
 ]
 
-## Legal clearings on the dense winding painting. The same six generous pockets teach the
-## player where building is possible and keep towers out of the painted cliffs and trees.
-const WINDING_BUILD_ZONES: Array = [
-	[Vector2(288, 155), 66.0], [Vector2(376, 155), 66.0],
-	[Vector2(855, 140), 82.0], [Vector2(360, 455), 80.0],
-	[Vector2(620, 600), 72.0], [Vector2(710, 600), 72.0],
-]
-
 ## Control points for the generated S board (`assets/art/maps/s_forest_v1.png`). Coordinates
 ## are traced down the pale cobbles after the 1672x941 painting is fitted to WORLD_SIZE.
 ## use_board() samples a Catmull-Rom curve through them so walkers follow the painted bends
@@ -271,13 +263,97 @@ const PLAY_TOP := WORLD_SIZE.y * (HUD_BAR_HEIGHT / SCREEN_SIZE.y)  # 48
 ## A tower's footprint. Placement, overlap and the click target all use this one radius, so
 ## what you can build on, what you can hit and what you can see are the same disc.
 const TOWER_RADIUS := 30.0
-## Clear of the stone by the tower's own bulk: the road is 80px wide, so a tower may sit
-## with its edge exactly against the kerb. Tighter than the old ROAD_CLEARANCE of 82, which
-## was not a design choice but an artefact of where a 96px cell could fall.
-const ROAD_KEEPOUT := ROAD_HALF + TOWER_RADIUS
+
+## How TALL a painted tower is drawn, in board px, and one half of a pair with PAD_PITCH
+## below: whether a row of towers reads as separate buildings or as one mass depends on the
+## drawn WIDTH against the pitch, so the two move together and neither means anything alone.
+##
+## It lives in Game rather than in `tower.gd` (which reads it) because THE PLACEMENT RULE HAS
+## TO SEE IT. While the art was small the two could be strangers: a 60px sprite over a 30px
+## footprint stuck out a little and nobody noticed. A pass that took it to 160 broke that in
+## two ways a player sees at once - towers near the top of the board lost their upper half
+## behind the HUD, and towers beside the road stood on it. Both were one bug: can_build_at
+## reserved TOWER_RADIUS of room for something drawn five times that. ROAD_KEEPOUT and the
+## top bound now derive from this number, so the rule follows the art at any size.
+const TOWER_SPRITE_HEIGHT := 96.0
+## Half the width of the painted FOOTING as a fraction of the drawn height. Measured across
+## the 75 reachable sprites: the footing spans a median 0.75 of a sprite's width and the
+## widest 0.96, which against height comes out at ~0.45 for the median set. This is what has
+## to clear the kerb — not the drawn width (the tower flares above its base) and not
+## TOWER_RADIUS (a tap target sized for a thumb).
+const TOWER_BASE_HALF := 0.45
+## How near a tap has to land to mean a tower. Bigger than TOWER_RADIUS, and that is a
+## DELIBERATE SPLIT of the one-disc rule above: placement, the build test and the drag ghost
+## still use TOWER_RADIUS, but hit-testing does not. The painted body is drawn much wider
+## than the footprint - at TOWER_SPRITE_HEIGHT 96 the widest set covers 147px against a 60px
+## build disc - so a tap disc sized to the footprint leaves most of a tower dead to the
+## touch, which on a phone reads as the tower simply not responding. It tracks the art: the
+## 30px that suited a 60px sprite, scaled by the same 1.6.
+##
+## `main.gd` `_tower_at()` keeps the NEAREST tower rather than the first in range, so discs
+## that overlap are harmless. What it must not do is exceed PAD_PITCH, which would let a tap
+## on empty grass select a tower a whole cell away.
+const PICK_RADIUS := 48.0
+## Min distance from a tower's centre to the road centre-line: half the road, plus the half
+## width of the painted FOOTING, so a tower never stands on the stone.
+##
+## It used to be a fraction of TOWER_RADIUS, which was fine while the sprite was about the
+## size of the footprint and wrong the moment it was not — at a 160px sprite the rule kept
+## 15px clear for a base 72px wide, and towers sat squarely on the road. Deriving it from the
+## drawn size means the rule follows the art at whatever size the art is next set to.
+const ROAD_KEEPOUT := ROAD_HALF + TOWER_SPRITE_HEIGHT * TOWER_BASE_HALF
 ## Centre-to-centre spacing. Two towers at exactly 2*TOWER_RADIUS touch, which reads as one
 ## blob at phone scale; a little air makes a row of towers countable.
 const TOWER_GAP := TOWER_RADIUS * 2.0 + 8.0
+
+# --- Build pads ----------------------------------------------------------------
+#
+# Free placement answered "may a tower stand here" continuously and correctly, and the board
+# it produced looked accidental: every tower at whatever angle the cursor happened to be, no
+# two rows agreeing. The pads keep exactly that terrain rule and put it on a MARKED lattice,
+# so a built-up board reads as a plan instead of a scatter. Nothing about what is legal
+# ground changes — can_build_at() is still the only judge, and the pads are the subset of it
+# the player is offered.
+#
+# The lattice is HEXAGONAL rather than square, and that is measured rather than a taste:
+# on the winding board a square lattice at this pitch marks 38 spots and the staggered one
+# 47, because the open meadows are small and roundish and a hex pack fits more of them into
+# the same grass. Rows still line up, which is the part the player sees.
+
+## Centre-to-centre pitch of the pad lattice, and the number that decides HOW MANY TOWERS THE
+## GAME IS. Set outright rather than derived from TOWER_GAP (which it used to be, +2 for
+## float slack); the floor that replaces that derivation is that it must stay above
+## TOWER_GAP, or two neighbouring pads are not both buildable.
+##
+## Measured pad counts on the winding board, which fall far faster than the pitch rises
+## because the meadows are small islands - and are NOT monotonic, because the origin search
+## finds lucky alignments. With the old footprint-sized keepout: 70px marked 47 pads, 84px
+## 28, 91px 25, 150px 13, 186px 9, and 215px 9 again. With the keepout now scaled to the
+## drawn art the same board holds fewer: 98px marks 17, 112px 12, 126px 10, 140px 7.
+## **Always measure with `--dump-board`; never interpolate.**
+##
+## 112 pairs with a 96px sprite: twelve towers, each drawn 60% larger than the 60px the board
+## shipped with. Twelve neither reach nor kill what forty-seven did, and both halves are paid
+## for in Balance - WC3_RANGE_SCALE for the reach, GLOBAL_DAMAGE_MULT for the kill. Move this
+## and re-measure all of it, with a full `--fill-board` as the gate.
+const PAD_PITCH := 112.0
+## Candidate lattice origins tried per axis when a board is installed. WHERE the lattice
+## starts is worth more than its pitch here, because the meadows are scattered islands: on
+## the winding board the worst origin marks 27 pads and the best 47. So instead of a magic
+## offset written down per board, every origin on a PAD_ORIGIN_STEPS x PAD_ORIGIN_STEPS
+## sample of one lattice cell is tried and the most productive wins — a repaint re-tunes
+## itself, the same way the build mask does.
+const PAD_ORIGIN_STEPS := 5
+## How far the cursor may sit from a pad and still mean it. One pitch, so every point of the
+## board that is nearer to some pad than to open ground snaps to it.
+const PAD_SNAP := PAD_PITCH
+
+## Where a tower may be placed on the active board. Read it through pads(), never directly:
+## it is built on first use, not on board swap. Empty means free placement — which is what
+## a board publishing an `active_build_zones` allowlist gets, since its own guides replace
+## the lattice.
+var _pads: Array = []
+var _pads_ready: bool = false
 
 ## Scenery that BLOCKS building, as [centre, radius] in board px. FOUND IN THE PAINTING, not
 ## invented: tools/trace_road.py's companion scan looks for teal water in the board art and
@@ -293,9 +369,15 @@ const OBSTACLES: Array = [
 
 ## Fraction of TOWER_RADIUS the footprint test reaches out to. A tower is drawn much taller
 ## than it is wide and its base is smaller than the 30px click disc, so testing the full
-## radius would refuse a spot whose visible ground is perfectly clear. 0.7 asks "is the base
-## on grass", not "is the whole click target".
-const FOOTPRINT_PROBE := 0.35
+## radius would refuse a spot whose visible ground is perfectly clear. This asks "is the
+## base on grass", not "is the whole click target".
+##
+## On the winding board the setting is worth roughly a third of the board's capacity, so it
+## is measured rather than picked: 0.35 gives 29 buildable spots, 0.20 gives 37, and with
+## the smaller ROAD_KEEPOUT above the pair measures 51. The floor is the ring of eight
+## probes still being wider than the painted base — at 0 the test is centre-only, which is
+## what let a tower sit on the last grass texel with three quarters of itself in a tree.
+const FOOTPRINT_PROBE := 0.20
 
 ## True when the ground under a tower's base is open on every side, not just at its centre.
 ## A centre-only test lets a tower sit on the last grass texel with three quarters of its
@@ -322,21 +404,24 @@ func _footprint_is_open(pos: Vector2) -> bool:
 func can_build_at(pos: Vector2, others: Array = []) -> bool:
 	if pos.x - TOWER_RADIUS < 0.0 or pos.x + TOWER_RADIUS > PLAY_RIGHT:
 		return false
-	if pos.y - TOWER_RADIUS < PLAY_TOP or pos.y + TOWER_RADIUS > WORLD_SIZE.y:
+	# Upward, the sprite is what has to fit, not the footprint: a tower is hung from its
+	# ground anchor and drawn TOWER_SPRITE_HEIGHT above it, so reserving TOWER_RADIUS here is
+	# what let a tower near the top of the board lose its upper half behind the HUD.
+	if pos.y - TOWER_SPRITE_HEIGHT < PLAY_TOP or pos.y + TOWER_RADIUS > WORLD_SIZE.y:
 		return false
 	if dist_to_road(pos) < ROAD_KEEPOUT:
 		return false
 	for entry in active_obstacles:
 		if pos.distance_to(entry[0]) < float(entry[1]) + TOWER_RADIUS:
 			return false
-	# A board may expose only a few painted clearings. The main board leaves this empty and
-	# lets the terrain mask below decide; the training board fills it so its lesson really is
-	# about the six pockets it draws rings around.
+	# A board may expose only a few painted clearings via active_build_zones instead of the
+	# derived mask. No board currently sets this — it stands ready for one that wants to
+	# name its own legal spots rather than let the terrain mask decide.
 	#
 	# An explicit allowlist WINS OUTRIGHT over the derived mask rather than intersecting with
-	# it. The two answer different questions — "where does this lesson want a tower" versus
-	# "where is the ground actually clear" — and intersecting them silently moved the
-	# tutorial's own spots, which showed up as a lesson that could no longer be completed.
+	# it: the two would answer different questions ("where does this board want a tower"
+	# versus "where is the ground actually clear"), and intersecting them would silently move
+	# whatever spots the allowlist named.
 	if not active_build_zones.is_empty():
 		var inside_zone := false
 		for entry in active_build_zones:
@@ -513,6 +598,13 @@ const FUSIONS := {
 	## map: Clay Tower, 600 dmg @ 1.05s (the cooldown IS in the object data here).
 	## "Throws clumps of clay at enemies, with a chance to slow." The chance is what
 	## slow_chance exists for — every other slow in the game lands on every hit.
+	##
+	## DELIBERATE DEPARTURE from the map, which names this ladder Clay -> Golem -> Living
+	## Statue. The painted set is a worked CLAY PIT, not a figure: the roster already has
+	## Flesh Golem sitting on a plinth, and two golems is one too many. Since a fusion's
+	## shape now comes from its NAME (docs/tower-art-prompt.md), keeping the map's names
+	## would have put the word "Golem" over a pit of mud. The recipe, the stats and the
+	## ability are still the map's; only these three words are ours.
 	"earth+water": {
 		"name": "Clay", "names": ["Clay", "Clay Pit", "Great Mire"],
 		"color": Color(0.80, 0.62, 0.45),
@@ -555,13 +647,6 @@ const FUSIONS := {
 		"range": 542.857, "interval": 0.4,         # 190px = mean(fire 170, water 210)
 		"splash_radius": 80.0, "splash_factor": 0.5,
 		"poison_dps": 16.0, "poison_time": 2.5,
-	##
-	## DELIBERATE DEPARTURE from the map, which names this ladder Clay -> Golem -> Living
-	## Statue. The painted set is a worked CLAY PIT, not a figure: the roster already has
-	## Flesh Golem sitting on a plinth, and two golems is one too many. Since a fusion's
-	## shape now comes from its NAME (docs/tower-art-prompt.md), keeping the map's names
-	## would have put the word "Golem" over a pit of mud. The recipe, the stats and the
-	## ability are still the map's; only these three words are ours.
 		"desc": "Fast area steam that keeps eating health",
 	},
 	## map: Well Tower, 350 dmg. "Supporting tower that has the Spring Forward ability
@@ -689,10 +774,6 @@ func fusion_name(def: Dictionary, level: int) -> String:
 #   name, color, hp, spd, count, radius, cc_immune, regen (frac of max hp/s),
 #   split (children on death), air (all flyers).
 const WAVE_TYPES := {
-	## Training scene only. Few, slow and soft enough that a single tower clears it
-	## comfortably. Never used by the endless-wave table or generator.
-	"tutorial": {"name": "Scout", "color": Color(0.80, 0.55, 0.45),
-			"hp": 0.45, "spd": 0.7, "count": 0.5},
 	"normal": {"name": "Normal", "color": Color(0.85, 0.30, 0.30)},
 	"fast":   {"name": "Fast",   "color": Color(0.95, 0.85, 0.25), "hp": 0.6, "spd": 1.7, "count": 1.3, "radius": 0.85},
 	"swarm":  {"name": "Swarm",  "color": Color(0.90, 0.50, 0.75), "hp": 0.35, "spd": 1.15, "count": 2.6, "radius": 0.8},
@@ -712,50 +793,96 @@ const WAVE_TYPES := {
 ## These exist so the first minutes are *taught* rather than rolled: each new mechanic
 ## arrives on its own wave, in a deliberate order, instead of whenever the dice say.
 ##
-## The interactive tutorial now runs on its own map before Main. This table therefore starts
-## with a gentle REAL wave, then introduces one idea at a time: speed, numbers, the element
-## matchup, flyers, CC immunity, regeneration, splitting — and the first boss on 10, which
-## is the cadence the generator keeps forever after.
+## This table starts with a gentle REAL wave, then introduces one idea at a time: speed,
+## numbers, the element matchup, flyers, CC immunity, regeneration, splitting — and the
+## first boss on 10, which is the cadence the generator keeps forever after.
 ##
 ## "element" (optional) is the wave's armor element (empty/absent = neutral); early waves
 ## and all Air waves stay neutral so element colour doesn't clash with the archetype tint.
 ## "art" / "name" may override only the painted creature and preview label while keeping
-## the `type` archetype's combat stats — wave 1 uses the familiar tutorial Scout this way.
+## the `type` archetype's combat stats — wave 1 uses the Scout art this way.
 ##
-## The four `element_avatar` rows (waves 3, 7, 11, 15 — Balance.ELEMENT_BOSS_WAVES) carry NO
-## `element` on purpose: theirs is drawn per run from Run.boss_elements and filled in by
-## wave_manager._start_wave, so a run's four avatar bosses are the four elements in a random
-## order. Beating one unlocks that element for fusion (Run.unlock_fusion), which is the only
-## way cross-element power enters a run now — see FUSIONS above.
+## NO BOSS LIVES IN THIS TABLE ANY MORE. Every boss wave — the four element avatars and the
+## two set pieces — is applied by apply_milestone() below, keyed by wave number, on top of
+## whatever supplied the wave. The table used to carry `boss_rule` rows that had to be kept in
+## step with Balance.ELEMENT_BOSS_WAVES by hand; one list now decides, so they cannot disagree.
+##
+## This table therefore authors the CREEP progression only, and its rows for waves that a
+## milestone overrides are what those waves revert to if the milestone list ever moves.
 const WAVES: Array = [
 	{"type": "normal", "art": "tutorial", "name": "Scout", "count": 0.65}, # 1
 	{"type": "normal"},                                # 2  — a real wave, still gentle
-	{"type": "fast", "boss": true, "boss_rule": "element_avatar"},   # 3  — speed + AVATAR 1
+	{"type": "fast"},                                  # 3  — speed
 	{"type": "swarm"},                                 # 4  — numbers
 	{"type": "normal", "element": "fire"},             # 5  — first armour element
 	{"type": "air"},                                   # 6  — flyers: ground-only towers miss
-	{"type": "immune", "boss": true, "boss_rule": "element_avatar"}, # 7  — CC off + AVATAR 2
+	{"type": "immune"},                                # 7  — CC off: slow and stun stop working
 	{"type": "fast", "element": "earth"},              # 8
 	{"type": "regen", "element": "water"},             # 9  — must out-damage the heal
-	# boss_rule (GAME_STRATEGY_V2.md §10.4, BUILD NEXT #7): the ONE question each boss asks.
-	# Wave 10's Muhafız is immune to every control effect in the game (slow/stun/knockback —
-	# see Enemy.cc_immune) rather than to one named kind, so a future control type is covered
-	# automatically instead of needing its own exemption listed here.
-	{"type": "tank", "boss": true, "element": "water", "boss_rule": "control_immune"},# 10 — FIRST BOSS
-	{"type": "split", "boss": true, "boss_rule": "element_avatar"},  # 11 — split + AVATAR 3
+	{"type": "tank", "element": "water"},              # 10 — OVERRIDDEN: AVATAR 1 walks alone
+	{"type": "split"},                                 # 11 — splits on death
 	{"type": "tank", "element": "earth"},              # 12
 	{"type": "air"},                                   # 13
 	{"type": "immune", "element": "water"},            # 14
-	{"type": "fast", "boss": true, "boss_rule": "element_avatar"},   # 15 — AVATAR 4, the last
+	{"type": "fast", "element": "nature"},             # 15
 	{"type": "regen", "element": "nature"},            # 16
 	{"type": "split", "element": "earth"},             # 17
 	{"type": "swarm", "element": "water"},             # 18
-	{"type": "tank", "element": "fire", "hp": 0.85},   # 19 — mild trim so 20 reads as the spike
-	# Wave 20's Uyanmış Muhafız cycles its own armour every 5s (Enemy.rotating_armor) around
-	# Game.TOWER_ORDER's ring, starting here at "fire" — asks whether the run invested in one
-	# element or spread across all four, which the first boss never asked.
-	{"type": "swarm", "boss": true, "element": "fire", "boss_rule": "rotating_armor"},# 20 — SECOND BOSS, then the generator
+	{"type": "tank", "element": "fire", "hp": 0.85},   # 19
+	{"type": "swarm", "element": "fire"},              # 20 — OVERRIDDEN: AVATAR 2 walks alone
 ]
+
+## The two SET-PIECE bosses, keyed by wave. Unlike the avatars these keep their creep wave —
+## the escort is part of what makes them a wall — so they carry no `count` override.
+##
+## They sat on 10 and 20 while the run was 20 waves long, which is exactly where the avatars
+## now land. Rather than delete two bosses that each ask a question nothing else asks, they
+## moved to the same PLACES in the longer run: Balance.MIDPOINT_BOSS_WAVE and the final wave.
+## Both follow the run length, so they stay the midpoint and the finale at any length.
+##
+## `boss_rule` (GAME_STRATEGY_V2.md §10.4, BUILD NEXT #7) is the ONE question each boss asks.
+## Muhafız is immune to every control effect in the game (slow/stun/knockback — see
+## Enemy.cc_immune) rather than to one named kind, so a future control type is covered
+## automatically. Uyanmış Muhafız cycles its own armour every 5s (Enemy.rotating_armor) around
+## Game.TOWER_ORDER's ring, starting at "fire" — it asks whether the run invested in one
+## element or spread across all four, which the first boss never asks.
+const MIDPOINT_BOSS := {
+	"type": "tank", "boss": true, "element": "water", "boss_rule": "control_immune",
+}
+const FINAL_BOSS := {
+	"type": "swarm", "boss": true, "element": "fire", "boss_rule": "rotating_armor",
+}
+
+## The definition for wave `n` once its milestone, if it has one, has been applied to `base`.
+## Called by WaveManager for EVERY wave, whichever source produced `base` — the seed table or
+## WaveGenerator — which is what lets a boss land on wave 40 without the generator knowing
+## bosses exist.
+##
+## An avatar wave is built here rather than merged, and every field of it is deliberate:
+##
+## * `count` 0 is the whole point of the change — the avatar walks the road ALONE.
+## * `type` is pinned to "normal" instead of inheriting the base row's archetype, because the
+##   archetype's own `hp` multiplier would otherwise stack under ELEMENT_BOSS_HP_MULT: wave
+##   10's row is a tank (3.0x), which would have made the first avatar three times the
+##   fight the fourth one is. The four avatars must differ by ELEMENT, not by what the
+##   underlying wave happened to be.
+## * no `element`: theirs is this run's draw (Run.boss_element_for_wave), filled in by
+##   wave_manager._start_wave, which is what makes the four arrive in a different order every
+##   run. Beating one unlocks that element for fusion (Run.unlock_fusion) — the only way
+##   cross-element power enters a run, see FUSIONS above.
+func apply_milestone(n: int, base: Dictionary) -> Dictionary:
+	if Balance.ELEMENT_BOSS_WAVES.has(n):
+		return {"type": "normal", "boss": true, "boss_rule": "element_avatar", "count": 0.0}
+	if n == Balance.MIDPOINT_BOSS_WAVE:
+		return _merged(base, MIDPOINT_BOSS)
+	if n == Balance.STANDARD_WAVES:
+		return _merged(base, FINAL_BOSS)
+	return base
+
+func _merged(base: Dictionary, over: Dictionary) -> Dictionary:
+	var out: Dictionary = base.duplicate()
+	out.merge(over, true)
+	return out
 
 # --- Workshop: permanent upgrades ----------------------------------------------
 # Bought with Essence between runs and applied at the start of every run afterwards.
@@ -866,12 +993,12 @@ var wave_reached: int = 0
 # The all-time best wave now lives in Meta, where it is persisted along with the rest of
 # the permanent progression — see Meta.best_wave.
 
-## The number of hand-authored waves a Standard run plays before it can be won. Kept as its
-## own named constant rather than reading Game.WAVES.size() at the call site, so the win
-## condition (WaveManager) states its own intent instead of leaning on the seed table's
-## length being exactly this by coincidence — the two happen to match today (20) and should
-## keep matching if the seed table ever grows.
-const STANDARD_WAVES := 20
+## The run's length moved to Balance.STANDARD_WAVES, where the HP ramp, the speed ramp and
+## the boss waves are all derived from it — see the block above Balance.BASE_HP_FLAT. It is
+## NOT Game.WAVES.size() and must not be confused with it: WAVES is the hand-authored
+## TEACHING table and stops at 20, where every archetype has been introduced once, while
+## waves 21 onward come from WaveGenerator. The two happened to share an answer only while
+## the run was 20 waves long.
 
 ## Which enemy caused the most recent life loss, and on which wave — overwritten by every
 ## leak, fatal or not, so by the time `game_over` fires this describes the exact leak that
@@ -889,7 +1016,7 @@ func record_leak(label: String, element: String) -> void:
 	last_leak_label = label
 	last_leak_element = element
 
-## Ends the run as a win: the player cleared Game.STANDARD_WAVES. Reuses `is_over` for every
+## Ends the run as a win: the player cleared Balance.STANDARD_WAVES. Reuses `is_over` for every
 ## guard that already stops the run (spawning, life loss, another choice) rather than adding
 ## a second flag those sites would also need to check — `is_won` only distinguishes how the
 ## summary is framed.
@@ -931,15 +1058,13 @@ var _path_cum: PackedFloat32Array = PackedFloat32Array()
 func _ready() -> void:
 	use_main_board()
 
-## Restores the endless-run board. Called by Menu/Main as well as on leaving training, so a
-## scene reload can never inherit the short tutorial road from the scene before it.
+## Restores the endless-run board. Called by Menu/Main so a scene reload always lands on the
+## real run's profile rather than whatever a previous scene had installed.
 func use_main_board() -> void:
 	use_board("spiral")
 
 ## Selects the endless board for `wave`. The last available profile remains active after its
 ## chapter, so an unfinished map slot never sends a deep run back to an earlier layout.
-## A real run always gets free placement — the scarce painted clearings are a lesson device,
-## not an endless-run rule — so this never passes the tutorial's WINDING_BUILD_ZONES on.
 ##
 ## UNREACHED as of BUILD NEXT #8: Standard mode pins to main.gd's STANDARD_BOARD for its
 ## whole length instead of rotating (GAME_STRATEGY_V2.md §28 Phase 1 is one map), so nothing
@@ -947,20 +1072,16 @@ func use_main_board() -> void:
 ## mode that reconnects it.
 func use_board_for_wave(wave: int) -> void:
 	var chapter := floori(float(maxi(wave, 1) - 1) / float(WAVES_PER_BOARD))
-	use_board(String(BOARD_SEQUENCE[mini(chapter, BOARD_SEQUENCE.size() - 1)]), false)
+	use_board(String(BOARD_SEQUENCE[mini(chapter, BOARD_SEQUENCE.size() - 1)]))
 
 ## Installs a named board profile. Towers and run economy deliberately survive the swap;
 ## only the painting, road and future placement checks change between chapters.
-## `restrict_clearings` only matters for "winding": Tutorial calls this with the default
-## true to keep its scarce painted pockets closed ground; every endless-run caller passes
-## false so wave 1-10 plays that same painting with free placement like the other boards.
-func use_board(board_id: String, restrict_clearings: bool = true) -> void:
+func use_board(board_id: String) -> void:
 	if active_board_id == board_id:
 		return
 	match board_id:
 		"winding":
-			configure_board(_smooth_path(WINDING_PATH, 4), [],
-					WINDING_BUILD_ZONES if restrict_clearings else [], board_id)
+			configure_board(_smooth_path(WINDING_PATH, 4), [], [], board_id)
 		"spiral":
 			configure_board(_smooth_path(PATH, 2), OBSTACLES, [], board_id)
 		"s":
@@ -979,6 +1100,11 @@ func configure_board(path: Array, obstacles: Array = [], build_zones: Array = []
 	active_obstacles = obstacles.duplicate(true)
 	active_build_zones = build_zones.duplicate(true)
 	active_build_mask = _load_build_mask(board_id)
+	# Invalidated, not rebuilt. Marking the lattice costs a sweep of the whole board and the
+	# autoload installs the endless board before Main replaces it with the one actually being
+	# played — building here paid that cost twice per launch, for a board nobody saw.
+	_pads = []
+	_pads_ready = false
 	_path_cum = PackedFloat32Array()
 	_path_cum.resize(active_path.size())
 	for i in range(1, active_path.size()):
@@ -986,6 +1112,73 @@ func configure_board(path: Array, obstacles: Array = [], build_zones: Array = []
 				+ (active_path[i] as Vector2).distance_to(active_path[i - 1])
 	active_board_id = board_id
 	board_changed.emit(active_board_id)
+
+## The pads for the active board, marking the lattice on first use.
+##
+## Tries every candidate origin and keeps the most productive, so no board carries a
+## hand-tuned offset. That is PAD_ORIGIN_STEPS^2 sweeps of a ~200-point lattice; the cheap
+## centre-of-the-mask prefilter in _pads_from() is what keeps it off the frame budget, since
+## most lattice points are over forest and can_build_at() would measure the distance to all
+## 140 road segments to find that out.
+func pads() -> Array:
+	if not _pads_ready:
+		_pads_ready = true
+		_rebuild_pads()
+	return _pads
+
+func _rebuild_pads() -> void:
+	_pads = []
+	# A board with an explicit clearing allowlist already HAS its guides. A lattice inside
+	# them would be a second answer to a question the allowlist has already answered.
+	if not active_build_zones.is_empty():
+		return
+	var row_h := PAD_PITCH * sqrt(3.0) * 0.5
+	for iy in PAD_ORIGIN_STEPS:
+		for ix in PAD_ORIGIN_STEPS:
+			var candidate := _pads_from(
+					TOWER_RADIUS + PAD_PITCH * float(ix) / float(PAD_ORIGIN_STEPS),
+					PLAY_TOP + TOWER_RADIUS + row_h * float(iy) / float(PAD_ORIGIN_STEPS),
+					row_h)
+			if candidate.size() > _pads.size():
+				_pads = candidate
+
+## One staggered lattice from one origin: every other row is shifted half a pitch, which is
+## what makes the pack hexagonal. Row height is pitch * sin(60), so a pad's six neighbours
+## are all exactly PAD_PITCH away.
+func _pads_from(ox: float, oy: float, row_h: float) -> Array:
+	var out: Array = []
+	var y := oy
+	var row := 0
+	while y <= WORLD_SIZE.y - TOWER_RADIUS:
+		var x := ox + (PAD_PITCH * 0.5 if row % 2 == 1 else 0.0)
+		while x <= PLAY_RIGHT - TOWER_RADIUS:
+			var at := Vector2(x, y)
+			# One texel of the mask, before can_build_at() walks the road. Three quarters of
+			# the board is closed ground, and this rejects it for the price of a lookup.
+			if is_open_ground(at) and can_build_at(at):
+				out.append(at)
+			x += PAD_PITCH
+		y += row_h
+		row += 1
+	return out
+
+## True when this board offers marked pads at all. False on a board that instead publishes
+## an `active_build_zones` allowlist and keeps free placement inside its own painted rings.
+func has_pads() -> bool:
+	return not pads().is_empty()
+
+## The pad the cursor means, or Vector2.INF when it is not near one. INF rather than the
+## cursor position on purpose: a caller that forgets to check would otherwise silently fall
+## back to free placement, and the marks would become a decoration over the old behaviour.
+func nearest_pad(pos: Vector2) -> Vector2:
+	var best := Vector2.INF
+	var best_d := PAD_SNAP
+	for pad in pads():
+		var d: float = pos.distance_to(pad)
+		if d < best_d:
+			best_d = d
+			best = pad
+	return best
 
 ## Loads `board_id`'s open-ground mask, or null if it has none. Called once per board swap,
 ## never per placement check.

@@ -1,7 +1,7 @@
 extends Control
 class_name EndScreen
 ## Run summary, either way a Standard run ends (GAME_STRATEGY_V2.md §11.1, BUILD NEXT #4):
-## clearing Game.STANDARD_WAVES (Game.victory) or running out of lives (Game.game_over).
+## clearing Balance.STANDARD_WAVES (Game.victory) or running out of lives (Game.game_over).
 ## Pauses the tree so nothing keeps moving, and restarts on button press.
 
 @onready var title: Label = $Center/Panel/VBox/Title
@@ -56,17 +56,19 @@ func _death_reason() -> String:
 	return "Wave %d — a %s%s got through" % [
 			Game.last_leak_wave, prefix, Game.last_leak_label]
 
-## A short line acknowledging the depth reached. Milestones are the ones the wave table
-## makes meaningful — surviving the tutorial, the first boss on 10, the second on 20, and
-## then the generator's own boss cadence.
+## A short line acknowledging the depth reached. Measured as a FRACTION of the run rather
+## than in wave numbers: the milestones it names are the avatar bosses and the midpoint boss,
+## and those follow Balance.STANDARD_WAVES, so hard-coded 10/20/40 stopped describing them
+## the moment the run stopped being 20 waves long.
 func _verdict(reached: int) -> String:
-	if reached >= 40:
-		return "The road held for a very long time."
-	if reached >= 20:
-		return "Past the second boss."
-	if reached >= 10:
-		return "You beat the first boss."
-	if reached >= 5:
+	var progress := float(reached) / float(maxi(Balance.STANDARD_WAVES, 1))
+	if progress >= 0.8:
+		return "The road held almost to the end."
+	if progress >= 0.5:
+		return "Past the Guardian at the midpoint."
+	if progress >= 0.2:
+		return "You took an element off its avatar."
+	if progress >= 0.1:
 		return "The elements are starting to matter."
 	return "Just getting started."
 

@@ -1,8 +1,12 @@
 extends Node
-## "Audio" autoload: all sound effects are SYNTHESIZED in code at startup — no audio
-## files ship with the game, matching its everything-drawn-in-code philosophy. Each
+## "Audio" autoload: every sound EFFECT is SYNTHESIZED in code at startup — no effect
+## ships as a file, matching the game's everything-drawn-in-code philosophy. Each
 ## effect is baked once into an AudioStreamWAV and replayed through a small pool of
 ## AudioStreamPlayers so overlapping shots never cut each other off.
+##
+## The background MUSIC is the one exception: if MUSIC_TRACK is present it plays that
+## recorded loop, and the synthesized chiptune loop further down stays as the fallback
+## for a build without it. Nothing else about the audio changes.
 ##
 ## Voiced as retro CHIPTUNE / 8-bit: NES-style pulse (square) leads with duty cycles,
 ## rapid arpeggios for "chords", pitch slides, triangle-wave bass, and sample-and-hold
@@ -10,7 +14,11 @@ extends Node
 
 const SR := 22050          ## Sample rate for every baked buffer (mono, 16-bit).
 const VOLUME_DB := -12.0    ## Master trim (square waves are hot, so trimmed a bit more).
-const MUSIC_VOLUME_DB := -20.0  ## Background loop sits well under the SFX.
+const MUSIC_VOLUME_DB := -20.0  ## Synthesized fallback loop sits well under the SFX.
+## Recorded background track. Imported with loop=true (see its .import), so the STREAM
+## repeats on its own and the player never restarts it. Absent -> _build_music().
+const MUSIC_TRACK := "res://assets/audio/guardians_of_the_verdant_spire.mp3"
+const MUSIC_TRACK_VOLUME_DB := -16.0  ## A mastered track is far hotter than the baked loop.
 const POOL_SIZE := 12       ## Concurrent one-shot voices.
 
 var _sfx: Dictionary = {}                 ## name -> AudioStreamWAV
@@ -34,11 +42,16 @@ func _ready() -> void:
 		_players.append(p)
 	_build_all()
 
-	# Continuous low-volume chiptune loop so between-wave lulls aren't silent.
+	# Continuous low-volume loop so between-wave lulls aren't silent.
 	_music = AudioStreamPlayer.new()
 	_music.process_mode = Node.PROCESS_MODE_ALWAYS
-	_music.stream = _build_music()
-	_music.volume_db = MUSIC_VOLUME_DB
+	var track := _load_music_track()
+	if track != null:
+		_music.stream = track
+		_music.volume_db = MUSIC_TRACK_VOLUME_DB
+	else:
+		_music.stream = _build_music()
+		_music.volume_db = MUSIC_VOLUME_DB
 	add_child(_music)
 	_music.play()
 
@@ -246,6 +259,18 @@ func _build_all() -> void:
 	_sfx["gameover"] = _encode(gameover, 0.6)
 
 # --- Background music ----------------------------------------------------------
+
+## The recorded track, or null if this build doesn't have it. Loading is guarded rather
+## than assumed so a stripped export (or a deleted asset) falls back to the synthesized
+## loop below instead of starting up silent.
+func _load_music_track() -> AudioStream:
+	if not ResourceLoader.exists(MUSIC_TRACK):
+		return null
+	var res := load(MUSIC_TRACK)
+	if res is AudioStream:
+		return res as AudioStream
+	return null
+
 # A 16-second seamless chiptune loop: triangle bass + pulse arpeggio melody over a
 # vi-IV-I-V progression (Am-F-C-G), with a soft kick and hats. Second half lifts the
 # melody an octave for a little variety. Kept quiet (MUSIC_VOLUME_DB) under the SFX.

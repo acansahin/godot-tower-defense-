@@ -4,10 +4,8 @@ A tiny, fully-playable 2D tower-defense prototype inspired by the Warcraft III
 custom map **Element TD**. Built with typed GDScript, deliberately small and
 readable rather than production-architected.
 
-When you press **Play**, a short interactive training match first opens on a close-up forest
-map: six teaching pads across four build clearings, an upper-left entrance, an upper-right
-exit, Water placement and upgrading, then one short counter-wave for every basic tower. It
-can always be skipped. The endless run reuses that winding forest for waves 1–10, changes to
+When you press **Play**, the run starts immediately. The endless run uses the winding
+forest for waves 1–10, changes to
 the inward spiral for waves 11–20, then uses the broad S road for waves 21–30. The run is
 structured as 10-wave map chapters so Z and later road shapes can be appended. Towers, gold
 and lives survive a chapter change; a tower
@@ -23,16 +21,24 @@ repo. Numbers come from the original Warcraft III map where the port takes them
 **element-matchup** system (each is strong and
 weak against another, so tower choice vs. an enemy's armor element matters),
 **tap-to-open** tower panels (upgrade, fuse, sell), **time controls** (pause and
-1x/2x/3x), a gold economy with interest and streak bonuses, lives, an interactive **tutorial**,
+1x/2x/3x), a gold economy with interest and streak bonuses, lives,
 and a **run summary** reporting how deep you got.
 
-A run has **no win condition and no last wave**. Waves 1–20 are hand-authored so each
-mechanic is introduced deliberately; past that, `WaveGenerator` produces waves forever, with
-a boss every 10. The run ends when your lives run out, and the wave you reached is the score.
+A run is **`Balance.STANDARD_WAVES` long — 50 — and can be won**. Waves 1–20 are hand-authored
+so each mechanic is introduced deliberately; past that `WaveGenerator` supplies them. The run
+ends when you clear the last wave or your lives run out, and the wave you reached is the score.
 
-On waves 3, 7, 11 and 15 an **element avatar boss** arrives — one for each of the four
-elements, in a random order every run. Beat it and that element unlocks for **fusion** for
-the rest of the run; let it walk off the end of the road and you lose it.
+**The run length is one dial.** Set `Balance.STANDARD_WAVES` and the boss waves, the HP ramp
+and the speed ramp all re-time themselves — a 50-wave run and a 100-wave run finish at the
+same difficulty and differ only in how finely they climb to it. Nothing below is a per-wave
+rate any more; each is an endpoint plus a slope derived from the length.
+
+Every fifth of the run — waves **10, 20, 30 and 40** — an **element avatar boss** arrives
+**alone**, with no ordinary creeps in the wave at all. One for each of the four elements, in a
+random order every run, named in the next-wave preview so you have the prep gap to build its
+counter. Beat it and that element unlocks for **fusion** for the rest of the run; let it walk
+off the end of the road and you lose it. Two set-piece bosses hold the midpoint (**25**) and
+the final wave (**50**), and those keep their escort.
 
 Fusion is how cross-element power enters a run, and it happens on the board rather than on a
 card. Tap any tower and its panel offers to absorb an unlocked element for gold. The set of
@@ -78,31 +84,34 @@ tower reference this is growing toward.
 No plugins or downloads are required. Two kinds of art now sit side by side: the
 **painted** board and the element towers, five tiers each (`assets/art/`), and the
 **code-drawn** everything else — enemies, every fusion tower, projectiles, every
-effect and all of the UI — still built from primitive shapes in `_draw()`. Every sound is still synthesized
-at startup; no audio file ships with the game. See §6.
+effect and all of the UI — still built from primitive shapes in `_draw()`. Every sound
+EFFECT is still synthesized at startup; the only audio file that ships is the background
+music track. See §6.
 
 ### Controls
 - The game opens on a **title screen**: **Play**, **How to Play** (a controls
   summary), a **Sound** toggle, and **Quit** (hidden on Web).
 - **Drag a tower from the palette** (top-right, lists every tower with its colour
-  and cost) onto **any clear ground** to build it. A green ghost disc marks a legal spot,
+  and cost) onto **a build pad** to build it. A green ghost disc marks a legal spot,
   red an illegal/unaffordable one, and the ghost also previews **the range that tower would
   cover** — so you can judge placement before spending the gold.
 - **Hover a placed tower** to light up its range ring. Ranges stay faint otherwise, so a
   full board doesn't turn into a tangle of overlapping circles.
-- **There is no build grid, but there is terrain.** A tower stands wherever you drop it, as
-  long as it is off the road, on OPEN GROUND — grass, never trees, cliffs or water —
-  inside the play area and not on top of another tower. One rule, `Game.can_build_at()`,
-  and the green/red ghost is that rule drawn. Where the open ground is comes from the
-  painting itself, not from hand-placed zones: `tools/build_mask.py` reads the board art and
-  writes a mask the placement rule samples, so the forest really is closed ground rather
-  than merely looking closed. While a drag is in
-  progress the ground that is closed to building is shaded, so the margins the painting
-  cannot show (the road's keep-out, the strip under the palette) are visible exactly when
-  you are asking about them. The ghost never disappears over bad ground; it turns red,
-  because a ghost that vanishes tells you nothing about why.
+- **Towers go on marked pads, and the pads come from the terrain.** Faint rings sit on every
+  spot a tower may stand — off the road, on OPEN GROUND (grass, never trees, cliffs or
+  water), inside the play area — and they light up while you drag. The ghost snaps to the
+  pad it would land on, so what you see is what the drop does. Where the open ground is
+  comes from the painting itself, not from hand-placed zones: `tools/build_mask.py` reads
+  the board art and writes a mask the placement rule samples, so the forest really is closed
+  ground rather than merely looking closed. The pads replaced free placement, which was
+  correct and looked accidental — every tower at whatever angle the cursor happened to be,
+  no two rows agreeing. The lattice is hexagonal because that fits more pads into small
+  round meadows than a square one (47 against 38 on the winding board). The ghost never
+  disappears over bad ground; it turns red, because a ghost that vanishes tells you nothing
+  about why.
 - **Click / tap a tower to upgrade it** (up to level 5) — each level raises **damage only**,
-  and a painted tower visibly grows with it. A green ▲ chevron floats beside any tower whose
+  and a painted tower swaps to that tier's art *at the same size*: an upgrade never takes
+  more board than the tower already stood on. A green ▲ chevron floats beside any tower whose
   next level you can already afford, so you can spot upgrade candidates at a glance.
 - **Tap a tower to open its panel** — upgrade, absorb an unlocked element, or sell.
   Selling refunds most of everything you spent on it, fusion costs included. The panel
@@ -146,7 +155,7 @@ godottowerdefense/
 ├── assets/
 │   └── art/                 # The project's only bitmap assets (icon.svg aside)
 │       ├── board_source.png # The endless-run board; Game.PATH is traced out of it
-│       ├── maps/            # Separate painted boards (the close tutorial map lives here)
+│       ├── maps/            # Separate painted boards (winding, s, ...)
 │       └── towers/          # <element>_1..5.png, cut from _source_<element>.png by
 │                            # tools/cut_sprites.py (at the repo root, not here)
 ├── web/
@@ -154,7 +163,6 @@ godottowerdefense/
 │                            # landscape lock (injected via the preset's head_include)
 ├── scenes/
 │   ├── Menu.tscn            # Title screen (main scene — what the game opens on)
-│   ├── Tutorial.tscn        # Action-gated training match on the close forest map
 │   ├── Main.tscn            # The level
 │   ├── Enemy.tscn           # A single enemy (also used for flyers / bosses)
 │   ├── Tower.tscn           # Generic tower (configured from Game.TOWER_DEFS)
@@ -170,14 +178,12 @@ godottowerdefense/
     ├── run.gd               # "Run" autoload: avatar boss order, unlocked fusions, mods
     ├── tower_mods.gd        # Folded modifier totals for one (tower id, element) pair
     ├── wave_generator.gd    # Endless wave definitions past the seed table
-    ├── tutorial.gd          # Training flow: placement, two groups, upgrade, hand-off
-    ├── tutorial_map.gd      # Draws the separate close map + legal-clearings/road overlay
-    ├── audio.gd             # "Audio" autoload: synthesized chiptune SFX + music
+    ├── audio.gd             # "Audio" autoload: synthesized chiptune SFX + music track
     ├── enemy_index.gd       # "EnemyIndex" autoload: per-frame spatial hash for targeting
     ├── menu.gd              # Title screen: play / how-to-play / sound / quit
     ├── main.gd             # Wires the level together (placement, upgrade, fuse, sell)
     ├── map.gd              # Draws the painted board (+ the traced-road overlay, off)
-    ├── grid.gd             # Shades the ground you may NOT build on, during a drag
+    ├── grid.gd             # Draws the build pads; shades closed ground on a padless board
     ├── sprites.gd          # Loads the painted tower art + its ground anchor; null
     │                       # for anything not painted yet, so the code art falls back
     ├── enemy.gd            # Path walking, health, flyer visuals, slow/poison
@@ -221,7 +227,7 @@ stays in sync with the **M** key.
 ```
 Main (Node2D)               [main.gd]
 ├── Map (Node2D)            [map.gd]   -> the painted board, stretched to WORLD_SIZE
-├── Grid (Node2D)           [grid.gd]  -> shades closed ground while a drag is in progress
+├── Grid (Node2D)           [grid.gd]  -> draws the build pads (lit while a drag is in progress)
 │                                         (still named Grid; there is no grid)
 ├── Enemies (Node2D)                   -> enemies spawned here at runtime
 ├── Towers (Node2D)                    -> built towers live here
@@ -328,11 +334,26 @@ editing three files and hunting for un-named literals; it is now one file.
   every circle in `OBSTACLES`, on open ground per the board's build mask (nine samples
   around the tower's base, so it cannot perch on the last grass texel with its back in a
   tree), and at least `TOWER_GAP` from any tower already standing. A board that publishes an
-  explicit `active_build_zones` allowlist — the tutorial does — uses that INSTEAD of the
-  mask, never both.
-  One radius — `TOWER_RADIUS` — does placement, overlap, hit-testing and the drawn
-  footprint, so what you can build on, what you can tap and what you can see are the same
-  disc.
+  explicit `active_build_zones` allowlist uses that INSTEAD of the mask, never both — no
+  shipped board sets one today.
+- **`Game.pads()`** is the subset of that rule the player is offered: a hexagonal lattice at
+  `PAD_PITCH`, marked once per board on first use. `main.gd` `_placement_point()` snaps the
+  ghost and the drop to the nearest pad and returns `Vector2.INF` — never the cursor — when
+  there is none in range, so nothing can quietly fall back to free placement. The lattice
+  ORIGIN is searched rather than written down (`PAD_ORIGIN_STEPS`² candidates, best wins),
+  because on scattered meadows the origin is worth 27 pads against 47. A board with an
+  `active_build_zones` allowlist gets no pads; its rings would already be its guides.
+  `PAD_PITCH` is paired with `Game.TOWER_SPRITE_HEIGHT`, and together they decide how many
+  towers the game is: at 112px the board marks **12 pads** and towers are drawn 96 tall, 60%
+  larger than the size it shipped with. Twelve towers had to be paid for twice —
+  `Balance.WC3_RANGE_SCALE` 0.45 so they still watch the road, and
+  `Balance.GLOBAL_DAMAGE_MULT` 4.2 so they still kill what they watch — with `--fill-board`
+  clearing the last wave as the gate. The placement rule sizes itself off the DRAWN sprite
+  rather than off `TOWER_RADIUS`, so a tower can neither stand on the road nor lose its top
+  behind the HUD at whatever size the art is next set to.
+  `TOWER_RADIUS` does placement, overlap and the drawn footprint. Hit-testing is the one
+  thing split off it, onto the larger `PICK_RADIUS`, because the painted body is drawn far
+  wider than the footprint and tapping what you see used to miss.
 - **`Grid`** no longer owns anything. It sweeps the play area on a 32px step and shades
   every square `can_build_at()` rejects, but only while `Main` has switched it on for a
   drag. The painting already says where the lake and the road are; this is for the margins,
@@ -386,8 +407,11 @@ editing three files and hunting for un-named literals; it is now one file.
   fifteen duals get, and is what let the board be repainted one element at a time. A sprite is hung by its **ground anchor** — the
   median middle of the bottom 4% of its opaque rows, *not* the lowest row alone, which on a
   painted tower is a sliver of one rock — so the base sits on the spot the tower occupies, and
-  `SPRITE_HEIGHT` fixes how tall it is drawn per level (78 → 138 board px), so the
-  proportionally taller upper tiers grow upward instead of ballooning.
+  `SPRITE_HEIGHT` is ONE height for all five levels (92 board px). It used to be a per-level
+  ladder (78 → 138) and the growth was the problem: the footprint stays `TOWER_RADIUS`
+  whatever the level, so upgraded neighbours 68px apart drew over each other and merged into
+  one shape. Held by height rather than width because every painted set gets proportionally
+  taller as it upgrades, so a fixed height also keeps the drawn base from growing.
 - **`EnemyIndex` (autoload)** is a uniform spatial hash of every live enemy, rebuilt
   lazily at most once per frame (on the first query, keyed on the frame counter). Towers
   and splash projectiles call `query(center, radius)` to get only the enemies in cells
@@ -409,11 +433,6 @@ editing three files and hunting for un-named literals; it is now one file.
   camera exists. It also applies `Game.use_board_for_wave()` before WaveManager spawns the
   first enemy of a chapter, so painting, pathing and new placement checks change together;
   towers invalid on the new terrain are relocated to the nearest legal open position.
-- **`Tutorial`** is a separate, finite level shown between Menu and Main. It installs its
-  own `Game.configure_board()` profile, restricts placement to six pads in four painted grass
-  clearings, reveals one basic tower at a time, and spawns six tiny counter-armour Scout groups
-  without touching `WaveManager` or permanent run rewards. Skip/completion restores the main
-  board profile, and Main resets gold, lives and run modifiers before the endless run.
 - **`FloatingText` / `DeathBurst`** are one-shot visuals parented to `Effects`. Both are
   built with `.new()` rather than from a `.tscn` — they are a bare `Node2D` plus a
   script, which also avoids a script preloading the very scene it is attached to.
@@ -441,13 +460,15 @@ editing three files and hunting for un-named literals; it is now one file.
 | Upgrade cost | `balance.gd` `TIER_COSTS` | 175 / 788 / 3544 / 24444, the same ladder for every element |
 | Sell refund | `balance.gd` `SELL_REFUND` / `SELL_REFUND_UNFIRED` | 80% of total gold spent, or 100% if the tower never got a shot off. `total_spent` includes fusion costs, so a Pure tower refunds against the whole road it travelled. Sell from the tower panel |
 | Fusion cost | `balance.gd` `FUSION_COSTS` | 160 / 420 / 900 gold for the 2nd, 3rd and 4th element. Scaled from the map's own 275 / 1017 combination costs against its 50-gold base tower; the map has no four-element tower, so Pure's is roughly double the triple. **Not yet measured against what a run actually banks** — the number most likely to move after real play |
-| Avatar bosses | `balance.gd` `ELEMENT_BOSS_*`, `game.gd` `WAVES` | Waves 3/7/11/15, one per element in a random order per run (`Run.boss_elements`, drawn from the run seed). HP ×5, speed ×0.7, reward ×8, costs 3 lives — softer than the two set-piece bosses because there are four of them and the first lands on wave 3. Killing one unlocks its element for fusion; leaking it does not |
+| Run length | `balance.gd` `STANDARD_WAVES` | 50. **The dial everything else hangs off** — `ELEMENT_BOSS_WAVES`, `MIDPOINT_BOSS_WAVE`, `hp_growth()` and `speed_slope()` are all derived from it, so 60 or 100 re-times the whole run instead of moving its finish line |
+| Avatar bosses | `balance.gd` `ELEMENT_BOSS_*`, `game.gd` `apply_milestone()` | Waves 10/20/30/40 — a fifth of the run apart, derived from `STANDARD_WAVES`. Each walks **ALONE** (`count` 0): no ordinary creeps share the wave. One per element in a random order per run (`Run.boss_elements`, drawn from the run seed) and named in the preview. Type pinned to `normal` so the four differ by element only, never by an inherited archetype's HP multiplier. HP ×5, speed ×0.7, reward ×8, costs 3 lives. Killing one unlocks its element for fusion; leaking it does not |
+| Set-piece bosses | `game.gd` `MIDPOINT_BOSS` / `FINAL_BOSS` | Muhafız on `MIDPOINT_BOSS_WAVE` (25) is immune to every control effect; Uyanmış Muhafız on the final wave (50) cycles its own armour every 5s. Unlike the avatars these keep their creep wave — the escort is part of the wall |
 | Targeting | `tower.gd` `_find_target()` | Fixed to "First" — the enemy furthest along the path (closest to the exit); no per-tower picker |
 | Game speed | `hud.gd` `SPEEDS` | 1x / 2x / 3x via `Engine.time_scale`; pause via `get_tree().paused` |
 | Screen shake | `main.gd` `SHAKE_DECAY`, `enemy.gd` | 7px on a boss death, 4px on a leak, bled off at 26 px/s |
 | Impact SFX cap | `audio.gd` `MAX_PER_FRAME` | 3 per effect per frame — a full board at 3x otherwise floods the 12-voice pool |
 | Element matchup | `game.gd` `ELEMENT_BEATS` | cycle light→darkness→water→fire→nature→earth→light; ×1.75 dmg if you beat the target's armor element, ×0.7 if it beats you, ×1 if either side is neutral (applies to direct, splash and poison damage) |
-| Waves | `game.gd` `WAVES` | 20 fixed entries (archetype + optional `boss`/`element`/visual override, plus optional per-wave multipliers); wave 1 keeps Normal stats but introduces the tutorial Scout art |
+| Waves | `game.gd` `WAVES` | 20 hand-authored entries teaching one archetype at a time (archetype + optional `element`/visual override + per-wave multipliers); wave 1 keeps Normal stats but introduces the Scout art. **No boss lives in this table** — every boss wave is applied by `apply_milestone()` on top of whatever supplied the wave, so the seed table and the boss-wave list cannot drift apart. Waves 21+ come from `WaveGenerator` |
 | Map chapters | `game.gd` `BOARD_SEQUENCE` / `WAVES_PER_BOARD` | winding forest on waves 1–10, spiral on 11–20, S road from 21; each new profile added to the sequence receives the next 10-wave chapter |
 | Creep archetypes | `game.gd` `WAVE_TYPES` | normal, fast, swarm, tank, immune, regen, air (flyer), split (splits on death) — each is a set of HP/speed/count/radius multipliers and flags on top of the base scaling |
 | Immune archetype | `game.gd` `WAVE_TYPES` + `enemy.gd` `cc_immune` | ignores **slow and stun**, but **not poison** — poison is damage rather than crowd control, so Nature stays the answer to these waves instead of the whole roster going dead |
@@ -455,13 +476,14 @@ editing three files and hunting for un-named literals; it is now one file.
 | Prep time between waves | `wave_manager.gd` `PREP_TIME` | 4s (skippable via the HUD's Send Next button, for a small gold bonus) |
 | Enemy speed / durability | `balance.gd` `CREEP_SPEED_PERCENT` / `CREEP_HP_PERCENT` | every board uses ×0.82 movement speed for clearer motion and ×1.20 HP to preserve combat pressure |
 | Tower range cap | `balance.gd` `MAX_TOWER_RANGE` | 300px. **The only unfaithful number in the port.** Light and Darkness reach 2000 WC3 units (700px), which watches 99% of the road from one spot — as it does on the original's own arena, which is why this is a design choice and not a repair. Capped, they watch 51% and take four towers to cover 95% of the road, against Fire's 18% and twelve. The defs keep the real 2000; this caps what the board honours |
-| Wave scaling (`n` = wave) | `balance.gd` | HP `75 × 1.16^(n-1)` from the map. Count ramps `9 + 1.2·n` to the map's flat 28 — starting at 28 meant wave 1 spent 25s just spawning. Reward `3 + max(n/3, 1.10^(n-1))`; the flat 3 is ours, because the map's curve pays 1 gold a kill until wave 5, speed `60 + 6·n`, each × the archetype's multipliers |
+| Wave scaling (`n` = wave) | `balance.gd` | HP `75 × hp_growth()^(n-1) × 1.20`, where `hp_growth()` is derived so wave `STANDARD_WAVES` lands on `FINAL_HP_FACTOR` (200× wave 1) — at 50 waves that is ×1.113 per wave. Speed `(80 + (n-1)·speed_slope()) × 0.82`, derived so the last wave reaches `FINAL_SPEED_RAW` 260 raw = 213 px/s = a 15s crossing of the 3199px road. Count ramps `8 + n` to the map's flat 28 cap. Reward `3 + n`. Each × the archetype's multipliers |
+| Why HP/speed are endpoints, not rates | `balance.gd` | **Measured.** With the ported flat `1.16` HP rate and the uncapped `80 + 9n` speed, a 50-wave run put the last wave at 1440× wave 1 and 435 px/s. `--fill-board` (a MAXED board) died on wave 35; softening HP alone to `1.09` — a 21× lighter finish — only reached 48, and `1.13`/`1.11` both died on exactly **43**, the signature of a limiter neither touched. That limiter was speed. Anchoring both endpoints took the same board from 35 to 49 |
 | Flyers | `wave_manager.gd` | **the Air archetype only** — there is no per-enemy roll on ground waves any more; `make_flying()` gives HP ×0.65, speed ×1.25 |
-| Bosses | `game.gd` `WAVES` (`"boss": true` per entry) | HP ×6, speed ×0.6, reward ×10, costs 10 lives |
+| Bosses | `game.gd` `apply_milestone()` (`"boss": true` on the produced def) | HP ×6, speed ×0.6, reward ×10, costs 10 lives |
 | Economy: interest | `balance.gd` `INTEREST_RATE`/`INTEREST_CAP` | 2.5% of banked gold per wave cleared, capped at 400. The map pays 2.5% every 15s and has no cap; the cap is ours, so that hoarding gold never beats building |
 | Economy: leak-free bonus | `wave_manager.gd` `LEAK_FREE_BONUS` | +6 gold if no enemy reached the end that wave |
 | Road paths | `game.gd` `WINDING_PATH` / `PATH` / `S_PATH` | all three traced routes are sampled into smooth walking curves: winding uses 36 controls → 141 points for waves 1–10, spiral 114 → 227 for 11–20, and S 32 → 125 from wave 21 |
-| Placement | `game.gd` `TOWER_RADIUS` / `ROAD_KEEPOUT` / `TOWER_GAP` | 30px footprint, 70px clear of the active road centre-line, 68px centre-to-centre. Winding uses marked grass clearings; spiral uses free placement |
+| Placement | `game.gd` `TOWER_RADIUS` / `ROAD_KEEPOUT` / `TOWER_GAP` / `FOOTPRINT_PROBE` / `PAD_PITCH` | 30px footprint, 55px clear of the active road centre-line (the painted base, not the tap disc, is what must clear the kerb), 68px centre-to-centre, base probed at 0.2 × radius, towers dropped on a 70px hex lattice of marked pads (47 of them on winding) |
 | Blocked ground | active board profile | winding restricts new builds to its painted clearings; spiral and S block their painted water and otherwise allow clear off-road ground |
 | Tower ranges | `game.gd` `TOWER_DEFS` × `WC3_RANGE_SCALE`, capped | 175–300px |
 | Enemy size | `wave_manager.gd` | radius 24 × the archetype multiplier; boss 38 (must stay under the 80px road width) |
@@ -516,9 +538,9 @@ in pixels.
 ## 6. Where the art comes from
 
 The project began with **no asset files at all** — every visual drawn in `_draw()`, every
-sound synthesized at startup. That still holds for the audio and part of the screen, while
-the board, all six element towers, the creep roster and selected effects are now painted
-images. The painted and code-drawn art paths still coexist so unfinished content can fall
+sound synthesized at startup. That still holds for every sound EFFECT and part of the
+screen, while the board, all six element towers, the creep roster and selected effects are
+now painted images and the background music is a recorded track (§ Sound, above). The painted and code-drawn art paths still coexist so unfinished content can fall
 back safely.
 
 **Painted** (`assets/art/`, the project's only bitmap assets — `icon.svg` aside):
@@ -586,6 +608,15 @@ back safely.
   8-bit**: NES-style pulse (square) leads with duty cycles, fast arpeggios for chords,
   triangle-wave bass, and sample-and-hold noise for percussion/explosions. A quiet
   16-second chiptune loop (triangle bass + pulse-arpeggio melody over an Am–F–C–G
-  progression) plays continuously underneath so between-wave lulls aren't silent. No
-  sound files ship with the game. Press **M** to mute everything.
+  progression) is still built the same way, but it is now the FALLBACK: the background
+  music is `assets/audio/guardians_of_the_verdant_spire.mp3`, imported with `loop=true` so
+  the stream repeats itself. `_load_music_track()` plays it when it is in the build and
+  drops back to the synthesized loop when it is not, so a stripped export is never silent.
+  It is the only audio file in the project — every effect is still baked in code. The
+  source track is 5:38 and 7.5 MB; what ships is a **1:57 section** cut out of it by
+  `python tools/trim_mp3.py`, which drops it to 2.7 MB. The cut lands at 117.5s because
+  that is where the tool's loudness report shows a dip ~12 dB under the surrounding bars,
+  at the same level as the intro it loops back to — a round 120 would have cut mid-phrase.
+  Short fades at both ends (0.8s in, 1.5s out) take the seam to silence. Press **M** to
+  mute everything.
 - `icon.svg` is a simple hand-written SVG placeholder for the app icon.

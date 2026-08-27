@@ -74,10 +74,6 @@ func _draw() -> void:
 		_:
 			board = BOARD
 	draw_texture_rect(board, Rect2(Vector2.ZERO, Game.WORLD_SIZE), false)
-	# The winding painting's scarce clearings and their quiet ring are a lesson device only
-	# (tutorial_map.gd draws Game.active_build_zones there); Game.use_board_for_wave passes
-	# restrict_clearings=false, so a real run gets free placement here like the other boards
-	# and there is nothing of Game.active_build_zones left to paint.
 	if show_road:
 		_draw_traced_road()
 

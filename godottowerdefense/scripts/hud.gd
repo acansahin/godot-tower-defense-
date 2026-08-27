@@ -53,8 +53,8 @@ func set_wave(number: int) -> void:
 	wave_label.text = "Wave: %d" % number
 	send_button.disabled = true  # a wave is active now
 
-## Shows a tutorial hint along the bottom, or clears it when handed "". The HUD only
-## renders this — which hint is current, and when it expires, is Tutorial's business.
+## Shows a hint along the bottom, or clears it when handed "". The HUD only renders this —
+## which hint is current, and when it expires, is the caller's business.
 func set_hint(text: String) -> void:
 	hint_label.text = text
 

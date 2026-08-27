@@ -4,7 +4,7 @@ class_name WaveManager
 ## nodes (freed automatically on scene reload) instead of coroutines so a
 ## restart never leaves a spawn loop running.
 ##
-## A Standard run is Game.STANDARD_WAVES long (GAME_STRATEGY_V2.md §11.1, BUILD NEXT #4) and
+## A Standard run is Balance.STANDARD_WAVES long (GAME_STRATEGY_V2.md §11.1, BUILD NEXT #4) and
 ## can be WON: waves come entirely from Game.WAVES, the hand-authored table, and clearing the
 ## last one calls Game.declare_victory() instead of queuing another. WaveGenerator (the
 ## endless tail past Game.WAVES) exists in the codebase but nothing in a Standard run reaches
@@ -75,14 +75,18 @@ func start(run_seed: int = 0) -> void:
 	_queue_next_wave()
 
 ## The definition for wave `n`: the hand-authored seed table while it lasts, the generator
-## forever after. Both return the same Dictionary shape, so nothing downstream has to know
-## which one answered.
+## forever after, with Game.apply_milestone() having the last word either way. All three
+## return the same Dictionary shape, so nothing downstream has to know which one answered —
+## and a boss can land on wave 40 without WaveGenerator knowing bosses exist.
 func _wave_def(n: int) -> Dictionary:
+	var base: Dictionary
 	if n <= Game.WAVES.size():
-		return Game.WAVES[n - 1]
-	if not _generated.has(n):
-		_generated[n] = _generator.wave_def(n)
-	return _generated[n]
+		base = Game.WAVES[n - 1]
+	else:
+		if not _generated.has(n):
+			_generated[n] = _generator.wave_def(n)
+		base = _generated[n]
+	return Game.apply_milestone(n, base)
 
 func _queue_next_wave() -> void:
 	# No upper bound: the run is endless and ends only when the player runs out of lives.
@@ -155,8 +159,11 @@ func _start_wave() -> void:
 	wave_preview.emit(_preview_text(_wave + 1), _preview_color(_wave + 1))
 	if def.get("boss", false):
 		_spawn_boss(def)             # milestone centrepiece
-	_spawn_one()                     # first enemy immediately
-	_spawn_timer.start(_interval)    # the rest on a cadence
+	# A solo avatar wave has no ordinary creeps to pace out, and starting the timer for them
+	# would tick once into a spawner that immediately stops itself.
+	if _to_spawn > 0:
+		_spawn_one()                 # first enemy immediately
+		_spawn_timer.start(_interval)  # the rest on a cadence
 
 func _spawn_one() -> void:
 	if Game.is_over or _to_spawn <= 0:
@@ -203,18 +210,33 @@ func _spawn_child(pos: Vector2, progress: int, count: int, hp: float, spd: float
 ## multiplier and then the per-wave override. Shared by the spawner and the HUD preview —
 ## these used to be two copies of the formula, and the preview could drift from the wave
 ## it was describing.
+##
+## A wave may ask for NO ordinary creeps at all by setting `count` to 0, which is how an
+## element avatar walks the road alone (Game.apply_milestone). That case has to short-circuit
+## before the clamp below, whose floor of 1 exists so a rounding-down never produces an empty
+## ordinary wave — it would otherwise put one creep back beside the avatar.
 func _spawn_count(n: int, type_def: Dictionary, wave_def: Dictionary) -> int:
+	if float(wave_def.get("count", 1.0)) <= 0.0:
+		return 0
 	var raw := int(round(Balance.wave_count(n, Game.ruleset)
 			* float(type_def.get("count", 1.0)) * float(wave_def.get("count", 1.0))))
 	return clampi(raw, 1, Balance.MAX_SPAWN_COUNT)
 
-## HUD text describing wave `n`. Guards Game.STANDARD_WAVES + 1 specifically: `_start_wave`
+## HUD text describing wave `n`. Guards Balance.STANDARD_WAVES + 1 specifically: `_start_wave`
 ## previews wave 21 the moment wave 20 begins, and without this a Standard run would show a
 ## generated wave for a fight that Game.declare_victory() means will never happen.
 func _preview_text(n: int) -> String:
-	if n > Game.STANDARD_WAVES:
+	if n > Balance.STANDARD_WAVES:
 		return "Final wave"
 	var def: Dictionary = _wave_def(n)
+	# An avatar wave is one boss and nothing else, so "x12" would be a lie. Naming its ELEMENT
+	# here is the point of the reveal: the four arrive in a random order, and this prep gap is
+	# the only chance the player gets to build the counter the avatar demands.
+	if String(def.get("boss_rule", "")) == "element_avatar":
+		var avatar := Run.boss_element_for_wave(n)
+		if avatar == "":
+			return "Next: Element Avatar  BOSS"
+		return "Next: %s Avatar  BOSS" % avatar.capitalize()
 	var t: Dictionary = Game.WAVE_TYPES[def["type"]]
 	var cnt := _spawn_count(n, t, def)
 	var boss := "  BOSS" if def.get("boss", false) else ""
@@ -228,9 +250,14 @@ func _preview_text(n: int) -> String:
 
 ## Colour for the preview label: the wave's element, or a default gold if neutral.
 func _preview_color(n: int) -> Color:
-	if n > Game.STANDARD_WAVES:
+	if n > Balance.STANDARD_WAVES:
 		return Color(0.95, 0.9, 0.7)
-	var elem := String(_wave_def(n).get("element", ""))
+	var def: Dictionary = _wave_def(n)
+	var elem := String(def.get("element", ""))
+	# An avatar carries no `element` in its definition — it takes this run's draw — so the
+	# label would stay neutral gold on the one wave whose element matters most.
+	if elem == "" and String(def.get("boss_rule", "")) == "element_avatar":
+		elem = Run.boss_element_for_wave(n)
 	if elem != "":
 		return Game.ELEMENT_COLORS.get(elem, Color(0.95, 0.9, 0.7))
 	return Color(0.95, 0.9, 0.7)
@@ -296,7 +323,7 @@ func _on_enemy_removed() -> void:
 		# next wave queued. Past this point WaveGenerator (the endless tail past Game.WAVES)
 		# is unreachable from a Standard run; it stays in the codebase for the Endless mode
 		# BUILD NEXT #8 adds.
-		if _wave >= Game.STANDARD_WAVES:
+		if _wave >= Balance.STANDARD_WAVES:
 			Game.declare_victory()
 			return
 		_queue_next_wave()

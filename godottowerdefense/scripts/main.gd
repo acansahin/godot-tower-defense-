@@ -27,7 +27,7 @@ var _auto_pick: bool = false
 ## Standard mode's one board (GAME_STRATEGY_V2.md §28 Phase 1: "1 harita", BUILD NEXT #8).
 ## `Game.use_board_for_wave()`'s 10-wave winding->spiral->s rotation (Game.BOARD_SEQUENCE)
 ## is now Endless-only infrastructure, unreached from here — same treatment step 4 gave
-## WaveGenerator. A Standard run stays on this board from wave 1 through Game.STANDARD_WAVES.
+## WaveGenerator. A Standard run stays on this board from wave 1 through Balance.STANDARD_WAVES.
 const STANDARD_BOARD := "winding"
 
 ## Harness only (`--map:s`): holds one board for a focused playtest instead of the default.
@@ -38,7 +38,7 @@ func _ready() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if String(arg).begins_with("--map:"):
 			_board_override = String(arg).trim_prefix("--map:")
-	Game.use_board(STANDARD_BOARD if _board_override == "" else _board_override, false)
+	Game.use_board(STANDARD_BOARD if _board_override == "" else _board_override)
 	# One seed drives both the waves and the card offers, so a whole run — what it throws at
 	# you and what it lets you answer with — replays from a single number.
 	var run_seed := randi()
@@ -61,6 +61,10 @@ func _ready() -> void:
 	hud.send_pressed.connect(wave_manager.send_now)
 	palette.drag_started.connect(_on_drag_started)
 	Game.shake_requested.connect(_add_shake)
+	# The pad overlay hides the pad a tower stands on, so it has to redraw whenever the set
+	# of towers changes — built, sold, or moved by a board swap.
+	grid.towers = towers_root
+	Game.towers_changed.connect(grid.queue_redraw)
 
 	# The tower panel only reports what was pressed; spending the gold and changing the board
 	# stays here, so there is exactly one place that mutates a tower.
@@ -146,7 +150,7 @@ func _ready() -> void:
 ## signal shape intact for whatever Endless mode reconnects here later.
 func _on_wave_starting(number: int) -> void:
 	var previous_board := Game.active_board_id
-	Game.use_board(STANDARD_BOARD if _board_override == "" else _board_override, false)
+	Game.use_board(STANDARD_BOARD if _board_override == "" else _board_override)
 	grid.queue_redraw()
 	if previous_board == Game.active_board_id:
 		return
@@ -648,10 +652,6 @@ func _fill_board() -> void:
 		# so sharing the modulus locked each element to one depth forever — Water was always
 		# left unfused and Fire/Nature/Earth were never seen maxed in their own painted art.
 		var depth := (i / Game.TOWER_ORDER.size()) % 4  # 0 base, 1 dual, 2 triple, 3 Pure
-		var added := 0
-		for k in Game.TOWER_ORDER.size():
-			if added >= depth:
-				break
 		# WHICH extra elements, not just how many: scanning TOWER_ORDER from its start always
 		# took the first element the tower was missing, so every dual came out Steam, Well or
 		# Clay and every triple Rainbow or Infernal -- half the roster, including all of Lava,
@@ -659,6 +659,10 @@ func _fill_board() -> void:
 		# exercise every row. Start the scan one past the base element and rotate that start
 		# every fourth ROW (16 towers), which is independent of both the element and the depth:
 		var rot := i / (Game.TOWER_ORDER.size() * 4)
+		var added := 0
+		for k in Game.TOWER_ORDER.size():
+			if added >= depth:
+				break
 			var at_k := (i + 1 + rot + k) % Game.TOWER_ORDER.size()
 			var candidate := String(Game.TOWER_ORDER[at_k])
 			if not t.elements.has(candidate):
@@ -666,10 +670,6 @@ func _fill_board() -> void:
 				added += 1
 		i += 1
 	print("--- FILL BOARD: placed %d towers, all at max level ---" % i)
-
-## Every position a tower could stand, swept on the tower spacing. Used by --fill-board and
-## by --dump-board, which need "the set of places you may build" now that the board no
-## longer keeps one.
 	# Which SETS are standing there, and whether each one is painted. --shot photographs a
 	# board of 47 towers where a single new set is three of them, so "did the art land?" was
 	# being answered by hunting through a screenshot. `art*` means assets/art/towers has the
@@ -686,7 +686,16 @@ func _fill_board() -> void:
 	for key in keys:
 		var painted := ResourceLoader.exists("res://assets/art/towers/%s_5.png" % key)
 		print("    %-12s x%d  art%s" % [key, int(tally[key]), "*" if painted else "-"])
+
+## Every position a tower could stand, swept on the tower spacing. Used by --fill-board and
+## by --dump-board, which need "the set of places you may build" now that the board no
+## longer keeps one.
 func _buildable_lattice(step := -1.0) -> Array:
+	# A board that marks pads has already answered this, and the harnesses must sweep the
+	# same spots the player is offered or they measure a game nobody plays. `step` is
+	# ignored there: the pads ARE the resolution.
+	if Game.has_pads():
+		return Game.pads().duplicate()
 	var pitch: float = Game.TOWER_GAP if step <= 0.0 else step
 	var out: Array = []
 	var y := Game.PLAY_TOP + Game.TOWER_RADIUS
@@ -748,7 +757,9 @@ func _dump_board() -> void:
 	# actually poses: how much road can one tower watch from the best place it may stand.
 	var spots: Array = _buildable_lattice()
 	print("  road length      : %.0f px over %d waypoints" % [total, path.size()])
-	print("  buildable spots  : %d (on a %.0fpx sweep)" % [spots.size(), Game.TOWER_GAP])
+	print("  buildable spots  : %d (%s)" % [spots.size(),
+			"marked pads, %.0fpx hex pitch" % Game.PAD_PITCH if Game.has_pads()
+				else "free placement, %.0fpx sweep" % Game.TOWER_GAP])
 	print("  road samples     : %d (every %.0f px)" % [samples.size(), STEP])
 	print("  %-10s %7s %8s %8s  %-12s %7s %8s"
 			% ["element", "range", "best 1", "median", "cover 95%", "raw", "raw best"])
@@ -899,16 +910,26 @@ func _set_hovered(tower: Tower) -> void:
 	if is_instance_valid(_hovered):
 		_hovered.set_highlighted(true)
 
+## Where a tower dropped at `world_pos` would actually stand: the pad under the cursor on a
+## board that marks them, the cursor itself on a padless one. Vector2.INF when the cursor is
+## nowhere near a pad — the caller shows a refusal rather than guessing.
+func _placement_point(world_pos: Vector2) -> Vector2:
+	return Game.nearest_pad(world_pos) if Game.has_pads() else world_pos
+
 func _update_ghost(world_pos: Vector2) -> void:
 	var d: Dictionary = Game.TOWER_DEFS[_drag_kind]
 	# The ghost is shown even where a tower cannot go — in red. A ghost that vanishes over
-	# bad ground tells the player nothing about WHY, and the whole point of free placement
-	# is that the board answers "can I build here" continuously.
+	# bad ground tells the player nothing about WHY, and the board has to keep answering
+	# "can I build here" continuously.
+	#
+	# It SNAPS to the pad it would land on, so the answer the ghost gives is the answer the
+	# drop will give. Off the lattice it stays under the cursor and reads red, which is what
+	# makes "there is no pad here" visible rather than mysterious.
 	# TOWER_DEFS stores range in Warcraft III units — scale to pixels, exactly as
 	# tower.gd's _recompute does, or the ghost circle lies about the tower's reach.
-	preview.show_at(world_pos,
-			Game.can_build_at(world_pos, towers_root.get_children())
-					and Game.gold >= _cost(_drag_kind),
+	var at := _placement_point(world_pos)
+	var legal := at.is_finite() 			and Game.can_build_at(at, towers_root.get_children()) 			and Game.gold >= _cost(_drag_kind)
+	preview.show_at(at if at.is_finite() else world_pos, legal,
 			minf(d.get("range", 160.0) * Balance.WC3_RANGE_SCALE, Balance.MAX_TOWER_RANGE),
 			d.get("color", Color.WHITE))
 
@@ -917,8 +938,8 @@ func _drop(world_pos: Vector2) -> void:
 	_drag_kind = ""
 	preview.hide()
 	grid.set_showing(false)
-	var center := world_pos
-	if not Game.can_build_at(center, towers_root.get_children()):
+	var center := _placement_point(world_pos)
+	if not center.is_finite() or not Game.can_build_at(center, towers_root.get_children()):
 		Audio.play("denied")
 		return
 	if not Game.spend_gold(_cost(kind)):
@@ -937,11 +958,12 @@ func _cost(kind: String) -> int:
 	return int(Game.TOWER_DEFS[kind]["cost"])
 
 ## True if no tower already sits on the cell centred at this point.
-## The tower under this point, or null. One radius does placement, hit-testing and the
-## drawn body, so what the player aims at is what they see.
+## The tower under this point, or null. Hit-testing uses Game.PICK_RADIUS rather than the
+## TOWER_RADIUS that placement uses: the painted body is drawn much wider than the
+## footprint, so aiming at what you see used to miss on everything but the tower's middle.
 func _tower_at(world_pos: Vector2) -> Tower:
 	var best: Tower = null
-	var best_d := Game.TOWER_RADIUS
+	var best_d := Game.PICK_RADIUS
 	for c in towers_root.get_children():
 		var t := c as Tower
 		if t == null:

@@ -442,6 +442,12 @@ func _recompute() -> void:
 	# their own, matching how they already ride the per-level damage growth.
 	poison_dps = poison_dps * m.damage_mult * m.poison_mult
 	burn_dps = burn_dps * m.damage_mult * m.poison_mult
+	# The board holds 9 towers where it used to hold 47, so each one hits harder. Applied
+	# here, at the end of the fold, so it lands on the same three payloads the run modifiers
+	# do and nothing can pick it up twice — see Balance.GLOBAL_DAMAGE_MULT.
+	damage *= Balance.GLOBAL_DAMAGE_MULT
+	poison_dps *= Balance.GLOBAL_DAMAGE_MULT
+	burn_dps *= Balance.GLOBAL_DAMAGE_MULT
 	burn_time *= m.burn_time_mult          # Wick
 	if slow_time > 0.0:
 		slow_time += m.slow_time_add       # Permafrost
@@ -604,28 +610,35 @@ func fire_bolt(target: Enemy, damage_mult: float = 1.0) -> void:
 func _projectile_origin() -> Vector2:
 	if elements.size() == 1 and element == "fire" and Sprites.tower(art_key(), level) != null:
 		var tier := clampi(level, 1, FIRE_FLAME_BASE_Y.size()) - 1
-		var socket := Vector2(0.0,
-				float(FIRE_FLAME_BASE_Y[tier]) - float(FIRE_FLAME_HEIGHT[tier]) * 0.42)
+		var socket := Vector2(0.0, (float(FIRE_FLAME_BASE_Y[tier])
+				- float(FIRE_FLAME_HEIGHT[tier]) * 0.42) * SPRITE_HEIGHT)
 		return to_global(socket)
 	return global_position
 
 const Sprites := preload("res://scripts/sprites.gd")
 
-## How TALL the painted tower is drawn, per level, in board px.
+## How TALL a painted tower is drawn. ONE height for every level: an upgrade changes what the
+## tower looks like, never how much board it occupies.
 ##
-## By height, not width, because these sprites get proportionally taller as they upgrade —
-## the fire set runs from 1.23 to 1.67 times as tall as it is wide, all of it flame plume.
-## Scaling by width let that compound: the top tier ended up 29% of the board's height, when
-## a tower on the reference art is at most 19%. Fixing the height fixes the silhouette and
-## leaves the widths where they belong, around 60-85px over a 60px footprint.
-const SPRITE_HEIGHT: Array = [78.0, 92.0, 106.0, 120.0, 138.0]
+## Held by HEIGHT rather than width, which keeps the BASE from growing as a tower is
+## upgraded: every painted set gets proportionally taller as it climbs (water runs 1.25 ->
+## 0.97 wide-over-tall), so at a fixed height the drawn width falls slightly with each tier.
+## Fixing the width would have done the opposite.
+##
+## The number itself lives in `Game.TOWER_SPRITE_HEIGHT`, because the PLACEMENT RULE has to
+## see it - a tower is hung from its ground anchor and drawn upward, so its height decides
+## both how far it must stand from the road and how near the top of the board it may go. See
+## that constant for the pair it forms with Game.PAD_PITCH and for what a size change costs.
+const SPRITE_HEIGHT := Game.TOWER_SPRITE_HEIGHT
 const FIRE_EFFECT_FRAMES := 12
 const FIRE_EFFECT_FPS := 12.0
-## Bottom of the central brazier flame in tower-local board pixels, measured from each
-## painted Fire tier. The fixed anchors keep the masonry perfectly still while only the
-## flame changes pose.
-const FIRE_FLAME_BASE_Y: Array = [-38.0, -52.0, -69.0, -80.0, -90.0]
-const FIRE_FLAME_HEIGHT: Array = [34.0, 34.0, 34.0, 36.0, 42.0]
+## Bottom of the central brazier flame per painted Fire tier, as a FRACTION of the drawn
+## sprite height, so the flame keeps sitting on its own brazier whatever SPRITE_HEIGHT is.
+## They were measured in board px against the old per-level ladder (-38/78, -52/92, -69/106,
+## -80/120, -90/138) and divided by it; the fixed anchors keep the masonry perfectly still
+## while only the flame changes pose.
+const FIRE_FLAME_BASE_Y: Array = [-0.487, -0.565, -0.651, -0.667, -0.652]
+const FIRE_FLAME_HEIGHT: Array = [0.436, 0.370, 0.321, 0.300, 0.304]
 
 func _draw() -> void:
 	# Range indicator in the element's colour: quiet by default so a full board stays
@@ -674,8 +687,7 @@ func _draw() -> void:
 func _draw_sprite(art: Texture2D) -> void:
 	var size := art.get_size()
 	var anchor := Sprites.anchor(art)
-	var target: float = float(SPRITE_HEIGHT[clampi(level, 1, SPRITE_HEIGHT.size()) - 1])
-	var scale := target / size.y
+	var scale := SPRITE_HEIGHT / size.y
 	# A soft contact shadow: the painting has none (it was asked for without one, so it can
 	# be lit by whatever board it lands on) and without one a tower floats.
 	draw_set_transform(Vector2(0, 6), 0.0, Vector2(1.0, 0.4))
@@ -693,8 +705,8 @@ func _draw_sprite(art: Texture2D) -> void:
 ## first frame's proportions. Lightweight procedural sparks bridge the discrete poses.
 func _draw_fire_flame() -> void:
 	var tier := clampi(level, 1, FIRE_FLAME_BASE_Y.size()) - 1
-	var height: float = FIRE_FLAME_HEIGHT[tier]
-	var base_y: float = FIRE_FLAME_BASE_Y[tier]
+	var height: float = float(FIRE_FLAME_HEIGHT[tier]) * SPRITE_HEIGHT
+	var base_y: float = float(FIRE_FLAME_BASE_Y[tier]) * SPRITE_HEIGHT
 	var frame_phase := float(get_instance_id() % FIRE_EFFECT_FRAMES)
 	var frame := int(floor(Time.get_ticks_msec() * 0.001 * FIRE_EFFECT_FPS + frame_phase)) \
 			% FIRE_EFFECT_FRAMES

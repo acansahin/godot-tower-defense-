@@ -95,7 +95,23 @@ const MIN_FIRE_INTERVAL := 0.05
 ## 0.35 puts Water/Nature/Earth at 262px, which is where our four towers already sat, so
 ## the familiar elements do not move. Fire lands at 175px — short, which is its identity.
 ## Light and Darkness would land at 700px; MAX_TOWER_RANGE below is what stops them.
-const WC3_RANGE_SCALE := 0.35
+## DEPARTURE, raised from 0.35 when the board went from 47 build spots to 12 (Game.PAD_PITCH,
+## widened so towers could be drawn 60% larger). Twelve towers watch less road than
+## forty-seven, and a creep on road no tower can reach is never shot whatever the damage is,
+## so reach had to be restored before damage was worth touching.
+##
+## Measured against the 47-tower coverage (86/79/87/85% of the road reachable for
+## water/fire/nature/earth): 0.45 gives 88/82/89/87 and leaves one tower watching 31% of the
+## road. 0.55 gives 92/88/93/91 at 39%, and 0.65 - which a 9-tower version of this board
+## needed - puts one water tower on 44% and covers 95% of the road with three towers, which
+## ends placement as a decision. 0.45 is the smallest that restores coverage, and smallest is
+## the right choice: every extra point of range is a point of placement.
+##
+## It also keeps MAX_TOWER_RANGE honest. At 0.45 the longest tower reaches 276px and the cap
+## is 300, so the cap still binds nothing the port can build - which is why raising the CAP
+## is not the lever it looks like. The four elements sit at 219-283; the cap only ever
+## existed to stop the 2000-range definitions.
+const WC3_RANGE_SCALE := 0.45
 
 ## Hard ceiling on a tower's reach, in pixels. THE ONE PLACE THE PORT IS NOT FAITHFUL
 ## about a number, and it is here rather than in TOWER_DEFS on purpose: the definitions
@@ -128,6 +144,25 @@ const WC3_RANGE_SCALE := 0.35
 ## The cap also catches the longest duals (Poison, Tech and Moon reach 481px uncapped), which
 ## have the same problem for the same reason.
 const MAX_TOWER_RANGE := 300.0
+
+## Every tower's damage, multiplied once. A DELIBERATE DEPARTURE from the port, and the
+## counterweight to the board holding 12 towers instead of 47.
+##
+## The board was respaced so towers could be drawn at the size the painted art wants
+## (Game.PAD_PITCH, Game.TOWER_SPRITE_HEIGHT), and that took the build spots from 47 to 12.
+## A maxed board clearing the LAST wave is the game's minimum bar - `--fill-board` is the
+## gate - and it is a real gate rather than a formality: 47 towers cleared wave 50, while 28
+## died on 46 and 25 on 47 with no compensation at all, and at 12 towers 3.5 still died on
+## 48. 4.2 clears it.
+##
+## It lives here rather than in the fifteen `damage_tiers` arrays for three reasons: those
+## arrays are the roster's IDENTITY and their ratios are what make Clay the hardest dual and
+## Roots the weakest, one number can be re-tuned against the gate in a single run, and
+## `--dump-stats` shows the whole effect in one diff.
+##
+## The wave curve was the other candidate and was left alone on purpose: `75 x 1.16^(n-1)` is
+## ported from the map, while the tower damage numbers are already ours.
+const GLOBAL_DAMAGE_MULT := 5.0
 
 ## Gold cost of upgrading a tower from `level` to `level + 1`.
 ## `build_cost` is ignored: in the map every element shares one cost ladder regardless
@@ -165,17 +200,79 @@ const LEAK_FREE_BONUS := 6        ## Bonus if no enemy reached the end this wave
 func early_call_bonus(wave: int) -> int:
 	return 3 + wave
 
+# --- Run length: the one dial the rest of the pacing hangs off -----------------
+#
+# HOW LONG A RUN IS, and every curve that has to finish with it. Set this and the wave
+# numbers, the HP ramp and the speed ramp all re-time themselves — none of them is written
+# down independently any more, so a 50-wave run and a 100-wave run END at the same
+# difficulty and differ only in how finely they climb to it.
+#
+# That inversion is the whole point, and it was measured rather than assumed. The run was 20
+# waves long and every ramp was a per-wave RATE, so stretching the run multiplied the finish
+# line instead of moving it: at 50 waves the ported 1.16 HP rate puts the last wave at 1440x
+# wave 1 (against 18x at wave 20), and the uncapped speed rate puts it at 435 px/s, which
+# crosses the 3199px road in 7 seconds. At 100 waves that is 804 px/s and 4 seconds.
+#
+# `--fill-board` proved the rates cannot simply be softened one at a time. Dropping the HP
+# rate 1.16 -> 1.09 makes the final wave TWENTY-ONE TIMES lighter and moved a maxed board's
+# death only from wave 35 to 48 — and 1.13 and 1.11 both died on exactly wave 43, the
+# signature of a limiter that neither of them touched. That limiter is speed.
+
+## How many waves a Standard run plays before it can be won. Lives here rather than in Game
+## because everything below derives from it, and Balance is the autoload nothing else may
+## depend on — see project.godot's ordering.
+const STANDARD_WAVES := 50
+
+## The four element-avatar waves: evenly spread at 20/40/60/80% of the run, so the fusion
+## ladder keeps its shape at any length. 50 -> 10/20/30/40, 60 -> 12/24/36/48,
+## 100 -> 20/40/60/80.
+const ELEMENT_BOSS_WAVES: Array = [
+	STANDARD_WAVES / 5, STANDARD_WAVES * 2 / 5,
+	STANDARD_WAVES * 3 / 5, STANDARD_WAVES * 4 / 5,
+]
+
+## The mid-run set-piece boss (Muhafız). The other one is the final wave itself, so it needs
+## no constant. Never collides with an avatar wave: N/2 is not a fifth of N.
+const MIDPOINT_BOSS_WAVE := STANDARD_WAVES / 2
+
 # --- Wave scaling formula (was wave_manager.gd:91-101) -------------------------
 
-## Wave 1 hit points, and the ratio between consecutive waves. Both read out of the
-## map: level 1 is 75 hp and every level after is exactly 1.16x the one before, from
-## wave 1 through wave 60 (75 -> 476522) with no breakpoints and no boss spike baked
-## into the curve itself.
-##
-## Note the map's own `udg_HP_exponent_base = 1.23` is a decoy — it is declared and
-## never read. 1.16 is what the per-level unit types actually contain.
+## Wave 1 hit points, read straight out of the map: its level 1 is 75 hp.
 const BASE_HP_FLAT := 75.0
-const HP_GROWTH := 1.16
+
+## Where the LAST wave lands, as a multiple of wave 1's hit points. THIS is the tuned number
+## now; the per-wave ratio is derived from it and STANDARD_WAVES by hp_growth() below.
+##
+## A DELIBERATE DEPARTURE FROM THE MAP, and the third one in the port (the others are
+## START_GOLD and MAX_TOWER_RANGE). The map's curve is a flat 1.16 per level across 60
+## levels — 75 -> 476522, a 6353x climb — and it can afford that because its tower ladder
+## climbs with it: 50 -> 24444 damage, roughly 490x. Ours is far flatter (GAME_STRATEGY_V2's
+## 10 -> 100 per tier plus the fusion rows), so the map's rate outruns our towers long before
+## the run is over. `--fill-board` puts a MAXED board's ceiling around this factor; a real
+## player's board is strictly weaker, which is the margin this number is spending.
+##
+## Note the map's own `udg_HP_exponent_base = 1.23` is a decoy — declared and never read.
+## 1.16 is what its per-level unit types actually contain, and it is what this replaces.
+##
+## MEASURED, and the margin is the point. `--fill-board` swept this against a maxed board —
+## every pad, every tower at level 5, unlimited gold — and found the ceiling between 150 and
+## 200: 200 dies on wave 49 (to an elite tank, archetype x3.0 and elite x1.6 stacking to
+## x4.8 on top of the curve), while 150, 110 and 80 all clear the run. A maxed board is the
+## UPPER BOUND of what the game can field, so 150 is where a run stops being winnable by
+## anyone at all — not where it should sit. 120 keeps roughly a fifth of that headroom for a
+## board a player could actually afford to build.
+##
+## THE NUMBER MOST LIKELY TO NEED PLAY-TESTING in the whole file, and the reason is a gap in
+## the harness suite rather than a doubt about the measurement: nothing simulates a player's
+## gradual build-up, so the distance between "a maxed board wins" and "a good board wins" is
+## the one quantity here that was reasoned about rather than measured.
+const FINAL_HP_FACTOR := 120.0
+
+## The per-wave HP ratio, derived so wave STANDARD_WAVES lands on FINAL_HP_FACTOR. At 50
+## waves this is 1.113, close to the map's own 1.16 — the run is longer, so each step is
+## smaller and the destination is the same.
+func hp_growth() -> float:
+	return pow(FINAL_HP_FACTOR, 1.0 / float(maxi(STANDARD_WAVES - 1, 1)))
 ## Creeps spawn at a fraction of their baked hit points, chosen by the map's difficulty
 ## selector: 50% on the easiest setting, +12.5 points per step. We have no difficulty
 ## screen, so this is the dial that stands in for one.
@@ -188,9 +285,25 @@ const CREEP_HP_PERCENT := 1.20
 ## rotates winding -> spiral -> s every 10 waves, `Game.WAVES_PER_BOARD`). GAME_STRATEGY_V2.md's
 ## BUILD NEXT plan pins Standard mode to `winding` alone once that lands (not done yet, see
 ## build-next memory) — until then this constant is tuned against `winding`'s 3199px, which
-## is what wave 1-10 actually plays on. 80 + 9n gives a wave-1 crossing of about 44 seconds.
+## is what wave 1 actually plays on: 80 raw is a wave-1 crossing of about 49 seconds.
 const BASE_SPEED_FLAT := 80.0
-const BASE_SPEED_LINEAR := 9.0
+
+## Raw speed the FINAL wave reaches, before CREEP_SPEED_PERCENT. The slope is derived from
+## it and STANDARD_WAVES (speed_slope() below) rather than being a per-wave rate, because a
+## rate has no idea when the run ends and this is the ramp that decides whether the run is
+## PLAYABLE at all.
+##
+## 260 raw is 213 px/s, which crosses winding's 3199px road in 15 seconds — the pacing the
+## last wave of the old 20-wave run had, kept as the finish line at any run length. What it
+## replaces is a bare `80 + 9n` with no ceiling, which was fine while the run stopped at 20
+## and became the actual wall past it: `--fill-board` died on wave 43 at two different HP
+## rates, where a `fast` creep (x1.7) crosses the whole board in 4.9 seconds and a Water
+## tower at 0.25s gets a handful of shots at it. Speed, not hit points, was killing the run.
+const FINAL_SPEED_RAW := 260.0
+
+## Raw speed added per wave, derived so wave STANDARD_WAVES arrives at FINAL_SPEED_RAW.
+func speed_slope() -> float:
+	return (FINAL_SPEED_RAW - BASE_SPEED_FLAT) / float(maxi(STANDARD_WAVES - 1, 1))
 ## Global movement reduction: enemies stay readable on every road. The matching 20% HP
 ## increase above preserves combat pressure instead of making the longer exposure free.
 const CREEP_SPEED_PERCENT := 0.82
@@ -233,10 +346,13 @@ const ENEMY_BASE_RADIUS := 24.0
 const MAX_SPAWN_COUNT := 160
 
 func wave_hp(wave: int, ruleset: String = DEFAULT_RULESET) -> float:
-	return BASE_HP_FLAT * pow(HP_GROWTH, wave - 1) * CREEP_HP_PERCENT * ruleset_hp_mult(ruleset)
+	return BASE_HP_FLAT * pow(hp_growth(), wave - 1) * CREEP_HP_PERCENT * ruleset_hp_mult(ruleset)
 
+## Both ramps count from wave - 1, so wave 1 sits exactly on the FLAT constants and wave
+## STANDARD_WAVES exactly on the FINAL ones. A run past its last wave (Endless, once it
+## exists) keeps climbing rather than clamping — the anchor sets the shape, not a ceiling.
 func wave_speed(wave: int) -> float:
-	return (BASE_SPEED_FLAT + wave * BASE_SPEED_LINEAR) * CREEP_SPEED_PERCENT
+	return (BASE_SPEED_FLAT + float(wave - 1) * speed_slope()) * CREEP_SPEED_PERCENT
 
 ## Ruleset scaling is applied AFTER the flat+linear count and rounded, rather than folded
 ## into BASE_COUNT_FLAT/LINEAR directly, so "normal" (mult 1.0) reproduces the exact integer
@@ -260,14 +376,20 @@ func spawn_interval(wave: int) -> float:
 # one of the four, drawn per run in a random order (Run.boss_elements). Kill it and that
 # element unlocks for fusion for the rest of the run; leak it and you get nothing.
 #
-# The wave numbers are unchanged, and for the reason they were chosen in the first place:
-# each sits just before a difficulty step, and 15 is five waves short of the last so the
-# closing stretch tests what the player built rather than handing them one more thing.
+# Every tenth wave, and each avatar walks ALONE — the wave spawns no ordinary creeps at all
+# (Game.apply_milestone sets `count` to 0). It used to ride on top of a normal creep wave,
+# where the fight that decides a whole element got lost in the traffic; on its own it reads
+# as the set piece it is, and the player can aim everything at it.
+#
+# These four ARE the fusion ladder's pacing, so they are spread evenly rather than bunched:
+# at 10/20/30/40 of STANDARD_WAVES' 50 they land at 20%, 40%, 60% and 80% of the run —
+# within a few points of the 15%/35%/55%/75% the old 3/7/11/15-of-20 gave, so Pure still
+# becomes possible at the same point in the run's shape even though the wave number quadrupled.
 
-## Waves carrying an element avatar boss. Kept in step with Game.WAVES' four
-## `boss_rule: "element_avatar"` rows — the list here is what wave_manager checks, the rows
-## there are what actually spawn, and they must not drift apart.
-const ELEMENT_BOSS_WAVES: Array = [3, 7, 11, 15]
+## ELEMENT_BOSS_WAVES is declared with STANDARD_WAVES at the top of this file, because it is
+## derived from the run length rather than written down. Game.apply_milestone() builds the
+## wave from it, so the seed table no longer carries `element_avatar` rows that had to be
+## kept in step with it by hand.
 
 ## Avatar bosses are deliberately softer than the two set-piece bosses (BOSS_HP_MULT 8.0).
 ## There are four of them rather than two, the first arrives on wave 3 when START_GOLD has
