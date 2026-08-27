@@ -10,10 +10,12 @@ roster this recipe is now being used for, and **they no longer follow the recipe
 Read "Fusions are named things" below before generating one: the six element towers keep the
 shared fortress language, and every fusion now takes its shape from ITS OWN NAME instead.
 
-EVERY tower in the game is painted: a `--fill-board` run reports `art*` on all fifteen rows.
-Painted under the NEW name rule: Dinosaur, Steam, Lava, Rainbow, Infernal, Flesh Golem, Pure,
-Clay, Sun, Well. Still on the OLD fusion recipe and queued to be redone as its own name:
-Roots.
+EVERY tower in the game is painted, and every one of the eleven fusions now follows the NAME
+rule: a `--fill-board` run reports `art*` on all fifteen rows, and none of the fusions is a
+fortress any more. Steam is an engine, Lava a volcano, Clay a pit, Well a waterfall, Sun a
+bronze disc, Roots a snare, Infernal a rift, Rainbow a prism ring, Dinosaur a fossil beast,
+Flesh Golem a seated golem, Pure a plaza. The four ELEMENT towers keep the shared fortress
+language and were not touched.
 
 The pipeline around it is in [CLAUDE.md](../../CLAUDE.md) ("Painted tower set"); this file is
 only the prompt.
@@ -367,6 +369,24 @@ or the name walks the set straight into a tall cascade and the proportion rule.
 
 The water wheel survived the repaint. Nothing in the code reads it, but it is the only visual
 the attack-speed aura has, and a turning wheel says haste more plainly than any amount of glow.
+
+### What Roots measured, the last repaint
+
+Anchors 48.7-50.5%, proportions 1.19-1.54, cut in one pass. A wide low nest of bare knotted
+roots and thorn-hoops coiled around a dark hollow, lifting slabs of cracked granite as it
+spreads.
+
+Roots was already close to its name — the old set was a root mass too — so the gain here is
+the smallest of the six repaints, and it is a useful measure of what the name rule actually
+buys. What changed is that the building parts went: the lit archway, the stone stair, the
+ruined-bastion skeleton it inherited from the five-beat template. The name ladder never
+mentioned a building; Roots, Brambles, Entangling are three words about what the PLANT DOES,
+and once the thorn-hoops and the coiled snare became the subject, the tower reads as the trap
+it is rather than as a fortified mound with plants on it.
+
+The canopy ban stayed doubled and specific, and the sheet obeyed it: bare wood and thorn, the
+only green a near-black bramble darker than the map's grass. On a board that is mostly pine
+and undergrowth, that is the whole difference between a tower and a bush.
 
 ### A cutter bug this sheet found
 
