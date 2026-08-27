@@ -64,7 +64,9 @@ def columns(img: Png, y0: int = 0, y1: int = -1, gap_tol: int = 0) -> list[tuple
             if x - start >= MIN_RUN:
                 runs.append((start, x))
             start = None
-    if start is not None:
+    # Same MIN_RUN filter as the runs that end mid-image: a speck touching the EDGE leaves
+    # `start` set at the end of the sweep, and without this it becomes a phantom sprite.
+    if start is not None and img.width - start >= MIN_RUN:
         runs.append((start, img.width))
     return runs
 
@@ -91,7 +93,9 @@ def rows(img: Png, gap_tol: int = 0) -> list[tuple[int, int]]:
             if y - start >= MIN_RUN:
                 runs.append((start, y))
             start = None
-    if start is not None:
+    # As in columns(): a stray mark on the last scanlines would otherwise be reported as an
+    # extra ROW, which silently renames every sprite on a single-row sheet.
+    if start is not None and img.height - start >= MIN_RUN:
         runs.append((start, img.height))
     return runs
 

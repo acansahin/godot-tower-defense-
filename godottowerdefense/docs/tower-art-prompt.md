@@ -6,9 +6,14 @@ all six were moved to the same broad, ground-hugging fortress language so they s
 on the board.
 
 The eleven **fusion** towers (six duals, four triples, Pure — see `Game.FUSIONS`) are the
-roster this recipe is now being used for. All six DUALS are painted -- Steam, Lava, Clay, Sun, Well and Roots. The four triples and
-Pure still draw the code
-art. Read "Fusion sheets" below before generating one — the method changed in two ways.
+roster this recipe is now being used for, and **they no longer follow the recipe above.**
+Read "Fusions are named things" below before generating one: the six element towers keep the
+shared fortress language, and every fusion now takes its shape from ITS OWN NAME instead.
+
+Painted so far: all six duals (Steam, Lava, Clay, Sun, Well, Roots) under the OLD fusion
+recipe, and Dinosaur under the new one. Infernal, Rainbow, Flesh Golem and Pure are unpainted,
+and the six duals are queued to be redone — Steam is a stone keep with copper pipes rather
+than a steam engine, and Lava is a fortress rather than a volcano.
 
 The pipeline around it is in [CLAUDE.md](../../CLAUDE.md) ("Painted tower set"); this file is
 only the prompt.
@@ -151,6 +156,69 @@ Each of these cost a sheet, or was caught just before it did.
 - **Light** is made of glow and will break the muted register if allowed. Strictest version of
   every rule, plus dark accents — slate roofs, shadowed arches, deep-set windows — so a pale
   building holds its edges against the map's pale road.
+
+## Fusions are named things, not fortresses
+
+Six duals were painted to the recipe above — same broad ground-hugging progression, same five
+tier beats, same lit archway and banner and top basin, "must read as BOTH parents at a
+glance" — and the verdict on the finished board was that they are one mound dipped in six
+colours. That is exactly what the recipe asks for, so it is the recipe that was wrong, not
+any one sheet.
+
+**The four element towers keep the shared fortress language. Every fusion now takes its form
+from its own NAME.** Steam is a steam engine. Lava is a volcano. Dinosaur is a dinosaur.
+The parent elements survive as MATERIALS AND PALETTE, never as silhouette, and the parent
+sheets are still attached — relabelled in the prompt as "attached for their materials and
+palette only, do NOT copy their shapes".
+
+What is dropped: the five-beat tier script, the mandatory archway/banner/basin, and the
+"reads as both parents" requirement. What survives untouched is everything with a measurement
+behind it — transparent background, no shadow, symmetric footprint, effects inside the
+silhouette, nothing floating, 60px gaps, one baseline, exact canvas, and the proportion rule.
+That last one matters MORE here, not less: the game scales every sprite to a fixed HEIGHT, so
+a tall subject is drawn with less mass than a broad one and reads as the weaker tower
+regardless of what it costs.
+
+### The plinth rule
+
+Some fusions are now creatures — Dinosaur, Flesh Golem, and Clay's own Living Statue — and
+the creeps walking past them are painted creatures too. So every named-form fusion stands on
+**a low ruined stone plinth**, and that is the only element they all share. It does two jobs
+at once: it says "planted building, not a walking enemy", and it gives `Sprites.anchor()`
+the even bottom band it needs, which an organic shape does not have on its own.
+
+Two more lines that come with a creature and not with a building: ask for a three-quarter
+view with the head angled toward the viewer, because **the game's creeps are painted in
+profile** and a profile pose reads as one of them; and ask for a settled, non-walking pose,
+because towers never move.
+
+### What Dinosaur measured, the pilot for all this
+
+| Check | Target | Dinosaur |
+|---|---|---|
+| Ground anchor off its own centre | ~0% | 49.2 / 46.0 / 48.0 / 54.0 / 46.8% |
+| Width : height | wider than tall | 1.08 / 1.09 / 1.12 / 1.10 / 1.19 |
+| Canvas | 1774x887, 2:1 | exact |
+
+It works: on the board it is plainly a different KIND of object from the towers beside it,
+which is the whole point of the change, and it does not read as a creep. The name ladder
+earns its keep too — Dinosaur at tiers 1-3 and Fossil at 4-5, so the tower petrifies at the
+rename and the player can see it happen.
+
+The anchor spread 46.0-54.0%, the widest any set has measured. A creature has a head at one
+end and a tail at the other, and no amount of asking makes that symmetrical; the plinth is
+what keeps it inside eight points rather than twenty. Expect this band from every
+creature-shaped fusion and do not re-cut over it — it is about six pixels at drawn size.
+
+### A cutter bug this sheet found
+
+`cut_sprites.py` applied its `MIN_RUN` speck filter to every run of ink that ENDED inside the
+image, and not to the one still open when the sweep reached the edge. This sheet arrived with
+a 37x15 speck touching the bottom edge, so the tool reported a second ROW — which on a
+single-row sheet silently renames every sprite (`extra2_1.png`, `extra3_1.png`, …) and caps
+them all at one height — and stretched tier 5's bounding box from 396 to 640 px tall, which
+would have drawn that tier at 60% of the size of the others. Both edges now take the same
+filter. The speck itself was erased from the stored `_source_dinosaur.png`.
 
 ## Fusion sheets
 
