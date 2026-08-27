@@ -385,13 +385,18 @@ reasoning about these numbers instead of reading them:
 - **`udg_HP_exponent_base = 1.23` in `war3map.j` is a decoy** — declared, never read. The
   real wave curve is `75 × 1.16^(n-1)`, baked into a separate unit type per level.
 
-Three deliberate departures from the map are marked in the code and must stay marked:
+Four deliberate departures from the map are marked in the code and must stay marked:
 `Balance.START_GOLD` (the map's 30 assumes towers are researched, not bought); the
 slow/poison/splash payloads still riding on Water/Nature/Earth (the map puts those on the
-combination towers); and the **Pure** row in `Game.FUSIONS`, which is a four-element tower
-the map has no equivalent for — it has six elements and its recipes stop at three. Its
+combination towers); the **Pure** row in `Game.FUSIONS`, which is a four-element tower
+the map has no equivalent for — it has six elements and its recipes stop at three (its
 `chaos` damage rule is ported, its name is borrowed from the map's own fifth single-element
-tier, but the tower itself is ours.
+tier, but the tower itself is ours); and the **Clay** row's per-tier NAMES, which the map
+calls Clay -> Golem -> Living Statue and this port calls Clay -> Clay Pit -> Great Mire.
+That one is downstream of the art: a fusion's shape now comes from its name, the roster
+already has a Flesh Golem sitting on a plinth, and the painted set is a worked clay pit —
+so the map's names would have put the word "Golem" over a pit of mud. Everything else in
+the row is still the map's.
 
 The **combination numbers are not ported, and the reason is worth knowing**: the map's
 ladder is 50 → 175 → 788 → 3544 → 24444, some sixty times steeper than ours, and V2 already

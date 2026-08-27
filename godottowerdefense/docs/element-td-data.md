@@ -86,7 +86,7 @@ Costs: **275** → **1775** → **7975**.
 | Fire + Earth | Lava | Magma | Volcano | siege splash plus incinerate |
 | Fire + Nature | Sun | Solar | Temple of Sol | medium damage, buffs nearby Tidal towers |
 | Fire + Darkness | Magic | Sorcery | Wizard | stores mana to spend as extra damage |
-| Water + Earth | Clay | Golem | Living Statue | chance to slow |
+| Water + Earth | Clay | Golem | Living Statue | chance to slow | *(port renames these Clay / Clay Pit / Great Mire — see game.gd)* |
 | Water + Nature | Well | Spring | Waterfall | support: attack-speed aura |
 | Water + Darkness | Poison | Venom | Virus | slowing poison; no effect on mechanical |
 | Earth + Nature | Roots | Brambles | Entangling | entangles ground enemies only |
@@ -136,7 +136,7 @@ rather than the map's. `type` is the Warcraft III attack type (`ua1t`).
 
 | Set | Names | dmg | cd | type | Ability, verbatim from the tooltip |
 |---|---|---|---|---|---|
-| Water + Earth | Clay → Golem → Living Statue | 600 | **1.05** | siege | "Throws clumps of clay at enemies, with a chance to slow" |
+| Water + Earth | Clay → Golem → Living Statue | 600 | **1.05** | siege | "Throws clumps of clay at enemies, with a chance to slow" (port renames the ladder Clay → Clay Pit → Great Mire) |
 | Fire + Earth | Lava → Magma → Volcano | 751 | — | siege | "Siege with added incinerate damage. Attacks land and air units" |
 | Fire + Nature | Sun → Solar → Temple of Sol | 600 | — | — | "Medium damage tower, also give a bonus to the damage of nearby Tidal Towers" |
 | Fire + Water | Steam → Vapor → Immolation | 150 | — | normal | "Blasts all nearby units with steam that gradually reduces health" |

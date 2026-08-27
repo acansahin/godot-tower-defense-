@@ -514,7 +514,7 @@ const FUSIONS := {
 	## "Throws clumps of clay at enemies, with a chance to slow." The chance is what
 	## slow_chance exists for — every other slow in the game lands on every hit.
 	"earth+water": {
-		"name": "Clay", "names": ["Clay", "Golem", "Living Statue"],
+		"name": "Clay", "names": ["Clay", "Clay Pit", "Great Mire"],
 		"color": Color(0.80, 0.62, 0.45),
 		"damage_tiers": [47, 85, 150, 263, 470],
 		"range": 585.714, "interval": 1.05,        # 205px = mean(water 210, earth 200)
@@ -555,6 +555,13 @@ const FUSIONS := {
 		"range": 542.857, "interval": 0.4,         # 190px = mean(fire 170, water 210)
 		"splash_radius": 80.0, "splash_factor": 0.5,
 		"poison_dps": 16.0, "poison_time": 2.5,
+	##
+	## DELIBERATE DEPARTURE from the map, which names this ladder Clay -> Golem -> Living
+	## Statue. The painted set is a worked CLAY PIT, not a figure: the roster already has
+	## Flesh Golem sitting on a plinth, and two golems is one too many. Since a fusion's
+	## shape now comes from its NAME (docs/tower-art-prompt.md), keeping the map's names
+	## would have put the word "Golem" over a pit of mud. The recipe, the stats and the
+	## ability are still the map's; only these three words are ours.
 		"desc": "Fast area steam that keeps eating health",
 	},
 	## map: Well Tower, 350 dmg. "Supporting tower that has the Spring Forward ability

@@ -11,8 +11,8 @@ Read "Fusions are named things" below before generating one: the six element tow
 shared fortress language, and every fusion now takes its shape from ITS OWN NAME instead.
 
 EVERY tower in the game is painted: a `--fill-board` run reports `art*` on all fifteen rows.
-Painted under the NEW name rule: Dinosaur, Steam, Lava, Rainbow, Infernal, Flesh Golem, Pure.
-Still on the OLD fusion recipe and queued to be redone as their own names: Clay, Sun, Well,
+Painted under the NEW name rule: Dinosaur, Steam, Lava, Rainbow, Infernal, Flesh Golem, Pure,
+Clay. Still on the OLD fusion recipe and queued to be redone as their own names: Sun, Well,
 Roots.
 
 The pipeline around it is in [CLAUDE.md](../../CLAUDE.md) ("Painted tower set"); this file is
@@ -307,6 +307,25 @@ a big flat disc is where to expect it.
 The pale-on-pale trap was the other risk and it held: dark slate at the rim, shadow in every
 cut step, black seams between flagstones, and white light confined to a thin seam and a pool
 at the centre. It sits on the map's pale road without dissolving into it.
+
+### What Clay measured, and the time the NAME had to move instead of the art
+
+Anchors 54.5 / 49.8 / 50.3 / 50.0 / 50.0%, every tier wider than tall at 1.17-1.36, cut in
+one pass. A wide sunken pool of wet ochre clay in a kerb of rough stone and timber, teal water
+fed in through cut channels, plank walkways and matching racks of drying bricks around the rim.
+
+The first attempt at this repaint WAS a golem, because `Game.FUSIONS` renames this tower to
+"Golem" at level 3 and "Living Statue" at level 5 and the name rule points straight at that.
+It was rejected on sight, and correctly: the roster already has Flesh Golem seated on a
+plinth, and two golems is one too many.
+
+**When the name is the problem, move the NAME.** The tower is now a worked clay pit — earth
+plus water with no figure in it at all, and its slow reads as mud rather than as an ability —
+and `Game.FUSIONS` renames the ladder Clay -> Clay Pit -> Great Mire. Those three words are a
+deliberate departure from the source map, marked in `game.gd` and counted in CLAUDE.md beside
+the other three; the recipe, the stats and the ability are untouched. Worth remembering the
+next time a ported name and a good silhouette disagree: the names are three strings, and the
+art is a tower the player looks at for a whole run.
 
 ### A cutter bug this sheet found
 
