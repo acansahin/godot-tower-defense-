@@ -6,7 +6,7 @@ all six were moved to the same broad, ground-hugging fortress language so they s
 on the board.
 
 The eleven **fusion** towers (six duals, four triples, Pure — see `Game.FUSIONS`) are the
-roster this recipe is now being used for. Steam, Lava and Clay are painted; the other eight still draw the code
+roster this recipe is now being used for. Steam, Lava, Clay and Sun are painted; the other seven still draw the code
 art. Read "Fusion sheets" below before generating one — the method changed in two ways.
 
 The pipeline around it is in [CLAUDE.md](../../CLAUDE.md) ("Painted tower set"); this file is
@@ -252,6 +252,36 @@ waiting to happen; wet terracotta plus cyan channels separates it from Earth, Wa
 map in one step, and it does not collide with Lava either — Lava is near-black with orange
 seams, Clay is warm ochre with cold water.
 
+### What Sun measured: the fix for Clay's miss, and how to use a motif reference
+
+| Check | Target | Sun |
+|---|---|---|
+| Ground anchor off its own centre | ~0% | 49.2 / 51.3 / 49.5 / 49.7 / 49.8% |
+| Width : height | 0.95-1.55, wider than tall | 1.17 / 1.19 / 1.19 / 1.31 / 1.12 |
+| Canvas | 1774x887, 2:1 | exact |
+
+Clay's tier 5 came in at 0.92 because the tier line asked for a colossus and said nothing
+about its shape. Sun's prompt puts **the proportion inside each tier line** — "about 1.35
+times as wide as it is tall", per tier, counting down to 1.15 at tier 5 — instead of leaving
+it to the constraints list at the bottom. Every tier came back wider than tall, tier 5
+included. Do this for any set whose top tier is built around a figure, a sphere or a spire.
+
+**A motif reference is attachable, but only for its ORNAMENT.** Sun started from a picture
+the designer liked: one tall golden temple crowned with a floating armillary sphere. It was
+installed in the game as-is to find out, and the answer was measured rather than argued —
+0.55 wide to tall, against a roster sitting at 1.08-1.28. Because the game scales sprites to
+a fixed HEIGHT, that spends the whole height budget on a needle: beside Water, Fire and Clay
+the building looked half their mass, and its filigree turned to mush at board scale. The
+motif survived, the silhouette did not. The prompt that worked attaches the picture with an
+explicit instruction to take its ornament vocabulary (armillary rings, sun disc, slate roofs,
+gold trim, ivy) and to ignore its proportions, detail density and glossy rendering, ending
+"where the reference and the board disagree, THE BOARD WINS". The armillary went from
+floating above the tower to lying FLAT in the top terrace like an orrery on a table.
+
+Worth keeping: **install a candidate and photograph it** before arguing about it. Copying one
+image over `sun_1..5.png`, importing, and running `--fill-board --shot` takes a couple of
+minutes and settles the question in a way no description of a constraint does.
+
 ### Per-fusion traps
 
 Each inherits its parents' traps from the section above, and adds its own.
@@ -259,7 +289,9 @@ Each inherits its parents' traps from the section above, and adds its own.
 - **Lava** (fire+earth) — fire's rule wins: the stone must be **dark**, or orange on the
   map's warm green and tan has nothing to separate it.
 - **Sun** (fire+nature) — gold is the Light trap. Needs dark accents or it breaks the muted
-  register. Nature's canopy ban also applies.
+  register. Nature's canopy ban also applies. PAINTED: pale sandstone held down by dark slate
+  domes and dark ivy, gold only as trim, and no open flame anywhere — that last one is what
+  keeps it apart from Fire, which is dark stone with a lit brazier.
 - **Clay** (water+earth) and **Well** (water+nature) — both land near the existing grey
   masonry. Clay especially: the roster's closest pair is already nature/earth, and Clay is a
   third grey building. Lean hard on the wet clay ochre and the blue channels.
