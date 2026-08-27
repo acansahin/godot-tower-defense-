@@ -10,10 +10,9 @@ roster this recipe is now being used for, and **they no longer follow the recipe
 Read "Fusions are named things" below before generating one: the six element towers keep the
 shared fortress language, and every fusion now takes its shape from ITS OWN NAME instead.
 
-Painted so far: all six duals (Steam, Lava, Clay, Sun, Well, Roots) under the OLD fusion
-recipe, and Dinosaur under the new one. Infernal, Rainbow, Flesh Golem and Pure are unpainted,
-and the six duals are queued to be redone — Steam is a stone keep with copper pipes rather
-than a steam engine, and Lava is a fortress rather than a volcano.
+Painted under the NEW name rule: Dinosaur, Steam. Painted under the OLD fusion recipe and
+queued to be redone: Lava (a fortress, not a volcano), Clay, Sun, Well, Roots. Unpainted:
+Infernal, Rainbow, Flesh Golem, Pure.
 
 The pipeline around it is in [CLAUDE.md](../../CLAUDE.md) ("Painted tower set"); this file is
 only the prompt.
@@ -196,7 +195,7 @@ because towers never move.
 
 | Check | Target | Dinosaur |
 |---|---|---|
-| Ground anchor off its own centre | ~0% | 49.2 / 46.0 / 48.0 / 54.0 / 46.8% |
+| Ground anchor (measured as the GAME does) | ~50% | 49.0 / 47.5 / 49.1 / 50.3 / 47.8% |
 | Width : height | wider than tall | 1.08 / 1.09 / 1.12 / 1.10 / 1.19 |
 | Canvas | 1774x887, 2:1 | exact |
 
@@ -205,10 +204,36 @@ which is the whole point of the change, and it does not read as a creep. The nam
 earns its keep too — Dinosaur at tiers 1-3 and Fossil at 4-5, so the tower petrifies at the
 rename and the player can see it happen.
 
-The anchor spread 46.0-54.0%, the widest any set has measured. A creature has a head at one
-end and a tail at the other, and no amount of asking makes that symmetrical; the plinth is
-what keeps it inside eight points rather than twenty. Expect this band from every
-creature-shaped fusion and do not re-cut over it — it is about six pixels at drawn size.
+**Measure the anchor the way `Sprites.anchor()` does, or the number is fiction.** A first
+pass over this set reported 46.0-54.0% and concluded that creature shapes simply cannot hold
+their centre. They can: the game takes the MEDIAN of the row middles across a band 4% of the
+sprite's height, and by that measure Dinosaur sits at 47.5-50.3%, no worse than the fortress
+sets. The bad number came from averaging the lowest four rows, where a single tapering corner
+of the plinth dominates. A one-off script is fine, but copy the algorithm from `sprites.gd`.
+### What Steam measured, repainted as an engine
+
+The first Steam was a blue-topped stone keep with copper pipework — a fortress wearing the
+word. Repainted under the name rule it is a riveted boiler bolted to a stone plinth: firebox
+glowing orange behind its grate, copper condensers, matched flywheels, stubby stacks jetting
+steam, and at tier 5 the whole machine run past its limit, seams glowing red and every valve
+lifted. On the board it reads as a MACHINE at a glance, which no amount of recolouring the
+old keep would have achieved.
+
+| Check | Target | Steam |
+|---|---|---|
+| Ground anchor (as the game measures it) | ~50% | 48.1 / 55.9 / 54.8 / 53.4 / 52.0% |
+| Width : height | wider than tall | 0.94 / 1.04 / 1.12 / 1.12 / 1.13 |
+| Canvas | 1774x887, 2:1 | exact |
+
+**An off-centre anchor is only a defect when the BASE is uneven.** Steam's reads 52-56%, the
+highest in the roster, and it is harmless: the plinth is even, and what pushes the number is
+the steam plume widening the sprite's bounding box on one side while the ground point stays
+where it is. The game positions by the anchor, not by the box, so the machine lands on its
+spot and the plume simply hangs further out on one side. Compare Earth's original 17%, which
+was a rock apron on one side of the FOOT and did move the building off its spot.
+
+Tier 1 came in at 0.94 wide to tall, a hair under the floor, for the same reason in the other
+axis — a tall plume over the smallest engine. Not worth a re-cut at that size.
 
 ### A cutter bug this sheet found
 
