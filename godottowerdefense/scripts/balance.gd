@@ -257,7 +257,22 @@ const MIDPOINT_BOSS_WAVE := STANDARD_WAVES / 2
 # --- Wave scaling formula (was wave_manager.gd:91-101) -------------------------
 
 ## Wave 1 hit points, read straight out of the map: its level 1 is 75 hp.
-const BASE_HP_FLAT := 75.0
+## HP of a wave-1 creep before CREEP_HP_PERCENT. Raised from 75 with FINAL_HP_FACTOR cut by
+## the same ratio, which LIFTS THE START OF THE CURVE WITHOUT MOVING ITS END.
+##
+## That shape is the fix for a specific mistake. GLOBAL_DAMAGE_MULT pays for a board that
+## holds 12 towers instead of 47, but the player does not lose those towers evenly: early on
+## they could only afford two or three either way, and the shortfall is entirely a late-game
+## one. A flat damage multiplier therefore over-pays at the start by nearly its whole factor.
+## Measured at wave 1: 9 creeps of 90 HP against a Lv1 Water tower now doing 120 DPS, which
+## kills one in 0.75s on a 0.9s spawn interval -- a single tower nearly held the wave alone,
+## and START_GOLD buys two.
+##
+## So the early waves rise and the last wave does not move: wave 1 goes from 90 to 270 HP,
+## wave 12 from 264 to 613, wave 20 from 576 to 1131, and wave 50 stays at 10,800. Holding
+## the end is not cosmetic -- `--fill-board` only just clears it, and 4.2 damage lost there
+## where 5.0 wins, so any lift at that end costs another damage re-tune.
+const BASE_HP_FLAT := 225.0
 
 ## Where the LAST wave lands, as a multiple of wave 1's hit points. THIS is the tuned number
 ## now; the per-wave ratio is derived from it and STANDARD_WAVES by hp_growth() below.
@@ -285,7 +300,10 @@ const BASE_HP_FLAT := 75.0
 ## the harness suite rather than a doubt about the measurement: nothing simulates a player's
 ## gradual build-up, so the distance between "a maxed board wins" and "a good board wins" is
 ## the one quantity here that was reasoned about rather than measured.
-const FINAL_HP_FACTOR := 120.0
+## Cut from 120 to 40 in step with BASE_HP_FLAT going 75 -> 225, so the product is unchanged
+## and wave STANDARD_WAVES still lands on exactly the HP it did. The per-wave ratio falls
+## from 1.103 to 1.078: a flatter climb from a higher floor.
+const FINAL_HP_FACTOR := 40.0
 
 ## The per-wave HP ratio, derived so wave STANDARD_WAVES lands on FINAL_HP_FACTOR. At 50
 ## waves this is 1.113, close to the map's own 1.16 — the run is longer, so each step is
@@ -339,7 +357,11 @@ const CREEP_SPEED_PERCENT := 0.82
 ## `8 + n` (was `9 + 1.2n`) per GAME_STRATEGY_V2.md §11.2, BUILD NEXT #3 — a flatter ramp
 ## that reaches the same 28-enemy cap four waves later (wave 20 vs wave 16), part of the
 ## same session-length trim as PREP_TIME.
-const BASE_COUNT_FLAT := 8
+## Raised from 8 for the same reason as BASE_HP_FLAT, and with the same shape: BASE_COUNT_MAX
+## still caps every wave from the mid-teens on, so this lifts the early waves and leaves the
+## late ones exactly where they were. Wave 1 goes from 9 creeps to 13, wave 5 from 13 to 17,
+## and wave 20 onward is 28 either way.
+const BASE_COUNT_FLAT := 12
 const BASE_COUNT_LINEAR := 1.0
 const BASE_COUNT_MAX := 28
 ## Gold per kill: `3 + wave` (GAME_STRATEGY_V2.md §29.1, BUILD NEXT #3), replacing the map's
