@@ -12,7 +12,7 @@ shared fortress language, and every fusion now takes its shape from ITS OWN NAME
 
 EVERY tower in the game is painted: a `--fill-board` run reports `art*` on all fifteen rows.
 Painted under the NEW name rule: Dinosaur, Steam, Lava, Rainbow, Infernal, Flesh Golem, Pure,
-Clay, Sun. Still on the OLD fusion recipe and queued to be redone as their own names: Well,
+Clay, Sun, Well. Still on the OLD fusion recipe and queued to be redone as its own name:
 Roots.
 
 The pipeline around it is in [CLAUDE.md](../../CLAUDE.md) ("Painted tower set"); this file is
@@ -346,6 +346,27 @@ towers that would otherwise converge.
 The gold trap held the way it always has to: aged bronze over most of the disc, dark slate in
 the cradle, ivy on the terraces, and gold only as a thin edge on the relief plus the glow in
 the cut channels. And no flame anywhere, which is what keeps it apart from Fire.
+
+### What Well measured, repainted as a spring
+
+Anchors 49.5-52.4%, every tier wider than tall at 1.06-1.31, cut in one pass. A mossy well
+head that becomes a clear teal spring welling between wet boulders and finally a broad low
+waterfall, with a dark timber wheel turning in the outflow.
+
+The old Well was a spring-HOUSE — roofs, walls, a lit archway — because it was written to the
+five-beat template. Its name ladder was pointing somewhere else the whole time: Well, Spring,
+Waterfall is a route from a dug hole to a natural feature, and there is no building anywhere
+on it. The repaint follows the ladder and the board gains its second waterfall, which is a
+good thing rather than a collision: the map already has one on its left edge, so the tower
+looks native to it.
+
+Clay went into the prompt as the do-not-resemble sheet, since both towers are a pool in a
+ring: opaque ochre mud in cut stone and timber against clear teal water over natural wet
+rock. **A tier-5 waterfall also has to be asked for as a WEIR** — wider than it is high —
+or the name walks the set straight into a tall cascade and the proportion rule.
+
+The water wheel survived the repaint. Nothing in the code reads it, but it is the only visual
+the attack-speed aura has, and a turning wheel says haste more plainly than any amount of glow.
 
 ### A cutter bug this sheet found
 
