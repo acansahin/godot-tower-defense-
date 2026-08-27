@@ -10,9 +10,10 @@ roster this recipe is now being used for, and **they no longer follow the recipe
 Read "Fusions are named things" below before generating one: the six element towers keep the
 shared fortress language, and every fusion now takes its shape from ITS OWN NAME instead.
 
-Painted under the NEW name rule: Dinosaur, Steam, Lava, Rainbow, Infernal, Flesh Golem.
-Painted under the OLD fusion recipe and queued to be redone: Clay, Sun, Well, Roots.
-Unpainted: Pure.
+EVERY tower in the game is painted: a `--fill-board` run reports `art*` on all fifteen rows.
+Painted under the NEW name rule: Dinosaur, Steam, Lava, Rainbow, Infernal, Flesh Golem, Pure.
+Still on the OLD fusion recipe and queued to be redone as their own names: Clay, Sun, Well,
+Roots.
 
 The pipeline around it is in [CLAUDE.md](../../CLAUDE.md) ("Painted tower set"); this file is
 only the prompt.
@@ -288,6 +289,24 @@ profile pose (the creeps are painted in profile), and a colour instruction that 
 is a MINORITY of the surface, living in the seams between grey stone and moss. Deep liver red,
 never bright, never pink, never glossy. On the board it reads as a boulder pile that happens
 to be alive, which is the right side of the line.
+
+### What Pure measured, the last one
+
+Every tier wider than tall at 1.21-1.36, cut in one pass. A wide sunken plaza of concentric
+steps, four elemental channels running inward from the rim, and where they meet, one white
+light. The disc IS the plinth here, which is why it is the flattest tower in the roster.
+
+Anchors 41.9 / 49.0 / 49.0 / 48.4 / 50.1%. Tier 1 is the worst single figure any sprite has
+measured, and it is worth knowing why: a plaza drawn in perspective is an ELLIPSE, and an
+ellipse's lowest point sits at its front — which on this one is front-LEFT rather than
+front-centre. The 4% band `anchor()` reads is only seven rows on a 164px sprite, so it lands
+entirely inside that narrow tip. By seven rows higher the middle is already back at 48%. It
+is about six pixels at drawn size and only on the smallest tier, so it ships; a set built on
+a big flat disc is where to expect it.
+
+The pale-on-pale trap was the other risk and it held: dark slate at the rim, shadow in every
+cut step, black seams between flagstones, and white light confined to a thin seam and a pool
+at the centre. It sits on the map's pale road without dissolving into it.
 
 ### A cutter bug this sheet found
 

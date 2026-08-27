@@ -271,9 +271,10 @@ To add content, add a **data row**, not a scene or script:
   functions.
 - **Sound is still zero-asset**, and stays that way: every SFX and the music loop are
   synthesized in `audio.gd`. Don't add `.wav` / `.ogg`.
-- **Art is no longer zero-asset**, but it is still *mostly* code. The board and all six
-  element towers are painted PNGs under `godottowerdefense/assets/art/`; everything else —
-  every dual, every enemy, all effects and all UI — is `_draw()`. The two
+- **Art is no longer zero-asset**, but it is still *mostly* code. The board, all six element
+  towers and ALL ELEVEN FUSIONS are painted PNGs under `godottowerdefense/assets/art/`, so a
+  `--fill-board` run now reports `art*` on every row; the enemies are painted too. What is
+  still `_draw()`: all effects except the Fire brazier, and all UI. The two
   coexist on purpose: `sprites.gd` returns `null` for anything unpainted and the caller
   falls back to the code art, which is what lets the repaint proceed one element at a time
   instead of in one unplayable jump. Adding a painted set is dropping files in; it needs no
