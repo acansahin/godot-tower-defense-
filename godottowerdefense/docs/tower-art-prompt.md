@@ -6,7 +6,8 @@ all six were moved to the same broad, ground-hugging fortress language so they s
 on the board.
 
 The eleven **fusion** towers (six duals, four triples, Pure — see `Game.FUSIONS`) are the
-roster this recipe is now being used for. Steam, Lava, Clay, Sun and Well are painted; the other six still draw the code
+roster this recipe is now being used for. All six DUALS are painted -- Steam, Lava, Clay, Sun, Well and Roots. The four triples and
+Pure still draw the code
 art. Read "Fusion sheets" below before generating one — the method changed in two ways.
 
 The pipeline around it is in [CLAUDE.md](../../CLAUDE.md) ("Painted tower set"); this file is
@@ -311,6 +312,32 @@ The attack-speed aura got a visual for free: a turning water wheel. Nothing in t
 it, but a tower that hastens its neighbours reading as a mill is worth more than another
 basin.
 
+### What Roots measured: inverting the material instead of shifting the hue
+
+| Check | Target | Roots |
+|---|---|---|
+| Ground anchor off its own centre | ~0% | 53.0 / 49.8 / 48.8 / 47.9 / 51.0% |
+| Width : height | wider than tall | 1.24 / 1.19 / 1.35 / 1.17 / 1.21 |
+| Canvas | 1774x887, 2:1 | exact |
+
+Roots landed in the most crowded corner the roster has: Nature, Well and Sun are all green
+growth on grey stone before it arrives. Clay and Well were separated by shifting the HUE,
+and there was no unused green left to shift to. So this one inverts the MATERIAL instead —
+in every other tower the masonry is the mass and the growth is the accent, and here the wood
+is the mass and the ruined granite shows through it in broken courses. Prompt line: "the mass
+is the WOOD, and the ruined masonry shows through it".
+
+The canopy ban had to be doubled and made specific to survive that. Not "avoid a canopy" but
+**no leaves and no foliage of any kind** — bare wood, thorn and briar, with the only green
+permitted being a near-black bramble darker than the map's grass, and a knot of bare roots
+where a crown would go. It reads as a building on the board and not as a bush, which was the
+whole risk; the lit archway and the stone stair are what carry that.
+
+Anchors spread 47.9-53.0%, the same failure mode Well had — asymmetric flanks rather than an
+uneven foot, even with matching pairs asked for. Take the pairs request as reducing the
+spread, not removing it: on a set built out of irregular organic shapes there is no symmetry
+to hold onto in the first place.
+
 ### Per-fusion traps
 
 Each inherits its parents' traps from the section above, and adds its own.
@@ -326,7 +353,9 @@ Each inherits its parents' traps from the section above, and adds its own.
   terracotta with cold cyan channels, Well took mossy green-grey stone with deep teal-green
   water, a dark timber wheel and no copper anywhere. Steam's copper-and-orange stays reserved.
 - **Roots** (earth+nature) — the canopy ban **doubled**. The map is full of pine; a tower
-  crowned with foliage reads as scenery, not as a building.
+  crowned with foliage reads as scenery, not as a building. PAINTED: the ban was written as
+  "no leaves and no foliage of any kind", bare wood and thorn only, and the tower inverts the
+  roster's material — the WOOD is the mass and the ruined granite is the accent.
 - **Rainbow / Spectrum** — the highest risk in the roster. Multi-colour against a deliberately
   muted board. Keep the prism desaturated and let the masonry carry the mass.
 - **Dinosaur / Fossil** — must be a BUILDING with bone and fossil set into its stone, not a
