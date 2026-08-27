@@ -10,9 +10,9 @@ roster this recipe is now being used for, and **they no longer follow the recipe
 Read "Fusions are named things" below before generating one: the six element towers keep the
 shared fortress language, and every fusion now takes its shape from ITS OWN NAME instead.
 
-Painted under the NEW name rule: Dinosaur, Steam, Lava, Rainbow, Infernal. Painted under the
-OLD fusion recipe and queued to be redone: Clay, Sun, Well, Roots. Unpainted: Flesh Golem,
-Pure.
+Painted under the NEW name rule: Dinosaur, Steam, Lava, Rainbow, Infernal, Flesh Golem.
+Painted under the OLD fusion recipe and queued to be redone: Clay, Sun, Well, Roots.
+Unpainted: Pure.
 
 The pipeline around it is in [CLAUDE.md](../../CLAUDE.md) ("Painted tower set"); this file is
 only the prompt.
@@ -275,6 +275,19 @@ Its first attempt, generated before the name rule, is the cautionary one in this
 stepped elemental cone with rocks hovering around an orb, measuring 0.91 down to 0.69 wide to
 tall with 20-37% of each sprite spent on floating debris. Both defects are now named in every
 prompt.
+
+### What Flesh Golem measured: keeping a creature off the enemy side of the board
+
+Anchors 48.1-51.0%, every tier wider than tall at 1.16-1.23, cut in one pass. A hunched golem
+of granite boulders bound in dark red sinew, rooted into a stone plinth, the flesh taking over
+from the stone at tier 4 where the name changes to Living Flesh.
+
+Its old trap note said red risks reading as an enemy, and under the name rule the tower IS a
+creature, so the risk went up rather than away. Three lines hold it: the plinth, the ban on a
+profile pose (the creeps are painted in profile), and a colour instruction that says the red
+is a MINORITY of the surface, living in the seams between grey stone and moss. Deep liver red,
+never bright, never pink, never glossy. On the board it reads as a boulder pile that happens
+to be alive, which is the right side of the line.
 
 ### A cutter bug this sheet found
 
