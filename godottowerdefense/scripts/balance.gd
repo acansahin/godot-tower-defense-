@@ -65,7 +65,26 @@ const MAX_LEVEL := 5
 ## run economy sized for a phone session could ever reach cleanly. 50/40/70/120/200 keeps
 ## the total cost of a maxed tower (480) inside what one run's economy actually earns
 ## (§29.2 measures ~6090 gold across 20 waves against ~12 good build spots x 480 = 5760).
-const TIER_COSTS: Array = [50, 40, 70, 120, 200]
+## Build cost, then the cost of each upgrade. The BUILD cost is deliberately left where it
+## was while the four upgrades were raised by half, because the two ends of this ladder do
+## different jobs: the first number is the opening (START_GOLD 120 still buys two towers on
+## wave 1, which is the tempo the early waves are tuned for), and the rest is the sink.
+##
+## The sink had to grow because the board shrank. Measured over a 50-wave run: kills pay
+## `3 + wave` each on a count curve that caps at 28, which with the interest cap and the
+## leak-free bonus is about 41,300 gold if nothing is missed. Against that, a board of 12
+## pads could absorb only 23,520 even taken to the absolute end -- every tower at Lv5 AND
+## every one of them walked all the way up to Pure. The player finished the board and then
+## held ~18,000 gold with nothing to buy. At the old 47 pads capacity was 92,120 and the
+## question never came up.
+##
+## x1.5 on the upgrades and on FUSION_COSTS puts capacity at ~34,980, or about 85% of that
+## income ceiling. Not 100%: the 41,300 assumes every enemy dies, so a real run earns less,
+## and a board that can only just be finished by a flawless player is a board nobody
+## finishes. **This number is sized against a budget, not against a played run** -- no
+## harness plays with real gold (`--fill-board` grants itself a million), so the last word
+## belongs to an actual playthrough.
+const TIER_COSTS: Array = [50, 60, 105, 180, 300]
 ## Damage multiplier applied on each upgrade. Unused while every TOWER_DEFS entry supplies
 ## its own explicit `damage_tiers` (see game.gd) — kept as the documented fallback shape,
 ## not yet rewritten to the V2 tier ratio (10/18/32/56/100, i.e. x1.8/x1.78/x1.75/x1.79)
@@ -412,7 +431,10 @@ const ELEMENT_BOSS_LIFE_COST := 3
 ##
 ## Still unproven by PLAY. Nothing simulates a player's gradual build-up, so the numbers above
 ## are a ceiling, not a budget — these three are the values most likely to move.
-const FUSION_COSTS: Array = [160, 420, 900]
+## Raised by half with TIER_COSTS above, and for the same reason: with 12 build spots instead
+## of 47 the fusion ladder is where most of a run's gold has to go, so it is most of the
+## sink. Was [160, 420, 900].
+const FUSION_COSTS: Array = [240, 630, 1350]
 
 # --- Meta progression ----------------------------------------------------------
 

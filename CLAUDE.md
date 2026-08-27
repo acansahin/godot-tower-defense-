@@ -61,9 +61,13 @@ towers out of 47 — then each wave with `earned=`, the gold gained since the pr
 run-over line with real WALL-CLOCK elapsed time plus which fusions unlocked. `earned` is a
 DELTA on purpose: this harness grants itself a million gold so placement never fails, so the
 absolute balance measures nothing while the delta is real income. Because a maxed board
-leaks nothing it is an UPPER bound — measured at ~3.7k gold banked by wave 15 and ~7.1k
-across the full 20, which is the only figure the suite has to size `Balance.FUSION_COSTS`
-against. Nothing simulates a player's gradual build-up. Elapsed is meaningless at 8x, but
+leaks nothing it is an UPPER bound. **Nothing simulates a player's gradual build-up, so the
+costs are sized on paper rather than by playing**: kills pay `3 + wave` on a count curve
+capped at 28, which with the interest cap and the leak-free bonus totals ~41,300 gold over a
+50-wave run, and `Balance.TIER_COSTS` + `Balance.FUSION_COSTS` are set so a full board
+absorbs ~85% of that. Re-do that arithmetic whenever the pad count moves — at 12 pads the
+board could originally take only 23,520 even taken to the last upgrade of the last Pure
+tower, so a player finished it and sat on ~18,000 spare gold. Elapsed is meaningless at 8x, but
 `--fill-board:1x` skips the speed-up for exactly this: BUILD NEXT #10 used it to measure a
 real Standard run at ~4.7 minutes, though that is a maxed-board LOWER BOUND, not proof of the
 ~10.5 min target for an actual player's gradual build-up — nothing currently simulates that),
@@ -227,10 +231,13 @@ rock by the waterfall, where an isolated open block survives the despeckle. Extr
 `build_mask.py` majority passes do **not** remove them — measured at 2, 3 and 4 passes, the
 same block survives all three.
 
-**More open ground does not mean more gold.** `--fill-board` earns ~3.5k by wave 15 and
-~6.9k across the 20 either way: on a maxed board the income is bounded by how many creeps
-the waves contain, not by how many towers are shooting them. So the placement numbers above
-can move without `Balance.FUSION_COSTS` having to.
+**More open ground does not mean more gold, but it does mean more to spend it on.** On a
+maxed board income is bounded by how many creeps the waves contain, not by how many towers
+are shooting them, so the placement numbers above barely move it. What they DO move is the
+other side of the ledger: capacity is `pads x (build + upgrades + fusions)`, so cutting the
+board from 47 pads to 12 cut what a run can absorb from 92,120 gold to 23,520 against an
+income ceiling of ~41,300. `Balance.TIER_COSTS` and `Balance.FUSION_COSTS` were raised by
+half to close that. **Any change to the pad count has to redo this arithmetic.**
 
 The road that came before it was **one inward turn of the original's spiral**, ported from
 the map's own pathing data — `python tools/extract_w3x.py "<map>.w3x" pathing` prints the
