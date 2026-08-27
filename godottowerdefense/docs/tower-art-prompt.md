@@ -6,7 +6,7 @@ all six were moved to the same broad, ground-hugging fortress language so they s
 on the board.
 
 The eleven **fusion** towers (six duals, four triples, Pure — see `Game.FUSIONS`) are the
-roster this recipe is now being used for. Steam, Lava, Clay and Sun are painted; the other seven still draw the code
+roster this recipe is now being used for. Steam, Lava, Clay, Sun and Well are painted; the other six still draw the code
 art. Read "Fusion sheets" below before generating one — the method changed in two ways.
 
 The pipeline around it is in [CLAUDE.md](../../CLAUDE.md) ("Painted tower set"); this file is
@@ -282,6 +282,35 @@ Worth keeping: **install a candidate and photograph it** before arguing about it
 image over `sun_1..5.png`, importing, and running `--fill-board --shot` takes a couple of
 minutes and settles the question in a way no description of a constraint does.
 
+### What Well measured: three neighbours named in the prompt, and an anchor that drifted
+
+| Check | Target | Well |
+|---|---|---|
+| Ground anchor off its own centre | ~0% | 46.7 / 51.0 / 48.1 / 49.1 / 53.2% |
+| Width : height | wider than tall | 1.19 / 1.15 / 1.18 / 1.09 / 1.10 |
+| Canvas | 1774x887, 2:1 | exact |
+
+Well is the first fusion with THREE towers it could be confused with rather than one, and
+the prompt names all three and says what to withhold from each: not Water (grey-tan stone,
+bright blue channels) so its own water is deep teal-green in mossy green-grey stone; not
+Steam (copper pipework, orange furnace glow) so it carries no copper, no brass and no orange
+anywhere; not Clay (warm terracotta) so it carries no warm ochre at all. Naming the tower to
+avoid AND the specific material to drop is what makes that work — "make it different" does
+not survive contact with a generator.
+
+Its per-tier proportions held (1.09-1.19, all wider than tall), but the ground anchor spread
+46.7-53.2%, the widest of any set so far — Steam, Lava and Clay all landed inside 48.8-50.3.
+The cause is not the foot, which is symmetrical as asked, but the FLANKS: tiers 4 and 5 carry
+a mill house on one side and a smaller shed on the other, and tier 1 a lantern post on one
+side only. `anchor()` reads the middle of the sprite's lowest band, so unequal side buildings
+shift it even when the base is even. At the drawn size that is about four pixels, which is
+why it shipped; a set that wants flanking structures should be asked for them in MATCHING
+PAIRS.
+
+The attack-speed aura got a visual for free: a turning water wheel. Nothing in the code reads
+it, but a tower that hastens its neighbours reading as a mill is worth more than another
+basin.
+
 ### Per-fusion traps
 
 Each inherits its parents' traps from the section above, and adds its own.
@@ -293,8 +322,9 @@ Each inherits its parents' traps from the section above, and adds its own.
   domes and dark ivy, gold only as trim, and no open flame anywhere — that last one is what
   keeps it apart from Fire, which is dark stone with a lit brazier.
 - **Clay** (water+earth) and **Well** (water+nature) — both land near the existing grey
-  masonry. Clay especially: the roster's closest pair is already nature/earth, and Clay is a
-  third grey building. Lean hard on the wet clay ochre and the blue channels.
+  masonry. BOTH PAINTED, and both solved by hue rather than by shape: Clay took wet ochre
+  terracotta with cold cyan channels, Well took mossy green-grey stone with deep teal-green
+  water, a dark timber wheel and no copper anywhere. Steam's copper-and-orange stays reserved.
 - **Roots** (earth+nature) — the canopy ban **doubled**. The map is full of pine; a tower
   crowned with foliage reads as scenery, not as a building.
 - **Rainbow / Spectrum** — the highest risk in the roster. Multi-colour against a deliberately
