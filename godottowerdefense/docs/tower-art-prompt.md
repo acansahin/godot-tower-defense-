@@ -12,7 +12,7 @@ shared fortress language, and every fusion now takes its shape from ITS OWN NAME
 
 EVERY tower in the game is painted: a `--fill-board` run reports `art*` on all fifteen rows.
 Painted under the NEW name rule: Dinosaur, Steam, Lava, Rainbow, Infernal, Flesh Golem, Pure,
-Clay. Still on the OLD fusion recipe and queued to be redone as their own names: Sun, Well,
+Clay, Sun. Still on the OLD fusion recipe and queued to be redone as their own names: Well,
 Roots.
 
 The pipeline around it is in [CLAUDE.md](../../CLAUDE.md) ("Painted tower set"); this file is
@@ -326,6 +326,26 @@ deliberate departure from the source map, marked in `game.gd` and counted in CLA
 the other three; the recipe, the stats and the ability are untouched. Worth remembering the
 next time a ported name and a good silhouette disagree: the names are three strings, and the
 art is a tower the player looks at for a whole run.
+
+### What Sun measured, repainted as an object
+
+Anchors 46.8 / 51.9 / 51.2 / 51.0 / 50.1%, every tier wider than tall at 1.16-1.40, cut in
+one pass. A thick convex disc of patinated bronze tilted back in a squat stone cradle, its
+relief channels glowing amber from within, flanked by matching smaller discs on a terraced
+plinth.
+
+The old Sun was not wrong so much as GENERIC: after the roster turned into an engine, a
+volcano, a rift, a clay pit, a dinosaur, a golem, a crystal ring and a plaza, it was the last
+plain fantasy building left. Its replacement had to dodge two towers rather than one, since
+Rainbow and Pure are both already "a ring with light in it", so the brief made it SOLID METAL
+instead of crystal, ONE big object instead of a ring of small ones, and steady heat instead
+of a pale arc. Attaching the Rainbow sheet with "this asset must NOT look like it" is the
+same trick Clay used against Flesh Golem, and it is now the standard way to separate two
+towers that would otherwise converge.
+
+The gold trap held the way it always has to: aged bronze over most of the disc, dark slate in
+the cradle, ivy on the terraces, and gold only as a thin edge on the relief plus the glow in
+the cut channels. And no flame anywhere, which is what keeps it apart from Fire.
 
 ### A cutter bug this sheet found
 
