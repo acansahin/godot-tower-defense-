@@ -10,9 +10,9 @@ roster this recipe is now being used for, and **they no longer follow the recipe
 Read "Fusions are named things" below before generating one: the six element towers keep the
 shared fortress language, and every fusion now takes its shape from ITS OWN NAME instead.
 
-Painted under the NEW name rule: Dinosaur, Steam. Painted under the OLD fusion recipe and
-queued to be redone: Lava (a fortress, not a volcano), Clay, Sun, Well, Roots. Unpainted:
-Infernal, Rainbow, Flesh Golem, Pure.
+Painted under the NEW name rule: Dinosaur, Steam, Lava. Painted under the OLD fusion recipe
+and queued to be redone: Clay, Sun, Well, Roots. Unpainted: Infernal, Rainbow, Flesh Golem,
+Pure.
 
 The pipeline around it is in [CLAUDE.md](../../CLAUDE.md) ("Painted tower set"); this file is
 only the prompt.
@@ -234,6 +234,17 @@ was a rock apron on one side of the FOOT and did move the building off its spot.
 
 Tier 1 came in at 0.94 wide to tall, a hair under the floor, for the same reason in the other
 axis — a tall plume over the smallest engine. Not worth a re-cut at that size.
+
+### What Lava measured, repainted as a volcano
+
+The cleanest set the pipeline has produced: anchors 49.5 / 50.0 / 49.8 / 49.9 / 49.2%, every
+tier wider than tall at 1.18-1.31, canvas exact, cut in one pass. A live cinder cone with a
+molten crater and lava rivers, held in a low kerb of heat-blackened carved blocks.
+
+The kerb is the volcano's version of the plinth rule, and it earns its place twice over: it
+says a built thing rather than a boulder on a board already full of rocks, and being a plain
+even ring it is the reason the anchors are the best in the roster. **Where a named form has no
+natural symmetry, give it a symmetrical thing to stand in.**
 
 ### A cutter bug this sheet found
 
