@@ -148,7 +148,8 @@ func _start_wave() -> void:
 		# column of 1000119, 1000209, ... that reads like an economy and measures nothing. The
 		# delta is real income — kill bounties, the leak-free bonus and interest — and since a
 		# maxed board leaks nothing, it is the best upper bound the harness suite has on what a
-		# run can afford. Nothing simulates a PLAYER's gradual build-up, so it is only that.
+		# run can afford — an upper bound and nothing more. For what a PLAYER earns while
+		# building up gradually, and leaking, run `--play-sim` instead.
 		print("wave %d: %s%s el=%s%s  hp=%.0f spd=%.0f count=%d  earned=%+d" % [_wave,
 				String(def["type"]), art_note,
 				_element if _element != "" else "-", "  BOSS" if def.get("boss", false) else "",

@@ -81,9 +81,10 @@ const MAX_LEVEL := 5
 ## x1.5 on the upgrades and on FUSION_COSTS puts capacity at ~34,980, or about 85% of that
 ## income ceiling. Not 100%: the 41,300 assumes every enemy dies, so a real run earns less,
 ## and a board that can only just be finished by a flawless player is a board nobody
-## finishes. **This number is sized against a budget, not against a played run** -- no
-## harness plays with real gold (`--fill-board` grants itself a million), so the last word
-## belongs to an actual playthrough.
+## finishes. **This number is sized against a budget, not against a played run.** `--play-sim`
+## does play with real gold, where `--fill-board` grants itself a million — but what it
+## answers is whether a gradual build-up SURVIVES, not whether the capacity ledger above adds
+## up, so the last word on this one still belongs to an actual playthrough.
 const TIER_COSTS: Array = [50, 60, 105, 180, 300]
 ## Damage multiplier applied on each upgrade. Unused while every TOWER_DEFS entry supplies
 ## its own explicit `damage_tiers` (see game.gd) — kept as the documented fallback shape,
@@ -296,18 +297,23 @@ const BASE_HP_FLAT := 225.0
 ## anyone at all — not where it should sit. 120 keeps roughly a fifth of that headroom for a
 ## board a player could actually afford to build.
 ##
-## THE NUMBER MOST LIKELY TO NEED PLAY-TESTING in the whole file, and the reason is a gap in
-## the harness suite rather than a doubt about the measurement: nothing simulates a player's
-## gradual build-up, so the distance between "a maxed board wins" and "a good board wins" is
-## the one quantity here that was reasoned about rather than measured.
-## Cut from 120 to 40 in step with BASE_HP_FLAT going 75 -> 225, so the product is unchanged
-## and wave STANDARD_WAVES still lands on exactly the HP it did. The per-wave ratio falls
-## from 1.103 to 1.078: a flatter climb from a higher floor.
+## This used to be THE NUMBER MOST LIKELY TO NEED PLAY-TESTING in the file, because the gap
+## between "a maxed board wins" and "a good board wins" was the one quantity here that was
+## reasoned about rather than measured — nothing simulated a player's gradual build-up.
+## `--play-sim` does now, and this is the first number read off it.
+##
+## The history, since two moves are folded into it. First 120 -> 40, in step with
+## BASE_HP_FLAT going 75 -> 225, so the product was unchanged and wave STANDARD_WAVES landed
+## on exactly the HP it had: a flatter climb from a higher floor. Then 40 -> 55, because the
+## flatter climb had been set against `--fill-board`, which is an upper bound, and a run that
+## has to EARN its towers finished with too much room left. The per-wave ratio runs
+## 1.103 -> 1.078 -> 1.085 across those two moves.
 const FINAL_HP_FACTOR := 55.0
 
 ## The per-wave HP ratio, derived so wave STANDARD_WAVES lands on FINAL_HP_FACTOR. At 50
-## waves this is 1.113, close to the map's own 1.16 — the run is longer, so each step is
-## smaller and the destination is the same.
+## waves and the current factor this is 1.085 — well under the map's own flat 1.16, because
+## the climb starts from a much higher floor (BASE_HP_FLAT 225 against the map's 75) and only
+## has to reach 55x rather than the map's 1440x.
 func hp_growth() -> float:
 	return pow(FINAL_HP_FACTOR, 1.0 / float(maxi(STANDARD_WAVES - 1, 1)))
 ## Creeps spawn at a fraction of their baked hit points, chosen by the map's difficulty
@@ -451,8 +457,12 @@ const ELEMENT_BOSS_LIFE_COST := 3
 ## that, walking one tower all the way to Pure costs 480 (maxed base) + 1480 (fusions) = 1960,
 ## about a quarter of the run: reachable, and a real commitment rather than a default.
 ##
-## Still unproven by PLAY. Nothing simulates a player's gradual build-up, so the numbers above
-## are a ceiling, not a budget — these three are the values most likely to move.
+## The numbers above are a CEILING rather than a budget: they come off a maxed board. What
+## `--play-sim` adds is a run that has to EARN the ladder, and it does climb all of it — a
+## full 50-wave run ends on `el=48`, every one of the twelve towers at four elements. So the
+## costs are affordable; what is still untested is whether they are a real DECISION, because
+## the simulated player buys the cheapest thing available rather than the best one and never
+## sells. These three remain the values most likely to move.
 ## Raised by half with TIER_COSTS above, and for the same reason: with 12 build spots instead
 ## of 47 the fusion ladder is where most of a run's gold has to go, so it is most of the
 ## sink. Was [160, 420, 900].

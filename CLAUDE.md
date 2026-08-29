@@ -61,8 +61,9 @@ towers out of 47 — then each wave with `earned=`, the gold gained since the pr
 run-over line with real WALL-CLOCK elapsed time plus which fusions unlocked. `earned` is a
 DELTA on purpose: this harness grants itself a million gold so placement never fails, so the
 absolute balance measures nothing while the delta is real income. Because a maxed board
-leaks nothing it is an UPPER bound. **Nothing simulates a player's gradual build-up, so the
-costs are sized on paper rather than by playing**: kills pay `3 + wave` on a count curve
+leaks nothing it is an UPPER bound. **The COST arithmetic below is still sized on paper
+rather than by playing** (`--play-sim` measures whether a gradual build-up survives, not
+whether the ledger adds up): kills pay `3 + wave` on a count curve
 capped at 28, which with the interest cap and the leak-free bonus totals ~41,300 gold over a
 50-wave run, and `Balance.TIER_COSTS` + `Balance.FUSION_COSTS` are set so a full board
 absorbs ~85% of that. Re-do that arithmetic whenever the pad count moves — at 12 pads the
@@ -70,7 +71,18 @@ board could originally take only 23,520 even taken to the last upgrade of the la
 tower, so a player finished it and sat on ~18,000 spare gold. Elapsed is meaningless at 8x, but
 `--fill-board:1x` skips the speed-up for exactly this: BUILD NEXT #10 used it to measure a
 real Standard run at ~4.7 minutes, though that is a maxed-board LOWER BOUND, not proof of the
-~10.5 min target for an actual player's gradual build-up — nothing currently simulates that),
+~10.5 min target for an actual player's gradual build-up — `--play-sim` is the one that
+plays that out),
+`--play-sim` (the counterpart to `--fill-board`, and the harness that closed the hole the
+line above describes: it starts on `START_GOLD`, buys through the SAME functions a tap goes
+through — the placement rule, `_upgrade_tower()`, `_fuse_tower()` — so the simulated player
+can do nothing the real one cannot and can skip no rule they are subject to. It leaks lives
+and it loses, and the wave it dies on is the number to read. **It is a FLOOR, not an
+average**, and reading a result means remembering which player it is: cheapest useful
+purchase first, board before depth, the first free pad rather than the best one, no element
+chosen against the wave's armour, and it never sells. A human plays better than this, so a
+run it clears is not proof the run is easy — but a run it dies early in IS proof of a
+problem. It is what `FINAL_HP_FACTOR` 40 -> 55 and the Pure damage cut were read off),
 `--show-fusion-panel`
 (stands one Lv3 tower on an empty board with two elements unlocked and opens its panel, so
 the panel's `_draw` can be photographed without playing to an avatar boss
