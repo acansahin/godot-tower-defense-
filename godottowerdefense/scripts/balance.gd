@@ -303,7 +303,7 @@ const BASE_HP_FLAT := 225.0
 ## Cut from 120 to 40 in step with BASE_HP_FLAT going 75 -> 225, so the product is unchanged
 ## and wave STANDARD_WAVES still lands on exactly the HP it did. The per-wave ratio falls
 ## from 1.103 to 1.078: a flatter climb from a higher floor.
-const FINAL_HP_FACTOR := 40.0
+const FINAL_HP_FACTOR := 55.0
 
 ## The per-wave HP ratio, derived so wave STANDARD_WAVES lands on FINAL_HP_FACTOR. At 50
 ## waves this is 1.113, close to the map's own 1.16 — the run is longer, so each step is

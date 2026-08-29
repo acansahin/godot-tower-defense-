@@ -735,7 +735,13 @@ const FUSIONS := {
 	"earth+fire+nature+water": {
 		"name": "Pure", "names": ["Pure"],
 		"color": Color(1.0, 1.0, 0.95),
-		"damage_tiers": [91, 164, 291, 510, 910],
+		## Trimmed by a fifth (was [91, 164, 291, 510, 910]) after play showed Pure flattening the
+		## roster. Its DPS ran 5.1x the base elements against Dinosaur's 3.7 at the next tier —
+		## 38% clear of everything else — and it is ALSO chaos (no armour resists) and pierces
+		## (no immunity stops it) on the fastest interval of any fusion. Any one of those three
+		## makes it the apex; all three together deleted the matchup game, and `--play-sim`
+		## showed a board walking every tower to four elements. 4.0x still leads the roster.
+		"damage_tiers": [71, 129, 228, 400, 714],
 		"range": 571.429, "interval": 0.7,         # 200px = mean of all four
 		"ignores_matchup": true, "pierces_rules": true, "can_hit_flying": true,
 		"desc": "Pure damage. No armour, no immunity stops it",
