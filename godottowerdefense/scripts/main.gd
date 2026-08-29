@@ -24,6 +24,12 @@ var _shake: float = 0.0      ## Current camera shake magnitude in px; decays to 
 ## Harness only (--fill-board/--auto-pick): buy every fusion a tower is offered as soon as it
 ## is affordable, so an unattended run exercises the whole ladder up to Pure.
 var _auto_pick: bool = false
+## Harness only (`--play-sim`): drives the simulated player. See _play_sim().
+var _play_sim_on: bool = false
+var _sim_spend_clock: float = 0.0
+var _sim_next_element: int = 0
+## How often the simulated player checks whether it can afford anything, in game seconds.
+const SIM_SPEND_EVERY := 0.5
 ## Standard mode's one board (GAME_STRATEGY_V2.md §28 Phase 1: "1 harita", BUILD NEXT #8).
 ## `Game.use_board_for_wave()`'s 10-wave winding->spiral->s rotation (Game.BOARD_SEQUENCE)
 ## is now Endless-only infrastructure, unreached from here — same treatment step 4 gave
@@ -110,6 +116,8 @@ func _ready() -> void:
 	# this is no longer required just to keep a delayed `--shot:N` alive.
 	if OS.get_cmdline_user_args().has("--auto-pick"):
 		_auto_pick = true
+	if OS.get_cmdline_user_args().has("--play-sim"):
+		_play_sim()
 	if OS.get_cmdline_user_args().has("--dump-waves"):
 		_dump_waves()
 	if OS.get_cmdline_user_args().has("--dump-board"):
@@ -687,6 +695,114 @@ func _fill_board() -> void:
 		var painted := ResourceLoader.exists("res://assets/art/towers/%s_5.png" % key)
 		print("    %-12s x%d  art%s" % [key, int(tally[key]), "*" if painted else "-"])
 
+## Harness (`--play-sim`): plays the run the way a PLAYER does, and fills the one hole the
+## rest of the suite has always had. `--fill-board` grants itself a million gold and stands a
+## maxed tower on every pad, which measures the ceiling; nothing measured the thing the game
+## is actually tuned for, which is whether a run that has to EARN its board survives. Every
+## HP and cost note in `Balance` that says "sized against a budget, not a played run" was
+## written against this gap.
+##
+## It buys through the same functions a tap does — the placement rule, `_upgrade_tower()`,
+## `_fuse_tower()` — so the simulated player cannot do anything the real one cannot, and
+## cannot miss a rule they are subject to. It starts on START_GOLD, it leaks lives, and it
+## loses.
+##
+## THE POLICY IS DELIBERATELY MODEST, and reading a result means remembering which player it
+## is: cheapest useful purchase first, board before depth. It buys a base tower whenever a
+## pad is free, then the cheapest upgrade, then the cheapest fusion. It does not choose
+## elements against the wave's armour, it does not place for coverage (the pad it takes is
+## simply the first free one), and it never sells. So it is a FLOOR, not an average: a human
+## who reads the next wave and picks the matchup beats it. Tune so this player finishes
+## around the last wave and a good one finishes with room.
+func _play_sim() -> void:
+	_play_sim_on = true
+	_auto_pick = true
+	Engine.time_scale = 8.0
+	var start_ms := Time.get_ticks_msec()
+	var report := func(outcome: String) -> void:
+		await get_tree().process_frame
+		var elapsed := float(Time.get_ticks_msec() - start_ms) / 1000.0
+		print("--- PLAY-SIM %s: wave %d | lives %d | gold %d | %s | %.0fs ---"
+				% [outcome, Game.wave_reached, Game.lives, Game.gold, _sim_board(), elapsed])
+	Game.game_over.connect(func() -> void: report.call("LOST"))
+	Game.victory.connect(func() -> void: report.call("WON"))
+	wave_manager.wave_starting.connect(func(n: int) -> void:
+		print("  w%02d lives=%2d gold=%5d %s" % [n, Game.lives, Game.gold, _sim_board()]))
+
+## One line describing what the simulated player has built: how many towers, their total
+## levels, and how deep the fusion ladder has gone.
+func _sim_board() -> String:
+	var n := 0
+	var levels := 0
+	var elements := 0
+	for c in towers_root.get_children():
+		var t := c as Tower
+		if t == null:
+			continue
+		n += 1
+		levels += t.level
+		elements += t.elements.size()
+	return "towers=%d lv=%d el=%d" % [n, levels, elements]
+
+## Spends everything affordable, cheapest first, until nothing else can be bought. Called on
+## a clock rather than per wave because gold arrives from kills mid-wave, and a player does
+## not wait for the wave to end before spending it.
+func _sim_spend() -> void:
+	if Game.is_over:
+		return
+	for _i in 40:            # bounded: one tick cannot loop forever on a rounding bug
+		if not _sim_buy_one():
+			return
+
+## The single cheapest useful purchase, or false when nothing is affordable. Board first,
+## then depth — see the policy note on _play_sim().
+func _sim_buy_one() -> bool:
+	# 1. an empty pad, if one is left. Elements are cycled so the board does not come out
+	#    monochrome, which would make the armour matchup meaningless.
+	var kind := String(Game.TOWER_ORDER[_sim_next_element % Game.TOWER_ORDER.size()])
+	if Game.gold >= _cost(kind):
+		for spot in _buildable_lattice():
+			if not Game.can_build_at(spot, towers_root.get_children()):
+				continue
+			if not Game.spend_gold(_cost(kind)):
+				break
+			var t := TOWER.instantiate() as Tower
+			t.setup_def(kind)
+			t.position = spot
+			towers_root.add_child(t)
+			Game.towers_changed.emit()
+			_sim_next_element += 1
+			return true
+	# 2. the cheapest upgrade.
+	var best: Tower = null
+	var best_cost := 0
+	for c in towers_root.get_children():
+		var t := c as Tower
+		if t == null or not t.can_upgrade():
+			continue
+		var cost := t.upgrade_cost()
+		if cost <= Game.gold and (best == null or cost < best_cost):
+			best = t
+			best_cost = cost
+	if best != null:
+		_upgrade_tower(best)
+		return true
+	# 3. the cheapest fusion the avatar bosses have unlocked.
+	var fuse: Tower = null
+	var fuse_cost := 0
+	for c in towers_root.get_children():
+		var t := c as Tower
+		if t == null or not t.can_fuse():
+			continue
+		var cost := t.fusion_cost()
+		if cost <= Game.gold and (fuse == null or cost < fuse_cost):
+			fuse = t
+			fuse_cost = cost
+	if fuse != null:
+		_fuse_tower(fuse, String(fuse.available_elements()[0]))
+		return true
+	return false
+
 ## Every position a tower could stand, swept on the tower spacing. Used by --fill-board and
 ## by --dump-board, which need "the set of places you may build" now that the board no
 ## longer keeps one.
@@ -862,6 +978,11 @@ func _add_shake(amount: float) -> void:
 	_shake = maxf(_shake, amount)
 
 func _process(delta: float) -> void:
+	if _play_sim_on:
+		_sim_spend_clock -= delta
+		if _sim_spend_clock <= 0.0:
+			_sim_spend_clock = SIM_SPEND_EVERY
+			_sim_spend()
 	if _shake <= 0.0:
 		return
 	_shake = maxf(0.0, _shake - SHAKE_DECAY * delta)
