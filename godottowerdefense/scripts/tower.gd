@@ -140,6 +140,9 @@ var _aim_dir: Vector2 = Vector2.UP  ## Barrel direction, eased toward the target
 var _recoil: float = 0.0            ## 1 → 0 kick after firing.
 var _was_upgrade_ready: bool = false  ## Last frame's _upgrade_ready(); the badge redraws only when this flips.
 var _highlighted: bool = false      ## Hovered by the mouse: draw the range clearly.
+## Whether this tower's current art_key/level has a painted set. Kept by _recompute(); read
+## by _process() to decide whether the idle pulse needs a repaint out of an idle tower.
+var _painted: bool = false
 
 func _ready() -> void:
 	# Painted towers carry four to seven source pixels for every screen pixel they are drawn
@@ -471,6 +474,10 @@ func _recompute() -> void:
 	# zero, which would make _process fire on every single frame.
 	fire_interval = maxf(Balance.MIN_FIRE_INTERVAL, fire_interval)
 	_range_sq = tower_range * tower_range
+	# Cached here because it is _process(), not _draw(), that has to know: an idle painted
+	# tower has an animation to run and so cannot skip its repaint. Both inputs to it change
+	# only through this function — `level` on upgrade, `art_key()` on fusion.
+	_painted = Sprites.tower(art_key(), level) != null
 
 ## Gold returned when this tower is sold: everything sunk into it if it never got a shot
 ## off, most of it (Balance.SELL_REFUND) otherwise. See has_fired. `total_spent` includes
@@ -489,7 +496,10 @@ func _process(delta: float) -> void:
 		var to := target.global_position - global_position
 		if to.length() > 0.1:
 			_aim_dir = Vector2.from_angle(lerp_angle(_aim_dir.angle(), to.angle(), 0.2))
-	if _recoil > 0.0:
+	# Read BEFORE the decay: the frame recoil reaches exactly 0 is the frame that has to
+	# repaint, or a tower whose target died mid-kick stays parked in its squashed pose.
+	var kicking := _recoil > 0.0
+	if kicking:
 		_recoil = maxf(0.0, _recoil - delta * 6.0)
 	# An idle tower never repaints on its own, so the animated hint needs to ask for it.
 	# The `ready != _was_upgrade_ready` term gives a single repaint when affordability
@@ -497,8 +507,11 @@ func _process(delta: float) -> void:
 	# Every term here assumes a turret that tracks a target, so a behavior that animates
 	# without one gets its own say via wants_redraw().
 	var up_ready := _upgrade_ready()
-	if target != null or _recoil > 0.0 or up_ready or up_ready != _was_upgrade_ready \
-			or element == "fire" or _behavior.wants_redraw():
+	# `_painted` replaces what used to be `element == "fire"` here. That term existed for the
+	# brazier, the one painted set with a life of its own; every painted tower has an idle
+	# pulse now, so the term generalised rather than grew a second clause beside it.
+	if target != null or kicking or up_ready or up_ready != _was_upgrade_ready \
+			or _painted or _behavior.wants_redraw():
 		queue_redraw()
 	_was_upgrade_ready = up_ready
 	_behavior.tick(self, delta, target)
@@ -603,17 +616,16 @@ func fire_bolt(target: Enemy, damage_mult: float = 1.0) -> void:
 	p.chill_hit_mult = chill_hit_mult
 	p.setup(_projectile_origin(), target, damage * damage_mult)
 
-## Painted Fire towers have no swivelling barrel: their visible emitter is the brazier at
-## the top. Launching from the Node2D origin made every fireball appear at the masonry's
-## feet. Other tower families retain their established origin until their own painted
-## sockets are measured.
+## A painted tower has no swivelling barrel, so its shot has to be given a start point.
+## Launching from the Node2D origin puts it at the masonry's FEET — invisible while sprites
+## were short, and a clear mistake at 96px, where every bolt but Fire's crawled out from
+## under the building that fired it. `_emitter_local()` now answers for every set, measured
+## off each sprite, so an unpainted combination is the only caller left on the origin.
 func _projectile_origin() -> Vector2:
-	if elements.size() == 1 and element == "fire" and Sprites.tower(art_key(), level) != null:
-		var tier := clampi(level, 1, FIRE_FLAME_BASE_Y.size()) - 1
-		var socket := Vector2(0.0, (float(FIRE_FLAME_BASE_Y[tier])
-				- float(FIRE_FLAME_HEIGHT[tier]) * 0.42) * SPRITE_HEIGHT)
-		return to_global(socket)
-	return global_position
+	var art := Sprites.tower(art_key(), level)
+	if art == null:
+		return global_position
+	return to_global(_emitter_local(art))
 
 const Sprites := preload("res://scripts/sprites.gd")
 
@@ -630,8 +642,12 @@ const Sprites := preload("res://scripts/sprites.gd")
 ## both how far it must stand from the road and how near the top of the board it may go. See
 ## that constant for the pair it forms with Game.PAD_PITCH and for what a size change costs.
 const SPRITE_HEIGHT := Game.TOWER_SPRITE_HEIGHT
-const FIRE_EFFECT_FRAMES := 12
-const FIRE_EFFECT_FPS := 12.0
+# --- The brazier ----------------------------------------------------------------------
+## Radius of the glow pool in the bowl, as a fraction of FIRE_FLAME_HEIGHT — the height of the
+## painted flame that used to stand here, so the overlay is sized against a measurement rather
+## than against a fresh number with nothing behind it.
+const FIRE_GLOW_WIDTH := 0.30
+const FIRE_EMBERS := 3
 ## Bottom of the central brazier flame per painted Fire tier, as a FRACTION of the drawn
 ## sprite height, so the flame keeps sitting on its own brazier whatever SPRITE_HEIGHT is.
 ## They were measured in board px against the old per-level ladder (-38/78, -52/92, -69/106,
@@ -639,6 +655,88 @@ const FIRE_EFFECT_FPS := 12.0
 ## while only the flame changes pose.
 const FIRE_FLAME_BASE_Y: Array = [-0.487, -0.565, -0.651, -0.667, -0.652]
 const FIRE_FLAME_HEIGHT: Array = [0.436, 0.370, 0.321, 0.300, 0.304]
+
+# --- Water's pool and Nature's rune circle -------------------------------------------
+# The painted feature each of those two sets is built around, per tier, as
+# [cx, cy, rx, ry] FRACTIONS of the drawn sprite height measured from the ground anchor —
+# the same convention FIRE_FLAME_BASE_Y uses and for the same reason: the masonry stays
+# perfectly still while only the effect moves, and the numbers survive a change to
+# SPRITE_HEIGHT.
+#
+# MEASURED BY HAND off the sheets, as Fire's brazier was, and only after three attempts at
+# reading them automatically failed in three different ways. Worth writing down, because the
+# obvious tool here does not work: a classifier keyed on "blue" or "green" cannot tell the
+# pool from the tower's own banners and spillways, which are painted the same colour; one
+# keyed on the widest run is broken by the rim highlights that chop the pool into stripes;
+# and one keyed on row density lands on the CRYSTAL — dense, bright, exactly the right colour
+# and entirely the wrong object — at two tiers of five. What settled it was drawing candidate
+# rings onto the sheet and looking at them, which took one pass.
+const WATER_POOL: Array = [
+	[0.000, -0.630, 0.245, 0.058],
+	[0.000, -0.605, 0.220, 0.060],
+	[0.000, -0.720, 0.140, 0.040],
+	[-0.020, -0.758, 0.165, 0.045],
+	[0.010, -0.752, 0.158, 0.044],
+]
+const NATURE_RUNE: Array = [
+	[0.000, -0.650, 0.150, 0.045],
+	[0.000, -0.718, 0.170, 0.042],
+	[0.000, -0.740, 0.140, 0.038],
+	[0.000, -0.800, 0.130, 0.036],
+	[0.000, -0.790, 0.130, 0.036],
+]
+
+const WATER_RIPPLE_RINGS := 3
+const WATER_RIPPLE_PERIOD := 2.9  ## Seconds for one ring to travel from the middle to the rim.
+const NATURE_MOTES := 5
+const NATURE_MOTE_PERIOD := 3.4   ## Seconds for one spore to rise and fade out.
+const NATURE_RUNE_PERIOD := 6.5   ## Seconds for the rune glow to travel once around the ring.
+## How far a spore climbs, as a fraction of the drawn height. Kept just under the gap between
+## the rune ring and the top of the sprite: past that the motes leave the tower's own bounds,
+## and a tower on the top row of pads would sprinkle them into the HUD.
+const NATURE_MOTE_RISE := 0.20
+
+## How far the drawn sprite is nudged below its ground anchor, so the base overlaps the spot
+## the tower occupies rather than sitting behind it. Named because the emitter socket has to
+## agree with it: a muzzle flash measured off the sprite and drawn 10px above where the
+## sprite actually is floats free of the building it belongs to.
+const SPRITE_NUDGE_Y := 10.0
+
+# --- Showing that a painted tower fired ------------------------------------------------
+# EVERY painted tower was frozen while it shot. `_recoil` has always decayed 1 -> 0 after a
+# shot, but the only thing reading it was draw_barrel() — the CODE-ART fallback — and all 17
+# sets are painted now, so nothing on the board consumed it. A tower firing and a tower idle
+# were the same picture.
+#
+# The obvious fix, and the one tried first, was to move the BODY: shove the sprite back along
+# its aim and squash it into the base. Rejected on sight — these are stone buildings, and a
+# keep that rocks when it shoots reads as cardboard however small the offset is. The masonry
+# stays still and only the LIGHT moves, which is also what the painted Fire brazier does.
+
+## Recoil above which the muzzle flash is drawn — the same threshold draw_barrel() uses for
+## its own flash, so the painted path and the code-art path flash for the same handful of
+## frames.
+const MUZZLE_FROM := 0.55
+
+# --- The idle pulse -----------------------------------------------------------------
+# Fire has had a life of its own since its brazier was painted: it flickers whether or not
+# anything is on the road. Beside it the other sixteen sets read as statuary — a board with
+# nothing walking on it was a still photograph. This is a slow breath at the same emitter
+# the muzzle flash uses, so it reads as the tower's own crystal/font/forge being lit rather
+# than as a decoration stuck on top of it.
+#
+# Deliberately far below the flash: this must never be mistaken for a shot. It is the
+# difference between a lit building and a firing one, and if the two are confusable the
+# flash stops carrying information.
+const IDLE_PULSE_PERIOD := 2.6   ## Seconds for one full breath.
+const IDLE_PULSE_ALPHA := 0.15   ## Peak alpha of the glow, against the flash's 0.55.
+const IDLE_PULSE_RADIUS := 11.0  ## Peak radius in px.
+## Where a shot leaves a painted tower, as a fraction of how tall the sprite actually STANDS.
+## Measured off the art rather than written down per set: `Sprites.figure_height()` already
+## knows the drawn height of each texture, so a squat mound fires low and a spire fires high,
+## and a repaint re-derives it with nothing here to update. Fire is the exception — its
+## emitter is the brazier, whose height it already carries per tier above.
+const EMITTER_FRACTION := 0.72
 
 func _draw() -> void:
 	# Range indicator in the element's colour: quiet by default so a full board stays
@@ -654,11 +752,23 @@ func _draw() -> void:
 	var art := Sprites.tower(art_key(), level)
 	if art != null:
 		_draw_sprite(art)
-		# The animated brazier belongs to the painted FIRE set specifically. A Steam tower
-		# built out of a Fire tower still reports element == "fire", so gating on the element
-		# alone would light a fire on top of a waterworks.
-		if elements.size() == 1 and element == "fire":
-			_draw_fire_flame()
+		# Each painted base set is built around ONE feature that should be alive: Fire's
+		# brazier, Water's pool, Nature's rune circle. Earth has none — it is a quarry, and
+		# the right answer for a pile of rock is that it sits there.
+		#
+		# Gated on a single element, never on the element field alone. A Steam tower built out
+		# of a Fire tower still reports element == "fire", so the looser test would light a
+		# fire on top of a waterworks — and now also ripple a pool on top of a forge.
+		var ambient := element if elements.size() == 1 else ""
+		match ambient:
+			"fire": _draw_fire_flame()
+			"water": _draw_water_ripples()
+			"nature": _draw_nature_motes()
+		# Fire's own fire IS its idle animation, and the pulse sits on the very brazier the
+		# flame stands in — on that one set the two are the same light drawn twice.
+		if ambient != "fire":
+			_draw_idle_pulse(art)
+		_draw_muzzle_flash(art)
 		_draw_level_pips(element_color.lightened(0.35))
 		_draw_element_dots()
 		return
@@ -697,35 +807,140 @@ func _draw_sprite(art: Texture2D) -> void:
 	# Nudged down a little: the anchor is the sprite's lowest pixel, and letting the base
 	# overlap the ground point slightly is what makes it read as standing ON the board
 	# rather than behind it.
-	where.position.y += 10.0
+	where.position.y += SPRITE_NUDGE_Y
+	# Nothing here reads _recoil: the building itself never moves. See MUZZLE_FROM.
 	draw_texture_rect(art, where, false)
 
-## Animated overlay for the Fire tower's central brazier. Every pose keeps the shared canvas
-## produced by the cutter, so a wider flame remains wider instead of being squeezed into the
-## first frame's proportions. Lightweight procedural sparks bridge the discrete poses.
+## Water's basin, kept moving: rings expand from the middle of the pool and fade at the rim.
+##
+## This is the painting continuing rather than a new thing laid over it — every Water tier has
+## concentric ripples drawn into its pool already, and the still image was of a fountain that
+## had stopped. The pool is a circle seen in perspective, so the whole draw is squashed on y
+## and the rings themselves are plain arcs; `draw_arc` can do that and cannot do an ellipse.
+func _draw_water_ripples() -> void:
+	var row: Array = WATER_POOL[clampi(level, 1, WATER_POOL.size()) - 1]
+	var centre := Vector2(float(row[0]), float(row[1])) * SPRITE_HEIGHT
+	var rx := float(row[2]) * SPRITE_HEIGHT
+	var ry := float(row[3]) * SPRITE_HEIGHT
+	draw_set_transform(centre, 0.0, Vector2(1.0, ry / rx))
+	var t := Time.get_ticks_msec() * 0.001 + float(get_instance_id() % 61) * 0.047
+	for i in WATER_RIPPLE_RINGS:
+		var p := fposmod(t / WATER_RIPPLE_PERIOD + float(i) / WATER_RIPPLE_RINGS, 1.0)
+		# Fades IN off the middle as well as out at the rim. A ring that arrived at full
+		# strength on a point read as a drip landing, which is a different fountain.
+		draw_arc(Vector2.ZERO, rx * p, 0.0, TAU, 30,
+				Color(0.78, 0.94, 1.0, sin(p * PI) * 0.34), maxf(1.0, 2.6 * (1.0 - p)), true)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+## Nature's rune circle, kept turning, and the spores coming off it.
+##
+## Two motions rather than one, because the ring on its own reads as a lamp on a timer. What
+## says "alive" is something LEAVING the tower, so the drifting motes are the point and the
+## sweeping rune is the thing that gives them somewhere to come from.
+func _draw_nature_motes() -> void:
+	var row: Array = NATURE_RUNE[clampi(level, 1, NATURE_RUNE.size()) - 1]
+	var centre := Vector2(float(row[0]), float(row[1])) * SPRITE_HEIGHT
+	var rx := float(row[2]) * SPRITE_HEIGHT
+	var ry := float(row[3]) * SPRITE_HEIGHT
+	var phase := float(get_instance_id() % 83) * 0.0757
+	var t := Time.get_ticks_msec() * 0.001 + phase
+	# A bright fifth of the ring, sweeping round the rune the art already painted there.
+	draw_set_transform(centre, 0.0, Vector2(1.0, ry / rx))
+	var head := fposmod(t / NATURE_RUNE_PERIOD, 1.0) * TAU
+	draw_arc(Vector2.ZERO, rx * 0.82, head, head + TAU * 0.22, 18,
+			Color(0.62, 1.0, 0.48, 0.30), 2.4, true)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	for i in NATURE_MOTES:
+		var p := fposmod(t / NATURE_MOTE_PERIOD + float(i) / NATURE_MOTES, 1.0)
+		var around := phase * 7.0 + float(i) * TAU / NATURE_MOTES
+		var from := Vector2(cos(around) * rx * 0.7, sin(around) * ry * 0.7)
+		var drift := sin(t * 1.3 + float(i) * 2.2) * SPRITE_HEIGHT * 0.035
+		# Fades in as well as out: a mote that appeared at full strength on the stonework
+		# read as a dead pixel on the screen rather than as something the tower let go of.
+		draw_circle(centre + from + Vector2(drift, -p * SPRITE_HEIGHT * NATURE_MOTE_RISE),
+				lerpf(2.4, 0.7, p), Color(0.66, 1.0, 0.52, sin(p * PI) * 0.75))
+
+## The slow breath at the emitter that keeps an idle painted tower from reading as a statue.
+## Phase-shifted by the instance id so a row of towers does not pulse in unison — which is
+## the failure the same trick already guards against in _draw_fire_flame().
+func _draw_idle_pulse(art: Texture2D) -> void:
+	var phase := float(get_instance_id() % 71) * 0.0885
+	var breath := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.001 * TAU / IDLE_PULSE_PERIOD
+			+ phase)
+	var ec := element_color
+	var at := _emitter_local(art)
+	draw_circle(at, IDLE_PULSE_RADIUS * (0.62 + 0.38 * breath),
+			Color(ec.r, ec.g, ec.b, IDLE_PULSE_ALPHA * (0.45 + 0.55 * breath)))
+
+## The shot leaving a painted tower: a bloom of the element's own colour at the emitter,
+## over the handful of frames after firing. The code-art fallback has always had one (see
+## draw_barrel), so this is the painted path catching up rather than a new idea.
+func _draw_muzzle_flash(art: Texture2D) -> void:
+	if _recoil <= MUZZLE_FROM:
+		return
+	var f: float = (_recoil - MUZZLE_FROM) / (1.0 - MUZZLE_FROM)
+	var at := _emitter_local(art)
+	var ec := element_color
+	draw_circle(at, 9.0 + 15.0 * f, Color(ec.r, ec.g, ec.b, 0.22 * f))
+	draw_circle(at, 5.0 + 7.0 * f, Color(ec.r, ec.g, ec.b, 0.55 * f))
+	draw_circle(at, 2.5 + 3.0 * f, Color(1.0, 1.0, 1.0, 0.65 * f))
+
+## Where this tower's shot leaves it, in tower-local pixels. One answer shared by the muzzle
+## flash and by the projectile's own start point, so the bolt and the flash cannot drift
+## apart — which is exactly what happened while only Fire had a socket and every other
+## element launched from `global_position`, i.e. from the tower's feet.
+func _emitter_local(art: Texture2D) -> Vector2:
+	# Painted Fire's visible emitter is the brazier, whose height is measured per tier.
+	if elements.size() == 1 and element == "fire":
+		var tier := clampi(level, 1, FIRE_FLAME_BASE_Y.size()) - 1
+		return Vector2(0.0, (float(FIRE_FLAME_BASE_Y[tier])
+				- float(FIRE_FLAME_HEIGHT[tier]) * 0.42) * SPRITE_HEIGHT)
+	var scale := SPRITE_HEIGHT / art.get_size().y
+	return Vector2(0.0,
+			SPRITE_NUDGE_Y - Sprites.figure_height(art) * scale * EMITTER_FRACTION)
+
+## The Fire tower's brazier.
+##
+## Far less is drawn here than either the painted twelve-frame flame or the code-drawn tongues
+## that first replaced it, and the reason is worth writing down because it is invisible from
+## the code: THE FIRE TOWER SPRITE ALREADY HAS A FIRE PAINTED INTO IT. Every tier's bowl
+## carries a burning flame and a white smoke plume, in the art. So the painted animation was a
+## second flame stacked on the first — and so were the tongues — which is why Fire kept reading
+## as hotter than every other tower no matter what the overlay's size was set to. The overlay
+## was never the problem; drawing a flame at all was.
+##
+## What is left is the one thing a painting cannot do: make the light MOVE. A breathing pool of
+## glow in the bowl and a few embers off the top — the same weight as Water's ripples on its
+## painted pool and Nature's sweep on its painted rune. In all three the ART says what the
+## element is, and the code only says it is alive.
+##
+## FIRE_FLAME_BASE_Y and FIRE_FLAME_HEIGHT survive every one of these rewrites: they measure
+## where each tier's brazier sits and how much room its fire has, which is a fact about the
+## masonry rather than about whatever is filling it this month.
 func _draw_fire_flame() -> void:
 	var tier := clampi(level, 1, FIRE_FLAME_BASE_Y.size()) - 1
-	var height: float = float(FIRE_FLAME_HEIGHT[tier]) * SPRITE_HEIGHT
+	var full: float = float(FIRE_FLAME_HEIGHT[tier]) * SPRITE_HEIGHT
 	var base_y: float = float(FIRE_FLAME_BASE_Y[tier]) * SPRITE_HEIGHT
-	var frame_phase := float(get_instance_id() % FIRE_EFFECT_FRAMES)
-	var frame := int(floor(Time.get_ticks_msec() * 0.001 * FIRE_EFFECT_FPS + frame_phase)) \
-			% FIRE_EFFECT_FRAMES
-	var flame := Sprites.effect("fire_flame", frame)
-	if flame == null:
-		return
-	var width := height * flame.get_width() / flame.get_height()
-	var where := Rect2(Vector2(-width * 0.5, base_y - height), Vector2(width, height))
-	draw_circle(Vector2(0.0, base_y - height * 0.26), height * 0.36,
-			Color(1.0, 0.22, 0.025, 0.10))
-	draw_texture_rect(flame, where, false, Color(1.0, 1.0, 1.0, 0.88))
-	var phase := float(get_instance_id() % 97) * 0.071
+	var width := full * FIRE_GLOW_WIDTH
+	var phase := float(get_instance_id() % 89) * 0.0706
 	var t := Time.get_ticks_msec() * 0.001 + phase
-	for i in 3:
-		var spark_p := fposmod(t * (0.72 + i * 0.11) + phase + i * 0.31, 1.0)
-		var spark_x := sin(t * (4.2 + i) + i * 2.1) * height * (0.10 + spark_p * 0.10)
-		var spark_y := base_y - height * (0.42 + spark_p * 0.88)
-		draw_circle(Vector2(spark_x, spark_y), height * (0.038 - spark_p * 0.018),
-				Color(1.0, 0.62 + spark_p * 0.25, 0.12, 0.85 * (1.0 - spark_p)))
+	# Two rates that do not divide into one another, so the bowl never settles into the
+	# obvious beat a single sine gives it.
+	var breath := 0.72 + 0.18 * sin(t * 2.3) + 0.10 * sin(t * 5.7)
+	# Squashed, so the light lies IN the bowl rather than hovering as a ball above it.
+	draw_set_transform(Vector2(0.0, base_y), 0.0, Vector2(1.0, 0.42))
+	draw_circle(Vector2.ZERO, width * 1.75 * breath, Color(1.0, 0.30, 0.04, 0.15))
+	draw_circle(Vector2.ZERO, width * 0.98 * breath, Color(1.0, 0.58, 0.12, 0.26))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	# Embers, on the same rise-and-fade the Nature spores use — which is the point: the three
+	# ambients are one idea in three colours.
+	for i in FIRE_EMBERS:
+		var p := fposmod(t * 0.55 + float(i) / FIRE_EMBERS, 1.0)
+		var x := sin(t * (3.1 + float(i)) + float(i) * 2.4) * width * 0.5
+		# Kept low. Reaching further cleared the tower's own height and read as a plume
+		# standing over the brazier — next to the one the art already paints there.
+		draw_circle(Vector2(x, base_y - full * (0.40 + p * 0.45)),
+				lerpf(1.8, 0.6, p), Color(1.0, 0.66, 0.16, sin(p * PI) * 0.85))
 
 ## The classic turret: barrel + element orb, aimed at the target and kicked back while
 ## firing. Public because BoltBehavior draws it; kept here rather than in the behavior

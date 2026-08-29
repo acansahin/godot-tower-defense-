@@ -6,17 +6,17 @@ extends Node2D
 ## processing) instead of new()/queue_free() removes a lot of node churn on busy waves.
 ##
 ## FloatingText / DeathBurst have class_name, so they are built with their global
-## constructors here. FrostRing and FireImpact have none (they are preloaded), so they are
+## constructors here. FrostRing and ImpactBurst have none (they are preloaded), so they are
 ## typed loosely. Every effect routes its own spawn() helper through this pool.
 
 const SOFT_CAP := 512  ## Idle instances kept per type; any freed past this are actually released.
 const FrostRing := preload("res://scripts/frost_ring.gd")
-const FireImpact := preload("res://scripts/fire_impact.gd")
+const ImpactBurst := preload("res://scripts/impact_burst.gd")
 
 var _free_text: Array[FloatingText] = []
 var _free_burst: Array[DeathBurst] = []
 var _free_frost: Array = []  ## FrostRing has no class_name, so this stays untyped.
-var _free_fire_impact: Array = []  ## FireImpact is also preloaded, not globally named.
+var _free_impact: Array = []  ## ImpactBurst is also preloaded, not globally named.
 
 func acquire_text() -> FloatingText:
 	var t: FloatingText
@@ -78,22 +78,22 @@ func recycle_frost(f) -> void:
 		return
 	_free_frost.append(f)
 
-func acquire_fire_impact():
+func acquire_impact():
 	var f
-	if _free_fire_impact.is_empty():
-		f = FireImpact.new()
+	if _free_impact.is_empty():
+		f = ImpactBurst.new()
 		f.pool = self
 		add_child(f)
 	else:
-		f = _free_fire_impact.pop_back()
+		f = _free_impact.pop_back()
 		f.visible = true
 		f.set_process(true)
 	return f
 
-func recycle_fire_impact(f) -> void:
+func recycle_impact(f) -> void:
 	f.set_process(false)
 	f.visible = false
-	if _free_fire_impact.size() >= SOFT_CAP:
+	if _free_impact.size() >= SOFT_CAP:
 		f.queue_free()
 		return
-	_free_fire_impact.append(f)
+	_free_impact.append(f)

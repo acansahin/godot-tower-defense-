@@ -5,12 +5,23 @@ class_name Projectile
 ## slow / poison debuffs. Configured by the firing tower; drawn as a coloured bolt.
 
 const FrostRing := preload("res://scripts/frost_ring.gd")  ## Ice's area-slow impact visual.
-const FireImpact := preload("res://scripts/fire_impact.gd")
-const Sprites := preload("res://scripts/sprites.gd")
-const FIREBALL_FRAMES := 12
-const FIREBALL_FPS := 18.0
-const FIRE_ARC_HEIGHT := 22.0
-const FIRE_BIRTH_TIME := 0.09
+const ImpactBurst := preload("res://scripts/impact_burst.gd")
+## Fire's impact keeps its own hot core and its falling embers; every other element gets the
+## same burst tinted with its own colour, smaller, and with the gravity off.
+const FIRE_IMPACT_COLOR := Color(1.0, 0.43, 0.035)
+const FIRE_IMPACT_GRAVITY := 14.0
+## Sized down from Fire's: a Water tower fires several times a second, and a full-size bloom
+## on every one of those hits buries the creeps under it.
+const IMPACT_SCALE := 0.7
+## How high each element's shot RISES on the way over, in px, and drawn-only — see _draw().
+## An element absent from the table flies flat.
+const ARC_HEIGHT := {"fire": 22.0, "earth": 28.0}
+const BIRTH_TIME := 0.09
+## How far the fire bolt's body reaches behind its head. Close to the plain bolt's own 24px
+## tail on purpose: a fireball may be the chunkier of the two, but the twelve-frame painted
+## one used to be in a different weight class from every other element's shot, and matching
+## the family is the point of this drawing.
+const FIRE_TRAIL_LONG := 30.0
 
 var speed: float = 630.0  ## px/s. Scales with tower range so flight *time* stays constant.
 var damage: float = 10.0
@@ -101,9 +112,13 @@ func _recycle() -> void:
 		queue_free()
 
 func _process(delta: float) -> void:
-	if element == "fire":
-		_visual_time += delta
-		queue_redraw()
+	# Every element's bolt animates now — a wavering flame tail, a breaking stream, a spinning
+	# leaf, a tumbling rock — so the clock runs for all of them and the repaint is
+	# unconditional. It used to be Fire's alone, and every other bolt was drawn exactly once:
+	# setting `rotation` below re-renders the cached commands under a new transform, it does
+	# not re-run _draw().
+	_visual_time += delta
+	queue_redraw()
 	# Target may have died mid-flight.
 	if not is_instance_valid(_target):
 		_recycle()
@@ -133,7 +148,9 @@ func _hit(target: Enemy) -> void:
 	if crack_spread_radius > 0.0 and crack_time > 0.0:
 		_apply_crack_splash(target, impact)
 	if element == "fire":
-		FireImpact.spawn(self, impact)
+		ImpactBurst.spawn(self, impact, FIRE_IMPACT_COLOR, 1.0, FIRE_IMPACT_GRAVITY)
+	else:
+		ImpactBurst.spawn(self, impact, color, IMPACT_SCALE)
 	_recycle()
 
 ## This bolt's damage multiplier against `enemy`'s armour. The one place the fusion ladder
@@ -289,35 +306,121 @@ func _apply_crack_splash(main_target: Enemy, center: Vector2) -> void:
 		if center.distance_squared_to(enemy.global_position) <= radius_sq:
 			enemy.apply_crack(crack_bonus, crack_time)
 
+## The bolt. Every element throws its own thing, and the whole point of the four shapes is
+## that they are told apart by SILHOUETTE: a fire leaf, a water slug, a spinning leaf and a
+## tumbling rock. Colour cannot do that job here — a fused tower is tinted with the fusion's
+## colour, so on a busy board the same green can be Nature, Roots or Dinosaur.
+##
+## The SHAPE comes from `element`, which a tower keeps from what it was BUILT as and never
+## changes when it fuses; the COLOUR comes from what it became. So a Steam tower raised out of
+## a Water tower still throws water, in Steam's colour. That was already the rule while Fire
+## was the only element with a shot of its own; it is only visible now that all four have one.
+##
+## In this node's local frame +x is the direction of travel (`rotation` is set to the bearing
+## every frame), so everything trailing is drawn at -x.
 func _draw() -> void:
-	if element == "fire":
+	# A drawn-only arc. Collision keeps following the straight homing path, so lobbing a shot
+	# can never miss a fast target or shift a tower's balance. Fire lobs and Earth lobs harder
+	# — it is throwing a rock — while Water is a jet and Nature glides, so both of those stay
+	# flat and get 0 from the table.
+	var arc: float = ARC_HEIGHT.get(element, 0.0)
+	var offset := Vector2.ZERO
+	if arc > 0.0:
 		var progress := clampf(_travelled / _flight_length, 0.0, 1.0)
-		# Collision continues along the established homing path. Only the rendered fireball
-		# rises, so the arc cannot miss a fast target or change tower balance.
-		var arc_offset := Vector2(0.0, -sin(progress * PI) * FIRE_ARC_HEIGHT).rotated(-rotation)
-		var birth := clampf(_visual_time / FIRE_BIRTH_TIME, 0.0, 1.0)
-		draw_set_transform(arc_offset, 0.0, Vector2.ONE * birth)
-		# Continuous trail/core carry the silhouette between the discrete painted poses.
-		draw_colored_polygon(PackedVector2Array([
-			Vector2(-2.0, -7.0), Vector2(-2.0, 7.0), Vector2(-38.0, 0.0),
-		]), Color(1.0, 0.24, 0.025, 0.25))
-		for i in 4:
-			var trail_x := -10.0 - i * 7.5
-			var trail_y := sin(_visual_time * (13.0 + i) + i * 1.9) * (1.5 + i * 0.7)
-			draw_circle(Vector2(trail_x, trail_y), 4.2 - i * 0.62,
-					Color(1.0, 0.38 + i * 0.07, 0.04, 0.31 - i * 0.05))
-		var frame := int(floor(_visual_time * FIREBALL_FPS)) % FIREBALL_FRAMES
-		var fireball := Sprites.effect("fireball", frame)
-		if fireball != null:
-			draw_texture_rect(fireball, Rect2(-Vector2(25.0, 11.0), Vector2(50.0, 22.0)),
-					false, Color(1.0, 1.0, 1.0, 0.78))
-		draw_circle(Vector2(2.0, 0.0), 10.0, Color(1.0, 0.18, 0.02, 0.20))
-		draw_circle(Vector2(2.0, 0.0), 6.2, Color(1.0, 0.48, 0.05, 0.82))
-		draw_circle(Vector2(0.8, -1.8), 2.8, Color(1.0, 1.0, 0.70, 0.88))
-		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-		return
-	# The node rotates toward its target, so local -x is "behind": draw a tapered
-	# trail there, a soft glow, then the bright coloured core.
+		offset = Vector2(0.0, -sin(progress * PI) * arc).rotated(-rotation)
+	# Bolts come out of a pool, so without this they appear at full size on their first frame
+	# and pop. Growing over the first fraction of a second hides the seam.
+	var birth := clampf(_visual_time / BIRTH_TIME, 0.0, 1.0)
+	match element:
+		"fire": _draw_fire_bolt(offset, birth)
+		"water": _draw_water_bolt(offset, birth)
+		"nature": _draw_nature_bolt(offset, birth)
+		"earth": _draw_earth_bolt(offset, birth)
+		_: _draw_plain_bolt(offset, birth)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+## Fire: a tapered leaf lying on its side — the SAME shape the tower's brazier is built from,
+## turned through ninety degrees. Three nested copies give it depth, exactly as on the tower.
+func _draw_fire_bolt(offset: Vector2, birth: float) -> void:
+	draw_set_transform(offset, 0.0, Vector2.ONE * birth)
+	_draw_flame_body(FIRE_TRAIL_LONG, 7.4, Color(1.0, 0.26, 0.03, 0.30))
+	_draw_flame_body(FIRE_TRAIL_LONG * 0.62, 5.0, Color(1.0, 0.55, 0.09, 0.55))
+	_draw_flame_body(FIRE_TRAIL_LONG * 0.30, 3.0, Color(1.0, 0.88, 0.42, 0.75))
+	draw_circle(Vector2.ZERO, 8.2, Color(1.0, 0.30, 0.03, 0.26))
+	draw_circle(Vector2.ZERO, 5.4, Color(1.0, 0.58, 0.08, 0.92))
+	draw_circle(Vector2(-0.6, -1.6), 2.5, Color(1.0, 0.96, 0.70, 0.95))
+
+## Water: a thrown slug of water with the stream breaking up behind it. Blunt and heavy-headed
+## where Fire's is pointed and tapered, which is the whole difference at 20px and in motion.
+func _draw_water_bolt(offset: Vector2, birth: float) -> void:
+	var c := color
+	var wob := sin(_visual_time * 21.0)
+	# Squashed across the flight line: the head reads as pushed flat by the air it is crossing.
+	draw_set_transform(offset, 0.0, Vector2(1.16, 0.86) * birth)
+	draw_circle(Vector2.ZERO, 11.0, Color(c.r, c.g, c.b, 0.22))
+	draw_circle(Vector2.ZERO, 7.2, c)
+	draw_circle(Vector2(-1.8, -2.4), 3.0, Color(1.0, 1.0, 1.0, 0.62))
+	draw_set_transform(offset, 0.0, Vector2.ONE * birth)
+	# Droplets shed behind it, each smaller and further off the line than the last. They wobble
+	# together rather than independently — one stream coming apart, not three separate shots.
+	for i in 3:
+		var f := float(i)
+		draw_circle(Vector2(-9.0 - f * 7.0, wob * (1.4 + f * 1.5)), 4.4 - f * 1.1,
+				Color(c.r, c.g, c.b, 0.62 - f * 0.15))
+
+## Nature: a leaf turning over as it flies, paying out a vine behind it. The node is already
+## rotated onto the flight line, so the spin rides on top of that and the leaf tumbles along
+## its own path rather than about the screen.
+func _draw_nature_bolt(offset: Vector2, birth: float) -> void:
+	var c := color
+	# Vine first, so the leaf sits over the end of it.
+	draw_set_transform(offset, 0.0, Vector2.ONE * birth)
+	var prev := Vector2.ZERO
+	for i in range(1, 5):
+		var f := float(i)
+		var to := Vector2(-f * 7.0, sin(_visual_time * 13.0 - f * 0.9) * f * 1.7)
+		draw_line(prev, to, Color(c.r * 0.55, c.g * 0.85, c.b * 0.45, 0.58 - f * 0.11),
+				2.6 - f * 0.4)
+		prev = to
+	draw_set_transform(offset, _visual_time * 9.0, Vector2.ONE * birth)
+	# A pointed oval: six points is enough for a leaf at this size, and the two sharp ends are
+	# the only part the eye actually reads.
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(9.0, 0.0), Vector2(3.0, -4.6), Vector2(-3.0, -4.2),
+		Vector2(-9.0, 0.0), Vector2(-3.0, 4.2), Vector2(3.0, 4.6),
+	]), c)
+	draw_line(Vector2(-7.6, 0.0), Vector2(7.6, 0.0), Color(1.0, 1.0, 1.0, 0.42), 1.4)
+
+## Earth: a rock, tumbling, trailing the dust it knocked loose. Angular on purpose — the other
+## three shots are built entirely out of curves, so flat facets are what identifies this one
+## before its colour is even registered.
+func _draw_earth_bolt(offset: Vector2, birth: float) -> void:
+	var c := color
+	draw_set_transform(offset, 0.0, Vector2.ONE * birth)
+	for i in 3:
+		var f := float(i)
+		draw_circle(Vector2(-10.0 - f * 6.5, sin(_visual_time * 9.0 + f * 2.0) * (1.5 + f)),
+				4.6 - f * 0.9, Color(c.r * 0.85, c.g * 0.80, c.b * 0.72, 0.30 - f * 0.07))
+	draw_set_transform(offset, _visual_time * 6.0, Vector2.ONE * birth)
+	var body := PackedVector2Array([
+		Vector2(8.4, -1.6), Vector2(4.0, -7.4), Vector2(-3.2, -7.0), Vector2(-8.0, -1.2),
+		Vector2(-5.6, 5.8), Vector2(1.8, 8.0), Vector2(7.4, 4.2),
+	])
+	draw_colored_polygon(body, c.darkened(0.18))
+	# One lit facet. Without it a spinning rock is a spinning blob — the turn is only visible
+	# because something on the surface catches the light and moves.
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(8.4, -1.6), Vector2(4.0, -7.4), Vector2(-3.2, -7.0), Vector2(0.6, -1.0),
+	]), c.lightened(0.30))
+	var outline := body.duplicate()
+	outline.append(body[0])
+	draw_polyline(outline, Color(0.0, 0.0, 0.0, 0.45), 1.4)
+
+## The bolt every element had before it had one of its own. Unreachable from the shipped roster
+## — Game.TOWER_DEFS has exactly the four elements above — and kept as the match's default so a
+## fifth element added later draws something rather than nothing while its shape is designed.
+func _draw_plain_bolt(offset: Vector2, birth: float) -> void:
+	draw_set_transform(offset, 0.0, Vector2.ONE * birth)
 	draw_colored_polygon(PackedVector2Array([
 		Vector2(0, -6), Vector2(0, 6), Vector2(-24, 0),
 	]), Color(color.r, color.g, color.b, 0.30))
@@ -325,3 +428,22 @@ func _draw() -> void:
 	draw_circle(Vector2.ZERO, 7.5, color)
 	draw_circle(Vector2(-2.2, -2.2), 3.0, Color(1, 1, 1, 0.6))               # highlight
 	draw_arc(Vector2.ZERO, 7.5, 0.0, TAU, 12, Color(0, 0, 0, 0.4), 1.5, true)
+
+## One tapered flame body lying along the bolt's own -x: `length` behind the head, `half` tall
+## at it. Seven points rather than the triangle the plain bolt uses, because the taper is what
+## makes it fire — a triangle of the same size is a dart.
+##
+## The tail wavers on one sine. That waver is the whole reason the painted twelve frames can
+## go: what the animation actually bought at this size was a tail that did not look welded on,
+## and a flying bolt is on screen for well under a second.
+func _draw_flame_body(length: float, half: float, col: Color) -> void:
+	var wag := sin(_visual_time * 17.0) * half * 0.45
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(0.0, -half),
+		Vector2(-length * 0.30, -half * 0.86),
+		Vector2(-length * 0.70, -half * 0.34 + wag),
+		Vector2(-length, wag),
+		Vector2(-length * 0.70, half * 0.34 + wag),
+		Vector2(-length * 0.30, half * 0.86),
+		Vector2(0.0, half),
+	]), col)
