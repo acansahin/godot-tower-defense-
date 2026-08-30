@@ -115,10 +115,12 @@ const MIN_FIRE_INTERVAL := 0.05
 ## 0.35 puts Water/Nature/Earth at 262px, which is where our four towers already sat, so
 ## the familiar elements do not move. Fire lands at 175px — short, which is its identity.
 ## Light and Darkness would land at 700px; MAX_TOWER_RANGE below is what stops them.
-## DEPARTURE, raised from 0.35 when the board went from 47 build spots to 12 (Game.PAD_PITCH,
-## widened so towers could be drawn 60% larger). Twelve towers watch less road than
-## forty-seven, and a creep on road no tower can reach is never shot whatever the damage is,
-## so reach had to be restored before damage was worth touching.
+## DEPARTURE, raised from 0.35 when the board's usable spots collapsed. The cause has since
+## been removed - a lattice of marked pads held the winding board to 12 spots, and placement
+## is free again - but the raise stays, because it was never really about the pads: a creep
+## on road no tower can reach is never shot whatever the damage is, so reach had to be
+## restored before damage was worth touching, and 0.45 is simply the honest reach for this
+## board. Re-measure with `--dump-board` rather than reverting it on principle.
 ##
 ## Measured against the 47-tower coverage (86/79/87/85% of the road reachable for
 ## water/fire/nature/earth): 0.45 gives 88/82/89/87 and leaves one tower watching 31% of the
@@ -165,15 +167,18 @@ const WC3_RANGE_SCALE := 0.45
 ## have the same problem for the same reason.
 const MAX_TOWER_RANGE := 300.0
 
-## Every tower's damage, multiplied once. A DELIBERATE DEPARTURE from the port, and the
-## counterweight to the board holding 12 towers instead of 47.
+## Every tower's damage, multiplied once. A DELIBERATE DEPARTURE from the port, raised when
+## the board briefly held only 12 towers instead of 47.
 ##
-## The board was respaced so towers could be drawn at the size the painted art wants
-## (Game.PAD_PITCH, Game.TOWER_SPRITE_HEIGHT), and that took the build spots from 47 to 12.
+## **That premise is gone and this number is now suspect.** The pad lattice it was set
+## against has been removed and placement is free, so the board carries far more towers than
+## 12 again - `--dump-board` reports the current figure. 4.2 was the value that let twelve
+## towers clear the last wave; at three times that many it is very likely too generous.
+##
 ## A maxed board clearing the LAST wave is the game's minimum bar - `--fill-board` is the
 ## gate - and it is a real gate rather than a formality: 47 towers cleared wave 50, while 28
 ## died on 46 and 25 on 47 with no compensation at all, and at 12 towers 3.5 still died on
-## 48. 4.2 clears it.
+## 48. Re-run BOTH `--fill-board` and `--play-sim` before trusting this.
 ##
 ## It lives here rather than in the fifteen `damage_tiers` arrays for three reasons: those
 ## arrays are the roster's IDENTITY and their ratios are what make Clay the hardest dual and

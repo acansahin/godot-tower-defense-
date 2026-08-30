@@ -575,7 +575,12 @@ func fire_bolt(target: Enemy, damage_mult: float = 1.0) -> void:
 		_proj_pool = get_tree().current_scene.get_node("Projectiles")
 	var p := _proj_pool.acquire() as Projectile
 	p.color = element_color
-	p.element = element
+	# What the bolt DRAWS as, and it is art_key() rather than `element` on purpose: `element`
+	# is what this tower was BUILT as and never changes when it fuses, so passing it made a
+	# Steam tower raised out of Fire throw a flame leaf while the one raised out of Water threw
+	# a water slug. art_key() is the tower's current identity — the same key its painted set is
+	# filed under, so the shot and the building can never name different towers.
+	p.shape = art_key()
 	p.elements = elements
 	p.ignores_matchup = ignores_matchup
 	p.pierces_rules = pierces_rules
@@ -640,7 +645,7 @@ const Sprites := preload("res://scripts/sprites.gd")
 ## The number itself lives in `Game.TOWER_SPRITE_HEIGHT`, because the PLACEMENT RULE has to
 ## see it - a tower is hung from its ground anchor and drawn upward, so its height decides
 ## both how far it must stand from the road and how near the top of the board it may go. See
-## that constant for the pair it forms with Game.PAD_PITCH and for what a size change costs.
+## that constant for the pair it forms with Game.TOWER_GAP and for what a size change costs.
 const SPRITE_HEIGHT := Game.TOWER_SPRITE_HEIGHT
 # --- The brazier ----------------------------------------------------------------------
 ## Radius of the glow pool in the bowl, as a fraction of FIRE_FLAME_HEIGHT — the height of the
@@ -747,10 +752,24 @@ func _draw() -> void:
 		draw_arc(Vector2.ZERO, tower_range, 0.0, TAU, 64, Color(ec.r, ec.g, ec.b, 0.50), 2.5, true)
 	else:
 		draw_arc(Vector2.ZERO, tower_range, 0.0, TAU, 48, Color(ec.r, ec.g, ec.b, 0.12), 2.0, true)
+	# Sun and Well only: their aura reach, on the ground with the range arc rather than up at
+	# the emitter with the rest of the ambient. See _draw_aura_ring.
+	_draw_aura_ring()
 	# Painted sprite if this tower's art has been drawn; the code art below is the fallback,
 	# and it is what the board still looks like everywhere the art has not landed.
 	var art := Sprites.tower(art_key(), level)
 	if art != null:
+		# Ground first, in the order light actually reaches it: the building's OCCLUSION,
+		# then whatever light the building throws back onto the grass, then the masonry. The
+		# glow used to be laid down before the shadow and was then partly painted over by
+		# it, which is why FUSION_GLOW_WIDTH carried a note about having to out-reach a
+		# disc it could not see. This ordering removes that coupling instead of re-tuning
+		# it, and is also the truthful one — a tower lights ground it is itself shading.
+		_draw_contact_shadow(_drawn_width(art))
+		# A fusion's light pools on the board it stands on, so it is laid down BEFORE the
+		# masonry — a tower standing in its own glow, not wearing it. See _draw_fusion_ground.
+		if elements.size() > 1:
+			_draw_fusion_ground()
 		_draw_sprite(art)
 		# Each painted base set is built around ONE feature that should be alive: Fire's
 		# brazier, Water's pool, Nature's rune circle. Earth has none — it is a quarry, and
@@ -766,14 +785,17 @@ func _draw() -> void:
 			"nature": _draw_nature_motes()
 		# Fire's own fire IS its idle animation, and the pulse sits on the very brazier the
 		# flame stands in — on that one set the two are the same light drawn twice.
-		if ambient != "fire":
+		if elements.size() > 1:
+			# The other half, over the sprite: spores climbing past the building.
+			_draw_fusion_motes()
+		elif ambient != "fire":
 			_draw_idle_pulse(art)
 		_draw_muzzle_flash(art)
 		_draw_level_pips(element_color.lightened(0.35))
 		_draw_element_dots()
 		return
 	# Flat drop shadow under the base.
-	draw_set_transform(Vector2(0, 24), 0.0, Vector2(1.0, 0.45))
+	draw_set_transform(Vector2(0, 24), 0.0, Vector2(1.0, Game.GROUND_SQUASH))
 	draw_circle(Vector2.ZERO, 27.0, Color(0, 0, 0, 0.20))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	# Layered stone base for depth.
@@ -798,18 +820,50 @@ func _draw_sprite(art: Texture2D) -> void:
 	var size := art.get_size()
 	var anchor := Sprites.anchor(art)
 	var scale := SPRITE_HEIGHT / size.y
-	# A soft contact shadow: the painting has none (it was asked for without one, so it can
-	# be lit by whatever board it lands on) and without one a tower floats.
-	draw_set_transform(Vector2(0, 6), 0.0, Vector2(1.0, 0.4))
-	draw_circle(Vector2.ZERO, size.x * scale * 0.34, Color(0, 0, 0, 0.28))
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	var where := Rect2(Vector2(-anchor.x * scale, -anchor.y * scale), size * scale)
 	# Nudged down a little: the anchor is the sprite's lowest pixel, and letting the base
 	# overlap the ground point slightly is what makes it read as standing ON the board
 	# rather than behind it.
 	where.position.y += SPRITE_NUDGE_Y
 	# Nothing here reads _recoil: the building itself never moves. See MUZZLE_FROM.
-	draw_texture_rect(art, where, false)
+	# Game.ART_TINT is WHITE unless a board and the roster have drifted apart — see it for
+	# why the knob exists here, at the one call every painted set passes through.
+	draw_texture_rect(art, where, false, Game.ART_TINT)
+
+## The shadow the sheets deliberately ship without, so a set can be lit by whatever board it
+## lands on (docs/tower-art-prompt.md: "NO drop shadow — the game draws its own").
+##
+## It was one hard-edged disc at alpha 0.28, and a disc is the one thing a soft outdoor
+## shadow never looks like: with no falloff the eye reads a dark COIN under the building
+## rather than the building occluding the ground, which is most of why the towers read as
+## stickers. Three stacked ellipses give a cheap penumbra — dense and small at the footing,
+## broad and faint at the edge — for two extra draw_circle calls and no texture.
+##
+## OFFSET DOWN AND SLIGHTLY RIGHT, because the sheets are lit from the upper left. That is
+## measured, not assumed: across the roster a sprite's top half runs 11-29 luminance above
+## its bottom and its left half 2-15 above its right (tools/art_match.py's method, run per
+## half). A shadow thrown the other way fights the painting it belongs to.
+const SHADOW_OFFSET := Vector2(2.5, 7.0)
+## Widest ring as a fraction of the drawn sprite width. The old 0.34 was sized against the
+## disc; a penumbra has to start wider than the footing to read as one.
+const SHADOW_WIDTH := 0.46
+## Ring radii and alphas, outermost first. They sum to roughly the old single disc's weight
+## at the centre while fading to nothing at the rim.
+const SHADOW_RINGS: Array = [[1.00, 0.10], [0.74, 0.13], [0.48, 0.16]]
+
+## How wide the sprite is actually drawn. Every set is scaled to one HEIGHT, so this is the
+## only thing that varies between them, and both the shadow and _draw_sprite need it.
+func _drawn_width(art: Texture2D) -> float:
+	var size := art.get_size()
+	return size.x * (SPRITE_HEIGHT / size.y)
+
+
+func _draw_contact_shadow(drawn_width: float) -> void:
+	var full := drawn_width * SHADOW_WIDTH
+	draw_set_transform(SHADOW_OFFSET, 0.0, Vector2(1.0, Game.GROUND_SQUASH))
+	for ring in SHADOW_RINGS:
+		draw_circle(Vector2.ZERO, full * float(ring[0]), Color(0, 0, 0, float(ring[1])))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 ## Water's basin, kept moving: rings expand from the middle of the pool and fade at the rim.
 ##
@@ -859,6 +913,185 @@ func _draw_nature_motes() -> void:
 		# read as a dead pixel on the screen rather than as something the tower let go of.
 		draw_circle(centre + from + Vector2(drift, -p * SPRITE_HEIGHT * NATURE_MOTE_RISE),
 				lerpf(2.4, 0.7, p), Color(0.66, 1.0, 0.52, sin(p * PI) * 0.75))
+
+# --- The fusion ambient -----------------------------------------------------------------
+# The eleven combination towers were the only sets on the board with no life of their own:
+# Fire's brazier breathes, Water's pool ripples, Nature's rune sweeps, and all eleven fusions
+# got the generic idle pulse and nothing else. Earth got the pulse too, and still does — a
+# quarry sitting there is the right answer for a pile of rock.
+#
+# A fusion cannot use the base towers' trick, because that trick is a hand measurement: each
+# of those three is anchored onto a specific painted feature (WATER_POOL, NATURE_RUNE,
+# FIRE_FLAME_BASE_Y), and eleven more sets at five tiers each is fifty-five rectangles to read
+# off the sheets by hand — after three automated attempts already failed on two sets.
+#
+# So a fusion's ambient is drawn on the GROUND the tower stands on, at the same contact point
+# _draw_sprite() puts its shadow, and it says the one thing about a fused tower that its art
+# cannot: WHAT IT IS MADE OF. One motion per element in the recipe, in the fusion's own
+# colour, so Steam pools light and ripples in pale blue while Roots only drifts in olive.
+# Earth contributes nothing, exactly as it contributes nothing to the base board, which is
+# why Clay is the quietest dual and Rainbow the busiest.
+#
+# THE GROUND IS THE WHOLE POINT, and it was arrived at the expensive way. The first version
+# drew all of this at the emitter, where the muzzle flash and the idle pulse already sit —
+# and every painted set has its own bright feature painted at exactly that height, because
+# that is where a building puts its crystal. Measured by diffing two frames a second apart,
+# a glow there moved 37 pixels on Infernal against base Water's 1265: light in the tower's
+# own colour, laid over the brightest part of a sprite painted in that colour, is nothing.
+# On the grass at its feet the same light has something to be brighter than.
+const FUSION_RINGS := 2
+const FUSION_MOTES := 4
+## Ring reach and mote spread on the ground, as fractions of drawn height. The ring has to
+## clear the painted FOOTING (TOWER_BASE_HALF, ~0.45 of a sprite's height) or it never leaves
+## the masonry — and has to stay inside half of Game.TOWER_GAP, or two neighbours' ambients
+## overlap. 0.50 is the room between those two, and there is not much of it.
+const FUSION_RING_RX := 0.50
+const FUSION_RING_RY := 0.19
+## How far a fusion spore climbs. Well past the base, so it reads as something the building
+## LETS GO OF, and short of the top, so a tower on the top row never sprinkles into the HUD —
+## the same bound NATURE_MOTE_RISE is written against.
+const FUSION_MOTE_RISE := 0.55
+## Radius of the light pooling on the ground, as a fraction of drawn height.
+##
+## This used to have to be WIDER than the contact shadow, because the shadow was drawn after
+## it: at 0.30 the glow sat entirely inside a flat black disc and Lava photographed with no
+## ambient at all — light drawn and then painted over. `_draw()` now lays the shadow down
+## FIRST, so the constraint is gone and this number only has to answer to the board: 0.36
+## puts the pool on open grass and stays inside half of Game.TOWER_GAP, so two neighbouring
+## fusions never bleed into one another.
+const FUSION_GLOW_WIDTH := 0.36
+
+## Sun's and Well's reach. This is the only tower effect in the game that happens somewhere
+## other than where the tower shoots, and until now NOTHING on the board said so — an aura
+## tower was indistinguishable from a weak damage tower, and which of your towers were inside
+## it was a thing you could only work out by reading the description and estimating.
+##
+## Read the same way the range circle is, and it sits comfortably inside it (170px against
+## Sun's 195 and Well's 215), so the two rings never lie on top of each other.
+const AURA_RING_PERIOD := 3.2  ## Seconds for one ring to travel from the tower out to the edge.
+
+func _draw_aura_ring() -> void:
+	var radius: float = float(_eff.get("aura_radius", 0.0))
+	if radius <= 0.0:
+		return
+	# Brighter than the range arc it sits inside (0.12) by more than a hair: at 0.16 the two
+	# read as one indecisive circle, which is worse than having drawn neither.
+	var ec := element_color.lightened(0.25)
+	var t := Time.get_ticks_msec() * 0.001 + float(get_instance_id() % 53) * 0.0604
+	# The standing edge: quiet, but always there. The travelling ring alone would only answer
+	# "how far does this reach" during the fraction of a second it happens to be passing the
+	# spot you are looking at, and the question is asked while PLACING a neighbour.
+	draw_arc(Vector2.ZERO, radius, 0.0, TAU, 48, Color(ec.r, ec.g, ec.b, 0.26), 2.0, true)
+	# One ring travelling out, fading in off the tower as well as out at the edge — the same
+	# reason Water's ripples do: a ring that arrives at full strength on a point reads as an
+	# impact landing rather than as something spreading.
+	var p := fposmod(t / AURA_RING_PERIOD, 1.0)
+	draw_arc(Vector2.ZERO, radius * p, 0.0, TAU, 48,
+			Color(ec.r, ec.g, ec.b, sin(p * PI) * 0.34), maxf(1.0, 3.0 * (1.0 - p)), true)
+
+## How many of the three motions this tower actually has. Earth is silent, so a fusion
+## carrying it is one motion quieter than its element count, and Clay and Lava and Roots are
+## single-motion towers despite being duals.
+func _ambient_motions() -> int:
+	var n := 0
+	for e in elements:
+		if String(e) != "earth":
+			n += 1
+	return n
+
+## Each motion is quieter the more company it has on one 96px sprite. Square-rooted rather
+## than divided by the count: at a flat third a triple's ambient vanished altogether, which is
+## the opposite of what a triple should look like.
+func _ambient_share() -> float:
+	var n := _ambient_motions()
+	return 0.0 if n == 0 else 1.0 / sqrt(float(n))
+
+## The half of a fusion's ambient that belongs UNDER the building: light pooling on the board
+## and rings spreading from its feet. Drawn before the sprite, so the tower stands in it
+## rather than wearing it.
+func _draw_fusion_ground() -> void:
+	var share := _ambient_share()
+	if share <= 0.0:
+		return
+	var c := element_color.lightened(0.35)
+	var t := Time.get_ticks_msec() * 0.001 + float(get_instance_id() % 97) * 0.0644
+	# The same contact point _draw_sprite() hangs its shadow from, so the light and the
+	# shadow agree about where the building actually meets the ground.
+	var at := Vector2(0.0, SPRITE_NUDGE_Y)
+	if elements.has("fire"):
+		# Nudged forward of the contact point, so the pool spills onto the grass IN FRONT of
+		# the building rather than under it, where the shadow would have it.
+		_ambient_glow(at + Vector2(0.0, 4.0), SPRITE_HEIGHT * FUSION_GLOW_WIDTH, c, t, share)
+	if elements.has("water"):
+		_ambient_rings(at, SPRITE_HEIGHT * FUSION_RING_RX, SPRITE_HEIGHT * FUSION_RING_RY,
+				c, t + 1.7, share)
+
+## The half that belongs OVER it: spores climbing past the building. The one motion here that
+## LEAVES the tower, which is what stops the other two reading as a lamp on a timer — and the
+## reason it is drawn after the sprite rather than with the rest.
+func _draw_fusion_motes() -> void:
+	if not elements.has("nature"):
+		return
+	var share := _ambient_share()
+	if share <= 0.0:
+		return
+	# Flesh Golem is the only tower in the game whose stats change while it stands there, and
+	# nothing on the board said so either. Its spores thicken as it feeds. Saturating on
+	# purpose: the signal worth carrying is "this one has been fed", not a count, and an
+	# unbounded glow would end the run as the brightest thing on the map.
+	var fed := 1.0
+	if damage_per_kill > 0.0:
+		fed = 1.0 + 0.9 * (1.0 - exp(-float(_kills) / 40.0))
+	var t := Time.get_ticks_msec() * 0.001 + float(get_instance_id() % 97) * 0.0644 + 3.1
+	_ambient_motes(Vector2(0.0, SPRITE_NUDGE_Y),
+			SPRITE_HEIGHT * FUSION_RING_RX * 0.7, SPRITE_HEIGHT * FUSION_RING_RY * 0.7,
+			element_color.lightened(0.35), t, share * fed)
+
+# The three primitives below are deliberately NOT the base towers' ambients refactored into
+# shared functions. Those three are measured onto one painted feature apiece and tuned against
+# it in two hardcoded colours each; pulling a common function out of them would have moved
+# three shipped, hand-tuned drawings to buy nothing. These are the same IDEAS, parameterised.
+
+## Fire's contribution: a pool of light on the ground, breathing. Squashed hard, because it
+## lies ON the board and the board is seen from slightly above. Two rates that do not divide
+## into one another, as the brazier uses, so a row of fused towers never settles into one beat.
+func _ambient_glow(at: Vector2, width: float, tint: Color, t: float, share: float) -> void:
+	var breath := 0.72 + 0.18 * sin(t * 2.3) + 0.10 * sin(t * 5.7)
+	draw_set_transform(at, 0.0, Vector2(1.0, Game.GROUND_SQUASH))
+	draw_circle(Vector2.ZERO, width * 1.75 * breath,
+			Color(tint.r, tint.g, tint.b, 0.28 * share))
+	draw_circle(Vector2.ZERO, width * 0.98 * breath,
+			Color(tint.r, tint.g, tint.b, 0.44 * share))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+## Water's contribution: rings opening across the ground and fading at the rim, in perspective.
+##
+## Brightest LATE rather than in the middle, which is where every other fade in this file
+## peaks. The middle of this one is still inside the tower's own footing; a ring only has
+## something to be seen against once it is out on the grass.
+func _ambient_rings(at: Vector2, rx: float, ry: float, tint: Color, t: float,
+		share: float) -> void:
+	draw_set_transform(at, 0.0, Vector2(1.0, ry / rx))
+	for i in FUSION_RINGS:
+		var p := fposmod(t / WATER_RIPPLE_PERIOD + float(i) / FUSION_RINGS, 1.0)
+		draw_arc(Vector2.ZERO, rx * p, 0.0, TAU, 28,
+				Color(tint.r, tint.g, tint.b, sin(p * p * PI) * 0.60 * share),
+				maxf(1.2, 3.2 * (1.0 - p)), true)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+## Nature's contribution: specks the tower lets go of, climbing from the ground past the
+## building. Fades in as well as out — a mote that appears at full strength on the stonework
+## reads as a dead pixel on the screen rather than as something the tower released.
+func _ambient_motes(at: Vector2, rx: float, ry: float, tint: Color, t: float,
+		share: float) -> void:
+	for i in FUSION_MOTES:
+		var p := fposmod(t / NATURE_MOTE_PERIOD + float(i) / FUSION_MOTES, 1.0)
+		var around := t * 0.4 + float(i) * TAU / FUSION_MOTES
+		var from := Vector2(cos(around) * rx, sin(around) * ry)
+		var drift := sin(t * 1.3 + float(i) * 2.2) * SPRITE_HEIGHT * 0.035
+		draw_circle(at + from + Vector2(drift, -p * SPRITE_HEIGHT * FUSION_MOTE_RISE),
+				lerpf(2.6, 0.7, p),
+				Color(tint.r, tint.g, tint.b, sin(p * PI) * 0.85 * share))
 
 ## The slow breath at the emitter that keeps an idle painted tower from reading as a statue.
 ## Phase-shifted by the instance id so a row of towers does not pulse in unison — which is

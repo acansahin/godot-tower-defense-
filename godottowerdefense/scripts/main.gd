@@ -110,6 +110,10 @@ func _ready() -> void:
 		_air_pose()
 	if OS.get_cmdline_user_args().has("--boss-pose"):
 		_boss_pose()
+	if OS.get_cmdline_user_args().has("--bolt-pose"):
+		_bolt_pose()
+	if OS.get_cmdline_user_args().has("--hit-pose"):
+		_hit_pose()
 	# TEMPORARY: buys every fusion the moment it is unlocked and affordable, so an unattended
 	# run climbs the ladder to Pure instead of finishing on four base towers. Nothing pauses
 	# the tree any more (the three popups that did are gone), so unlike the old card screen
@@ -588,6 +592,131 @@ func _boss_pose() -> void:
 		e.global_position = Game.active_path[step]
 		e.take_damage(2000.0 * 0.35)  # dent the health bar so it reads against a full boss
 
+## TEMPORARY verification harness: flies one of EVERY bolt drawing across an empty board at a
+## crawl, so all fifteen can be photographed side by side and compared.
+##
+## Neither of the other two ways works. A normal run only ever has the four base shots in the
+## air — a fusion needs an avatar boss to unlock its second element first — and `--fill-board`
+## buries the road, so every creep dies at its spawn point and its bolts exist for a handful
+## of frames in one corner of the map. This was written when the eleven fusions stopped
+## throwing their build origin's shot and started throwing their own; the thing it checks is
+## the half of projectile.gd that no number can reach, which is whether the fifteen drawings
+## are actually told apart by SILHOUETTE at the size they fly at.
+##
+## Rows run top to bottom in the order printed to stdout. Pair with --shot, WITHOUT --headless
+## (a headless run does no drawing at all, so it passes this silently):
+##   Godot.exe --path <project> res://scenes/Main.tscn --quit-after 900 -- --bolt-pose --shot:4
+## Delete this and its call above once the fusion bolts have been checked.
+func _bolt_pose() -> void:
+	wave_manager.set_process(false)
+	# Built from the tables rather than listed, so a new fusion row appears here for free —
+	# and, more to the point, a row whose `shape` does not match a case in Projectile._draw()
+	# shows up as a plain bolt in the photograph instead of passing unnoticed.
+	var rows: Array = []
+	for el in Game.TOWER_ORDER:
+		rows.append({"shape": String(el), "color": Game.TOWER_DEFS[el]["color"],
+				"elements": [String(el)]})
+	for key in Game.FUSIONS:
+		var def: Dictionary = Game.FUSIONS[key]
+		# The same expression Tower.art_key() uses. Derived, not written down, so the harness
+		# cannot drift from the key the game actually passes.
+		rows.append({"shape": String(def["name"]).to_lower().replace(" ", "_"),
+				"color": def["color"], "elements": Array(String(key).split("+"))})
+	var enemy_scene: PackedScene = load("res://scenes/Enemy.tscn")
+	var pool := get_node("Projectiles")
+	var top := 120.0
+	var gap := (Game.WORLD_SIZE.y - 200.0) / float(rows.size())
+	for i in rows.size():
+		var row: Dictionary = rows[i]
+		var y := top + gap * float(i)
+		# A stationary dummy far off the right edge. The bolt homes on it, so it never
+		# arrives, never recycles and keeps animating for the whole run — which is the only
+		# way to hold a shot that normally lives for a third of a second still enough to look
+		# at. Speed 0 rather than a paused node: an Enemy that stops processing also stops
+		# being a valid target, and the bolt would recycle itself on the next frame.
+		var e := enemy_scene.instantiate() as Enemy
+		e.setup(1.0e9, 0.0, 0, Color(1, 1, 1, 0))
+		e.kind = "normal"
+		e.radius = 1.0
+		enemies_root.add_child(e)
+		e.set_progress(1)
+		e.global_position = Vector2(Game.WORLD_SIZE.x + 2400.0, y)
+		var p := pool.acquire() as Projectile
+		p.color = row["color"]
+		p.shape = String(row["shape"])
+		p.elements = row["elements"]
+		p.speed = 34.0
+		p.setup(Vector2(110.0, y), e, 0.0)
+		print("bolt row %2d  y=%4d  %s" % [i, int(y), row["shape"]])
+
+## TEMPORARY verification harness: stands one REAL tower of each impact-relevant identity in
+## front of a creep it cannot kill, so every kind of impact lands over and over in a known
+## spot and can be photographed.
+##
+## Real towers firing real bolts, deliberately. The impact branch lives in Projectile._hit()
+## and reads five payload fields; a harness that spawned bolts itself would have to set those
+## fields the way Tower.fire_bolt() does, and would then be free to disagree with it — which
+## is exactly the bug such a harness exists to catch. So this builds towers the way
+## _fill_board() does and lets the game decide what a hit looks like. It bypasses the PAD rule
+## (it places on a fixed grid, not by the placement rule) because what is photographed is the impact,
+## not the placement.
+##
+## `--fill-board` cannot do this: a maxed board kills every creep in the first frame or two
+## after it spawns, so all seventeen kinds of impact happen on top of one another in one
+## corner of the map, and catching a chosen one is down to luck with `--shot:N`.
+##
+## Pair with --shot, WITHOUT --headless (a headless run does no drawing, so it passes this
+## silently), and take two so a burst caught mid-life in one is caught early in the other:
+##   Godot.exe --path <project> res://scenes/Main.tscn --quit-after 700 -- --hit-pose --shot:6 --shot:7
+## Delete this and its call above once the impact effects have been checked.
+func _hit_pose() -> void:
+	wave_manager.set_process(false)
+	Game.add_gold(1000000)
+	# Built from the tables, so a row that stops splashing — or starts — shows up here without
+	# this list being edited. The three columns are the three things the impact branch keys
+	# on: a splash radius, a burn payload, and chaos.
+	var rows: Array = [
+		["fire", ["fire"]],                                  # burn, no splash: embers only
+		["water", ["water"]],                                # neither: the quiet reference
+		["earth", ["earth"]],                                # splash 90, no burn
+		["lava", ["earth", "fire"]],                         # splash 110 AND burn
+		["steam", ["fire", "water"]],                        # splash 80, fires 2.5x/s
+		["roots", ["earth", "nature"]],                      # neither, and the slowest tower
+		["infernal", ["earth", "fire", "water"]],            # chaos
+		["rainbow", ["fire", "nature", "water"]],            # chaos, another colour
+		["earth+fire+nature+water", ["earth", "fire", "nature", "water"]],  # Pure
+	]
+	var enemy_scene: PackedScene = load("res://scenes/Enemy.tscn")
+	var xs: Array = [280.0, 700.0, 1120.0]
+	var ys: Array = [220.0, 480.0, 740.0]
+	for i in rows.size():
+		var elems: Array = rows[i][1]
+		var at := Vector2(float(xs[i % 3]), float(ys[i / 3]))
+		var t := TOWER.instantiate() as Tower
+		# Every tower is BUILT as its first element and then absorbs the rest, which is the
+		# only route a real tower has to a fusion — and the route that used to leave the shot
+		# and the impact reading off the build origin instead of the result.
+		t.setup_def(String(elems[0]))
+		t.position = at
+		towers_root.add_child(t)
+		while t.can_upgrade():
+			t.upgrade()
+		for j in range(1, elems.size()):
+			t.add_element(String(elems[j]))
+		# A creep it cannot kill, parked inside its reach. Speed 0 rather than a paused node:
+		# an Enemy that stops processing also stops being a valid target, and the bolt in the
+		# air would recycle itself instead of landing.
+		var e := enemy_scene.instantiate() as Enemy
+		e.setup(1.0e9, 0.0, 0, Color(0.85, 0.85, 0.85))
+		e.kind = "normal"
+		e.radius = Balance.ENEMY_BASE_RADIUS
+		enemies_root.add_child(e)
+		e.set_progress(1)
+		e.global_position = at + Vector2(120.0, 0.0)
+		print("hit row %d  tower=%-12s at (%4d,%4d)  target +120x  splash=%.0f" % [
+				i, t.display_name, int(at.x), int(at.y),
+				float(t._eff.get("splash_radius", 0.0))])
+
 ## TEMPORARY verification harness: covers every buildable cell with towers, cycling the
 ## roster, so a headless run actually exercises targeting, firing, the projectile pool and
 ## the effect payloads. Without it a headless run has no towers and proves nothing about
@@ -804,14 +933,13 @@ func _sim_buy_one() -> bool:
 	return false
 
 ## Every position a tower could stand, swept on the tower spacing. Used by --fill-board and
-## by --dump-board, which need "the set of places you may build" now that the board no
-## longer keeps one.
+## by --dump-board, which need "the set of places you may build".
+##
+## Placement is free, so that set is CONTINUOUS and this is a sample of it rather than an
+## enumeration: it sweeps at half the tower spacing and keeps whatever clears `_far_enough`,
+## which is one plausible packing. A player placing by hand will fit a slightly different
+## number, so read the count as a capacity estimate and not as a board specification.
 func _buildable_lattice(step := -1.0) -> Array:
-	# A board that marks pads has already answered this, and the harnesses must sweep the
-	# same spots the player is offered or they measure a game nobody plays. `step` is
-	# ignored there: the pads ARE the resolution.
-	if Game.has_pads():
-		return Game.pads().duplicate()
 	var pitch: float = Game.TOWER_GAP if step <= 0.0 else step
 	var out: Array = []
 	var y := Game.PLAY_TOP + Game.TOWER_RADIUS
@@ -873,9 +1001,8 @@ func _dump_board() -> void:
 	# actually poses: how much road can one tower watch from the best place it may stand.
 	var spots: Array = _buildable_lattice()
 	print("  road length      : %.0f px over %d waypoints" % [total, path.size()])
-	print("  buildable spots  : %d (%s)" % [spots.size(),
-			"marked pads, %.0fpx hex pitch" % Game.PAD_PITCH if Game.has_pads()
-				else "free placement, %.0fpx sweep" % Game.TOWER_GAP])
+	print("  buildable spots  : %d (free placement, sampled every %.0fpx)"
+			% [spots.size(), Game.TOWER_GAP * 0.5])
 	print("  road samples     : %d (every %.0f px)" % [samples.size(), STEP])
 	print("  %-10s %7s %8s %8s  %-12s %7s %8s"
 			% ["element", "range", "best 1", "median", "cover 95%", "raw", "raw best"])
@@ -1031,11 +1158,14 @@ func _set_hovered(tower: Tower) -> void:
 	if is_instance_valid(_hovered):
 		_hovered.set_highlighted(true)
 
-## Where a tower dropped at `world_pos` would actually stand: the pad under the cursor on a
-## board that marks them, the cursor itself on a padless one. Vector2.INF when the cursor is
-## nowhere near a pad — the caller shows a refusal rather than guessing.
+## Where a tower dropped at `world_pos` would actually stand: the cursor itself, since
+## placement is free and `Game.can_build_at()` is the whole rule.
+##
+## Kept as a named function rather than inlined, because it is the one place placement could
+## ever be snapped, quantised or nudged again, and the ghost and the drop MUST agree about
+## it — a preview that answers a different question from the drop is worse than no preview.
 func _placement_point(world_pos: Vector2) -> Vector2:
-	return Game.nearest_pad(world_pos) if Game.has_pads() else world_pos
+	return world_pos
 
 func _update_ghost(world_pos: Vector2) -> void:
 	var d: Dictionary = Game.TOWER_DEFS[_drag_kind]
@@ -1043,9 +1173,8 @@ func _update_ghost(world_pos: Vector2) -> void:
 	# bad ground tells the player nothing about WHY, and the board has to keep answering
 	# "can I build here" continuously.
 	#
-	# It SNAPS to the pad it would land on, so the answer the ghost gives is the answer the
-	# drop will give. Off the lattice it stays under the cursor and reads red, which is what
-	# makes "there is no pad here" visible rather than mysterious.
+	# It sits under the cursor, so the answer the ghost gives is the answer the drop gives;
+	# `grid.gd` shades the closed ground behind it, so a red ghost has a visible reason.
 	# TOWER_DEFS stores range in Warcraft III units — scale to pixels, exactly as
 	# tower.gd's _recompute does, or the ghost circle lies about the tower's reach.
 	var at := _placement_point(world_pos)

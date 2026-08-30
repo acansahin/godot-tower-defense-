@@ -91,7 +91,23 @@ the road on an EMPTY board so the flyer's drawing can be photographed — `--fil
 buries the road and kills them at the spawn point, and a normal run never reaches the Air
 wave without leaking away all twenty lives first), `--boss-pose` (stages both bosses' rules —
 control-immune and rotating-armor, BUILD NEXT #7 — on an empty board so the ward/ring/icon
-can be photographed without playing to wave 10 or 20 first), `--shot` (saves one drawn frame to
+can be photographed without playing to wave 10 or 20 first), `--bolt-pose` (flies one of
+EVERY bolt drawing — the four elements and all eleven fusions — across an empty board at a
+crawl, so the fifteen can be compared side by side. Neither other route works: a normal run
+only ever has the four base shots in the air, since a fusion needs an avatar boss to unlock
+its second element, and `--fill-board` buries the road so its bolts live for a handful of
+frames in one corner. Rows are printed top-to-bottom in the order they are laid out, and the
+list is built FROM `Game.FUSIONS`, so a row whose shape has no case in `projectile.gd` shows
+up as a plain bolt in the photograph instead of passing unnoticed), `--hit-pose` (the same
+idea for the other end of the shot: stands one REAL tower of each impact-relevant identity —
+splash, burn, chaos and neither — in front of a creep it cannot kill, on a grid, so every kind
+of impact lands over and over in a known spot. Real towers on purpose: the impact branch reads
+five payload fields, and a harness that spawned its own bolts would set them the way
+`Tower.fire_bolt()` does and would then be free to DISAGREE with it. `--fill-board` cannot do
+this either — a maxed board kills every creep within a frame or two of its spawn, so all
+seventeen kinds of impact happen on top of one another in one corner. Take two or three shots:
+a slow tower fires every 1.4s and a ring lives 0.35s, so any single frame misses it three times
+out of four), `--shot` (saves one drawn frame to
 `user://shot.png` and prints the path — the only harness that shows you the board rather
 than describing it, so **drop `--headless` for this one**; `--shot:20` waits 20s first and
 lands in `shot_20.png`, and several may be passed at once to watch a run across waves),
@@ -160,50 +176,30 @@ same tool's scan found. Re-trace after any change to the art and check the resul
 `map.gd`'s `show_road` overlay — it draws the traced line back over the painting, which is
 the only check that catches enemies walking beside the road rather than on it.
 
-**The legal ground is continuous; what the player is OFFERED is a lattice of pads.**
-`Game.can_build_at()` is still the whole rule and still answers about any point: off the road
-by `ROAD_KEEPOUT`, out of `OBSTACLES`, inside `PLAY_TOP`/`PLAY_RIGHT`, on open ground (below),
-and `TOWER_GAP` from its neighbours. `Game.pads()` marks the subset of it a tower may
-actually be dropped on, and `main.gd` `_placement_point()` snaps the ghost and the drop to
-it — returning `Vector2.INF`, never the cursor, when there is no pad nearby, so a caller that
-forgets to check cannot silently fall back to free placement. `grid.gd` draws them.
+**Placement is FREE: `Game.can_build_at()` is the whole rule and it answers about any
+point.** Off the road by `ROAD_KEEPOUT`, out of `OBSTACLES`, inside `PLAY_TOP`/`PLAY_RIGHT`,
+on open ground (below), and `TOWER_GAP` from its neighbours. `main.gd` `_placement_point()`
+returns the cursor, and both the ghost and the drop validate through `can_build_at()`, so
+the preview cannot disagree with the result. `grid.gd` shades the ground the rule REFUSES,
+and only while a tower is being dragged, so the answer is visible before the question.
 
-Four things about the pads are measured rather than chosen:
+**A hex lattice of marked pads used to stand between the two, and it has been removed.** It
+existed because free placement produced boards that looked accidental, and it was paid for
+in a way that only became clear later: at `PAD_PITCH` 112 the winding board offered **12**
+spots where free placement offers **87**. That is the number every balance constant since
+was set against — see the warnings on `Balance.WC3_RANGE_SCALE` and
+`Balance.GLOBAL_DAMAGE_MULT`, both of which were raised to compensate for a scarcity that no
+longer exists. **Re-run `--dump-board`, `--fill-board` and `--play-sim` before trusting any
+of those numbers.**
 
-- **The lattice is HEXAGONAL.** At the same pitch a square lattice marks fewer spots than
-  the staggered one, because the open meadows are small and roundish. Rows still line up,
-  which is the part the player sees — and the reason the pads exist at all is that free
-  placement produced boards that looked accidental.
-- **The ORIGIN is searched, not written down.** Where the lattice starts is worth more than
-  its pitch when the meadows are scattered islands: measured at the old 70px pitch, the
-  worst origin on this board marked 27 pads and the best 47. `_rebuild_pads()` tries
-  `PAD_ORIGIN_STEPS`² origins across one cell and keeps the best, so a repaint re-tunes
-  itself the way the build mask does.
-- **`PAD_PITCH` and `Game.TOWER_SPRITE_HEIGHT` are one pair, and moving them is a
-  FOUR-NUMBER change.** A row of towers reads as separate buildings or as one mass by drawn
-  WIDTH against the pitch, so the size and the spacing move together; the board sits at
-  **112px, 12 pads, sprites 96 tall** — 60% larger than the 60px it shipped with. Measured
-  counts fall far faster than the pitch rises and are NOT monotonic (the origin search finds
-  lucky alignments): with the keepout scaled to the art, 98px marks 17 pads, 112px 12, 126px
-  10, 140px 7. Always measure with `--dump-board`.
-  **Twelve towers neither reach nor kill what forty-seven did, and both halves are paid for
-  in `Balance`.** Reach first, because a creep on road no tower can reach is never shot
-  whatever the damage is: `WC3_RANGE_SCALE` 0.35 -> 0.45 puts coverage back at 88/82/89/87%
-  against the old 86/79/87/85. Take the SMALLEST scale that does it — 0.65 also works and
-  puts one water tower on 44% of the road with three towers covering 95% of it, which ends
-  placement as a decision. Then kill: `GLOBAL_DAMAGE_MULT` 4.2. The gate is `--fill-board`
-  clearing the LAST wave and it is not a formality — 3.5 died on wave 48 of 50.
-- **The placement rule reserves room for what is DRAWN, not for `TOWER_RADIUS`.**
-  `ROAD_KEEPOUT` is `ROAD_HALF + TOWER_SPRITE_HEIGHT * TOWER_BASE_HALF`, and the top bound
-  tests `pos.y - TOWER_SPRITE_HEIGHT`. Both used to be sized off the 30px footprint, which
-  was invisible while sprites were 60px and produced two immediate bugs at 160: towers near
-  the top lost their upper half behind the HUD, and towers beside the road stood on it.
-  `TOWER_BASE_HALF` (0.45) is measured, not guessed — across the 75 reachable sprites the
-  painted footing spans a median 0.75 of a sprite's width, which against height is ~0.45.
-- **It is built lazily and prefiltered.** Eager building in `configure_board()` cost 509ms
-  per launch and ran twice, because the autoload installs the endless board before Main
-  replaces it. Deferring to first use and rejecting closed ground with one mask texel before
-  `can_build_at()` walks all 140 road segments brings it to 133ms, once.
+What went with it: `PAD_PITCH`, `PAD_SNAP`, `PAD_ORIGIN_STEPS`, `Game.pads()`,
+`has_pads()`, `nearest_pad()`, the origin search, and `grid.gd`'s pad drawing. What stayed
+is everything that was actually load-bearing — the build mask, `ROAD_KEEPOUT`,
+`TOWER_GAP`, `FOOTPRINT_PROBE` and the `PLAY_TOP`/`PLAY_RIGHT` bounds.
+
+`--dump-board` and `--fill-board` sweep `main.gd` `_buildable_lattice()`, which now SAMPLES
+the continuous legal set at half the tower spacing rather than enumerating slots. Read its
+count as a capacity estimate: a player placing by hand fits a slightly different number.
 
 A board that supplies an explicit `active_build_zones` allowlist gets NO pads — its own rings
 would already be its guides. No shipped board sets this today (the interactive tutorial that
@@ -211,6 +207,59 @@ used to, drawing rings around six pockets, has been removed), but the mechanism 
 `Game` for a future board that wants to name its own legal spots. `--dump-board` and
 `--fill-board` sweep the pads when a board has them (`main.gd` `_buildable_lattice()`), so
 the harnesses measure the spots the player is actually offered.
+
+## The towers and the board are not the same picture, and that is measured too
+
+`python tools/art_match.py` answers "do these belong together?" the way `--dump-board`
+answers "can you build here?" — with numbers instead of a screenshot. It reports four things
+and the played board currently fails all four.
+
+The first is about PLACEMENT rather than looks, and it is the one no other tool reports:
+**how much of the band 70-300px from the road is open ground** — the only ground a tower can
+both stand on and shoot from. `--dump-board` counts pads, an answer that also depends on
+`PAD_PITCH` and the origin search; `build_mask.py` reports open ground over the whole image,
+which a board can win with one empty corner the road never goes near. The winding board
+measures **22.6%** against a target of 80%, and that is what 12 pads looks like as a
+fraction. The other three:
+
+| | winding (played) | board_source (what the roster was painted against) | the roster |
+|---|---|---|---|
+| Open-ground luminance | 73.3 | 106.4 | masonry 50-125 |
+| Open-ground blue | 25.1 | 35.6 | masonry median 46.5 |
+| Ground squash | **1.000** | — | **0.24-0.30** |
+
+Three separate faults, and only the third is unfixable in code:
+
+- **The value gap is an accident of history.** The six element sets were generated with
+  `board_source.png` attached — the spiral — and a Standard run has played on the winding
+  board since. The roster is lit for a board 45% brighter than the one it stands on.
+  `docs/tower-art-prompt.md` caught this for the FUSION sheets and told them to attach the
+  winding board instead; they still measure bright (clay 92, pure 93, rainbow 125), so
+  attaching the right board was not on its own enough.
+- **The hue gap is why grey stone floats.** Nothing painted on the winding board carries
+  blue above ~32. Neutral masonry carries 44-114. A multiply can darken stone; it cannot put
+  back a hue the board does not contain.
+- **The camera gap is the big one.** `art_match.py` reads it off the road: a ribbon of
+  constant width is drawn narrower where it runs east-west than where it runs north-south,
+  and the ratio is `sin(elevation)`. The winding board measures **1.000** — painted straight
+  down — against tower sheets painted at 0.24-0.30 (`tower.gd`'s hand-measured `WATER_POOL`
+  and `NATURE_RUNE` tables are ground circles, so they report the sheets' camera directly).
+  **No colour work closes 60 degrees.** The fix is a board repaint, and
+  `docs/board-art-prompt.md` now asks for 0.50 — halfway, because matching the sheets
+  exactly would lay the playfield nearly edge-on.
+
+**`Game.GROUND_SQUASH` is the engine's half of that number.** Every shadow, pad, aura ring
+and ground glow is drawn `Vector2(1.0, Game.GROUND_SQUASH)`; before it there were four
+values across seven sites and `grid.gd`'s comment claiming its 0.45 matched the towers'
+contact shadows had gone stale against their 0.40. What is NOT on the ground stays out of
+it — Fire's brazier glow and the pool/rune/fusion rings sit on top of a tower and follow the
+art's plane, not the board's. When a new board lands, move this constant to whatever
+`art_match.py` measures on it.
+
+`Game.ART_TINT` is the matching knob for value: one `Color` multiplied over every painted
+tower and creep, at the single `draw_texture_rect` each passes through. It is `WHITE`, which
+is the honest state — it exists so a roster that lands slightly hot can be trimmed in one
+place, not as a substitute for the repaint.
 
 **You cannot build on trees, cliffs or water, and that rule is read off the painting.**
 `python tools/build_mask.py <board.png>` writes `<board>_build.png`, a 1-texel-per-8px mask
@@ -331,7 +380,7 @@ To add content, add a **data row**, not a scene or script:
 | Adding a… | Goes in |
 |---|---|
 | Tower | `Game.TOWER_DEFS` + its id in `Game.TOWER_ORDER` **to make it buildable** |
-| Fusion (dual / triple / Pure) | a row in `Game.FUSIONS`, keyed by its element names **sorted and joined with `+`** (`fusion_key()` builds the same key from a tower's element set, which is what makes Fire+Water and Water+Fire one tower). It replaces the base definition rather than layering over it, so the row must be complete: `damage_tiers`, `range`, `interval`, `color`, `names`, `desc`. **No code change** — the payload fields are the ones `projectile.gd` already reads |
+| Fusion (dual / triple / Pure) | a row in `Game.FUSIONS`, keyed by its element names **sorted and joined with `+`** (`fusion_key()` builds the same key from a tower's element set, which is what makes Fire+Water and Water+Fire one tower). It replaces the base definition rather than layering over it, so the row must be complete: `damage_tiers`, `range`, `interval`, `color`, `names`, `desc`. **No code change for the PAYLOAD** — those fields are the ones `projectile.gd` already reads. The SHOT is the exception: `Projectile._draw()` dispatches on `shape` (the firing tower's `art_key()`, so `flesh_golem`, never `earth+nature+water`) and a row with no case there falls through to `_draw_plain_bolt` — which is silent, since a plain bolt in the row's colour looks deliberate. Add the case and check it with `--bolt-pose` |
 | Permanent upgrade | `Game.WORKSHOP_DEFS` — effects must be **per-level steps**, not totals. This is the only thing left that writes `TowerMods` |
 | Saved field | a key in the relevant `Save` section; bump `SAVE_VERSION` + add a `_migrate` branch if the shape changes |
 | Wave (first 20 only) | `Game.WAVES` — past that, waves are generated. **No boss goes in this table**, see below |
@@ -441,6 +490,10 @@ rather than Pillow:
 python tools/trace_road.py                        # re-derive Game.PATH + OBSTACLES from the board art
 python tools/build_mask.py <board.png>            # where a tower may stand: open ground, not trees/cliffs/water
 python tools/water_mask.py <board.png> <mask.png> # where the water is, for map.gd's ripple shader
+python tools/art_match.py [board.png]             # do the towers and the board look like one picture? see below
+python tools/art_match.py <new> --against <old>   # did an EDIT of a board move the road? (keeps WINDING_PATH or not)
+python tools/grade_board.py <board.png>           # pull a board's GRASS onto the register the towers were painted for
+python tools/art_match.py <new> --against <old>   # did an EDIT of a board move the road? (keeps WINDING_PATH or not)
 python tools/cut_sprites.py <sheet> <dir> <name> <max_h>   # split a generated sheet into sprites
 python tools/key_white.py <in> <out>              # restore alpha to a sheet flattened onto white
 python tools/stitch_sheets.py <out> <a> <b>       # one cycle split across two files -> one sheet

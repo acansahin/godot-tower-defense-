@@ -8,10 +8,13 @@ extends Node2D
 ## crossed the board and then was not there any more. The geometry turned out to be nothing
 ## to do with fire, so it is TINTED now and the fire palette is one caller of it.
 ##
-## Two knobs keep the fire look byte-for-byte where it matters and give the rest something
+## Three knobs keep the fire look byte-for-byte where it matters and give the rest something
 ## quieter: `scale`, because a hit that fires four times a second should not stamp the same
-## bloom a fireball does, and `gravity`, because embers falling out of the burst read as
-## burning debris and are wrong for a splash of water.
+## bloom a fireball does; `gravity`, because embers falling out of the burst read as
+## burning debris and are wrong for a splash of water; and `shards`, which swaps the ember
+## spray for the counter-rotating splinters Infernal, Rainbow and Pure throw. That last one is
+## not decoration — see the call site in projectile.gd for why chaos, alone among the
+## payloads, has nothing else on the board saying it happened.
 ##
 ## The palette is DERIVED from one colour rather than passed in five parts. Fire's
 ## hand-tuned constants sat within a few hundredths of `darkened`/`lightened` steps off its
@@ -25,6 +28,7 @@ var _age: float = 0.0
 var _color: Color = Color(1.0, 0.43, 0.035)
 var _scale: float = 1.0
 var _gravity: float = 0.0
+var _shards: bool = false
 var _angles: PackedFloat32Array = PackedFloat32Array()
 static var _effects: Node = null
 
@@ -32,20 +36,21 @@ static var _effects: Node = null
 ## tree. `scale` sizes the whole burst against Fire's original (1.0), and `gravity` is how
 ## far the embers sag over the burst's life, in px — 0 for anything that is not on fire.
 static func spawn(ctx: Node, pos: Vector2, color: Color, scale: float = 1.0,
-		gravity: float = 0.0) -> void:
+		gravity: float = 0.0, shards: bool = false) -> void:
 	if not is_instance_valid(_effects):
 		_effects = ctx.get_tree().current_scene.get_node_or_null("Effects")
 		if _effects == null:
 			return
 	var impact = _effects.acquire_impact()
 	impact.global_position = pos
-	impact.setup(color, scale, gravity)
+	impact.setup(color, scale, gravity, shards)
 
-func setup(color: Color, scale: float, gravity: float) -> void:
+func setup(color: Color, scale: float, gravity: float, shards: bool = false) -> void:
 	_age = 0.0
 	_color = color
 	_scale = scale
 	_gravity = gravity
+	_shards = shards
 	_angles.resize(EMBERS)
 	for i in EMBERS:
 		_angles[i] = TAU * i / EMBERS + randf_range(-0.18, 0.18)
@@ -91,5 +96,17 @@ func _draw() -> void:
 		# Flattened on y, so the burst sits on the ground plane the board is drawn in.
 		var ember_pos := Vector2(cos(a), sin(a) * 0.72) * distance
 		ember_pos.y += p * p * _gravity
-		draw_circle(ember_pos, lerpf(3.0, 0.8, p) * _scale,
-				Color(spark.r, spark.g, spark.b, 0.92 * fade))
+		if not _shards:
+			draw_circle(ember_pos, lerpf(3.0, 0.8, p) * _scale,
+					Color(spark.r, spark.g, spark.b, 0.92 * fade))
+			continue
+		# Chaos: the same ten pieces, thrown as splinters that keep turning on their way out.
+		# Turned OPPOSITE to the direction they fly, which is the whole reading — everything
+		# else on the board that spins, spins with its motion.
+		var turn := a - p * 6.0
+		var size := lerpf(4.2, 1.0, p) * _scale
+		draw_colored_polygon(PackedVector2Array([
+			ember_pos + Vector2(0.0, -size * 0.8).rotated(turn),
+			ember_pos + Vector2(size, 0.0).rotated(turn),
+			ember_pos + Vector2(0.0, size * 0.8).rotated(turn),
+		]), Color(spark.r, spark.g, spark.b, 0.92 * fade))

@@ -264,9 +264,53 @@ const PLAY_TOP := WORLD_SIZE.y * (HUD_BAR_HEIGHT / SCREEN_SIZE.y)  # 48
 ## what you can build on, what you can hit and what you can see are the same disc.
 const TOWER_RADIUS := 30.0
 
-## How TALL a painted tower is drawn, in board px, and one half of a pair with PAD_PITCH
-## below: whether a row of towers reads as separate buildings or as one mass depends on the
-## drawn WIDTH against the pitch, so the two move together and neither means anything alone.
+## How flat a circle lying on the GROUND is drawn: a circle at camera elevation e appears
+## sin(e) times as tall as it is wide, so every shadow, pad, aura ring and impact ring is
+## drawn `draw_set_transform(at, 0.0, Vector2(1.0, GROUND_SQUASH))`.
+##
+## ONE number, because there is one ground. Before this constant the seven ground decals
+## carried four values - 0.32, 0.34, 0.40 and 0.45 across tower.gd, enemy.gd and grid.gd -
+## which is four cameras agreeing about nothing, and `grid.gd`'s comment claiming its 0.45
+## matched "the towers' contact shadows" had already gone stale against their 0.40. A site
+## that wants to differ writes it as a MULTIPLE of this and says why.
+##
+## WHAT IS NOT ON THE GROUND STAYS OUT OF IT. Fire's brazier glow and the WATER_POOL /
+## NATURE_RUNE / fusion rings in `tower.gd` are circles on top of a TOWER, hand-measured off
+## the painted sheets; they follow the art's own plane and must not be dragged onto this
+## one. Projectile rings are in the air. Only shadows, pads and light pooled on the board
+## itself belong here.
+##
+## It is a property of the BOARD ART, not a taste: run `python tools/art_match.py`, which
+## reads it off the road (a ribbon of constant width is drawn narrower where it runs east-
+## west than where it runs north-south, and the ratio is this number). The winding board
+## measures 1.000 - straight overhead - against tower sheets painted at 0.24-0.30, and that
+## disagreement is most of why the towers read as stickers on it.
+##
+## Held at 0.45 rather than at either end on purpose: it is what pads and the fallback
+## shadow already used, so collapsing the four costs the least visible change, and 0.45 is
+## one edit from the 0.50 docs/board-art-prompt.md asks a replacement board to be painted
+## at. When that board lands, move this to whatever art_match.py measures on it - this holds
+## what the ENGINE draws at, the prompt holds what the BOARD is generated to, and the two
+## are meant to end up equal.
+const GROUND_SQUASH := 0.45
+
+## Multiplied over every painted tower and creep as they are drawn. WHITE means "the art
+## ships as painted", which is the honest state whenever the board and the roster were made
+## for each other.
+##
+## It exists as a named knob because they were not: the six element sets were generated
+## against board_source.png (open ground luminance 106) and the game is played on the
+## winding board (73), so the roster is lit for a board 45% brighter than the one it stands
+## on. Grading here is the CHEAP half of that fix and the wrong half to lean on - a multiply
+## can darken stone but cannot put back a hue the board does not contain, and it dims the
+## flame and crystal the sets are built around along with the masonry. The real fix is the
+## board, and this is the dial to reach for while one is being painted, or to trim a set
+## that lands slightly hot.
+const ART_TINT := Color.WHITE
+
+## How TALL a painted tower is drawn, in board px. Whether a row of towers reads as separate
+## buildings or as one mass depends on the drawn WIDTH against TOWER_GAP, so those two move
+## together and neither means much alone.
 ##
 ## It lives in Game rather than in `tower.gd` (which reads it) because THE PLACEMENT RULE HAS
 ## TO SEE IT. While the art was small the two could be strangers: a 60px sprite over a 30px
@@ -291,8 +335,8 @@ const TOWER_BASE_HALF := 0.45
 ## 30px that suited a 60px sprite, scaled by the same 1.6.
 ##
 ## `main.gd` `_tower_at()` keeps the NEAREST tower rather than the first in range, so discs
-## that overlap are harmless. What it must not do is exceed PAD_PITCH, which would let a tap
-## on empty grass select a tower a whole cell away.
+## that overlap are harmless. What it must not do is exceed TOWER_GAP (68), which would let a
+## tap on empty grass select a tower standing further away than the nearest legal spot.
 const PICK_RADIUS := 48.0
 ## Min distance from a tower's centre to the road centre-line: half the road, plus the half
 ## width of the painted FOOTING, so a tower never stands on the stone.
@@ -302,9 +346,26 @@ const PICK_RADIUS := 48.0
 ## 15px clear for a base 72px wide, and towers sat squarely on the road. Deriving it from the
 ## drawn size means the rule follows the art at whatever size the art is next set to.
 const ROAD_KEEPOUT := ROAD_HALF + TOWER_SPRITE_HEIGHT * TOWER_BASE_HALF
-## Centre-to-centre spacing. Two towers at exactly 2*TOWER_RADIUS touch, which reads as one
-## blob at phone scale; a little air makes a row of towers countable.
-const TOWER_GAP := TOWER_RADIUS * 2.0 + 8.0
+## Centre-to-centre spacing, sized against what is DRAWN rather than against TOWER_RADIUS —
+## the same correction ROAD_KEEPOUT above already carries, and for the same reason.
+##
+## It was `TOWER_RADIUS * 2 + 8` = 68px: two 30px footprints plus a little air. That is the
+## right answer for the tap disc and the wrong one for the art. A painted tower is drawn
+## TOWER_SPRITE_HEIGHT tall and runs 108-147px WIDE across the roster, so at 68px apart a
+## row of them buries itself — neighbours overlap by a third of their width and read as one
+## mass instead of as countable buildings.
+##
+## **The defect was invisible while a pad lattice existed**, because the pads were pitched at
+## 112px and nothing could ever be dropped at 68 regardless of what this constant allowed.
+## Removing the lattice made the rule the only thing standing between two towers and exposed
+## it immediately. Worth remembering: a guide that constrains the player more tightly than
+## the rule does will hide a wrong rule for as long as it lasts.
+##
+## 112 is measured, not derived — it is the pitch the pads used, chosen against the 96px
+## sprite and confirmed by eye at board scale. It is a PAIR with TOWER_SPRITE_HEIGHT: move
+## the drawn size and this moves with it, or the row goes back to being a blob. Re-measure
+## with `--dump-board` and look at a `--fill-board --shot`, which is what shows the overlap.
+const TOWER_GAP := 112.0
 
 # --- Build pads ----------------------------------------------------------------
 #
@@ -320,40 +381,6 @@ const TOWER_GAP := TOWER_RADIUS * 2.0 + 8.0
 # 47, because the open meadows are small and roundish and a hex pack fits more of them into
 # the same grass. Rows still line up, which is the part the player sees.
 
-## Centre-to-centre pitch of the pad lattice, and the number that decides HOW MANY TOWERS THE
-## GAME IS. Set outright rather than derived from TOWER_GAP (which it used to be, +2 for
-## float slack); the floor that replaces that derivation is that it must stay above
-## TOWER_GAP, or two neighbouring pads are not both buildable.
-##
-## Measured pad counts on the winding board, which fall far faster than the pitch rises
-## because the meadows are small islands - and are NOT monotonic, because the origin search
-## finds lucky alignments. With the old footprint-sized keepout: 70px marked 47 pads, 84px
-## 28, 91px 25, 150px 13, 186px 9, and 215px 9 again. With the keepout now scaled to the
-## drawn art the same board holds fewer: 98px marks 17, 112px 12, 126px 10, 140px 7.
-## **Always measure with `--dump-board`; never interpolate.**
-##
-## 112 pairs with a 96px sprite: twelve towers, each drawn 60% larger than the 60px the board
-## shipped with. Twelve neither reach nor kill what forty-seven did, and both halves are paid
-## for in Balance - WC3_RANGE_SCALE for the reach, GLOBAL_DAMAGE_MULT for the kill. Move this
-## and re-measure all of it, with a full `--fill-board` as the gate.
-const PAD_PITCH := 112.0
-## Candidate lattice origins tried per axis when a board is installed. WHERE the lattice
-## starts is worth more than its pitch here, because the meadows are scattered islands: on
-## the winding board the worst origin marks 27 pads and the best 47. So instead of a magic
-## offset written down per board, every origin on a PAD_ORIGIN_STEPS x PAD_ORIGIN_STEPS
-## sample of one lattice cell is tried and the most productive wins — a repaint re-tunes
-## itself, the same way the build mask does.
-const PAD_ORIGIN_STEPS := 5
-## How far the cursor may sit from a pad and still mean it. One pitch, so every point of the
-## board that is nearer to some pad than to open ground snaps to it.
-const PAD_SNAP := PAD_PITCH
-
-## Where a tower may be placed on the active board. Read it through pads(), never directly:
-## it is built on first use, not on board swap. Empty means free placement — which is what
-## a board publishing an `active_build_zones` allowlist gets, since its own guides replace
-## the lattice.
-var _pads: Array = []
-var _pads_ready: bool = false
 
 ## Scenery that BLOCKS building, as [centre, radius] in board px. FOUND IN THE PAINTING, not
 ## invented: tools/trace_road.py's companion scan looks for teal water in the board art and
@@ -1053,7 +1080,7 @@ var active_build_mask: Image = null
 ## simply has no mask and keeps free placement, so adding one is dropping a `_build.png` next
 ## to the art and adding a line here.
 const BUILD_MASKS := {
-	"winding": "res://assets/art/maps/winding_forest_close_v1_build.png",
+	"winding": "res://assets/art/maps/winding_forest_cleared_v7_graded_build.png",
 }
 
 ## Cumulative distance from active_path[0] to each waypoint. Towers
@@ -1106,11 +1133,6 @@ func configure_board(path: Array, obstacles: Array = [], build_zones: Array = []
 	active_obstacles = obstacles.duplicate(true)
 	active_build_zones = build_zones.duplicate(true)
 	active_build_mask = _load_build_mask(board_id)
-	# Invalidated, not rebuilt. Marking the lattice costs a sweep of the whole board and the
-	# autoload installs the endless board before Main replaces it with the one actually being
-	# played — building here paid that cost twice per launch, for a board nobody saw.
-	_pads = []
-	_pads_ready = false
 	_path_cum = PackedFloat32Array()
 	_path_cum.resize(active_path.size())
 	for i in range(1, active_path.size()):
@@ -1118,73 +1140,6 @@ func configure_board(path: Array, obstacles: Array = [], build_zones: Array = []
 				+ (active_path[i] as Vector2).distance_to(active_path[i - 1])
 	active_board_id = board_id
 	board_changed.emit(active_board_id)
-
-## The pads for the active board, marking the lattice on first use.
-##
-## Tries every candidate origin and keeps the most productive, so no board carries a
-## hand-tuned offset. That is PAD_ORIGIN_STEPS^2 sweeps of a ~200-point lattice; the cheap
-## centre-of-the-mask prefilter in _pads_from() is what keeps it off the frame budget, since
-## most lattice points are over forest and can_build_at() would measure the distance to all
-## 140 road segments to find that out.
-func pads() -> Array:
-	if not _pads_ready:
-		_pads_ready = true
-		_rebuild_pads()
-	return _pads
-
-func _rebuild_pads() -> void:
-	_pads = []
-	# A board with an explicit clearing allowlist already HAS its guides. A lattice inside
-	# them would be a second answer to a question the allowlist has already answered.
-	if not active_build_zones.is_empty():
-		return
-	var row_h := PAD_PITCH * sqrt(3.0) * 0.5
-	for iy in PAD_ORIGIN_STEPS:
-		for ix in PAD_ORIGIN_STEPS:
-			var candidate := _pads_from(
-					TOWER_RADIUS + PAD_PITCH * float(ix) / float(PAD_ORIGIN_STEPS),
-					PLAY_TOP + TOWER_RADIUS + row_h * float(iy) / float(PAD_ORIGIN_STEPS),
-					row_h)
-			if candidate.size() > _pads.size():
-				_pads = candidate
-
-## One staggered lattice from one origin: every other row is shifted half a pitch, which is
-## what makes the pack hexagonal. Row height is pitch * sin(60), so a pad's six neighbours
-## are all exactly PAD_PITCH away.
-func _pads_from(ox: float, oy: float, row_h: float) -> Array:
-	var out: Array = []
-	var y := oy
-	var row := 0
-	while y <= WORLD_SIZE.y - TOWER_RADIUS:
-		var x := ox + (PAD_PITCH * 0.5 if row % 2 == 1 else 0.0)
-		while x <= PLAY_RIGHT - TOWER_RADIUS:
-			var at := Vector2(x, y)
-			# One texel of the mask, before can_build_at() walks the road. Three quarters of
-			# the board is closed ground, and this rejects it for the price of a lookup.
-			if is_open_ground(at) and can_build_at(at):
-				out.append(at)
-			x += PAD_PITCH
-		y += row_h
-		row += 1
-	return out
-
-## True when this board offers marked pads at all. False on a board that instead publishes
-## an `active_build_zones` allowlist and keeps free placement inside its own painted rings.
-func has_pads() -> bool:
-	return not pads().is_empty()
-
-## The pad the cursor means, or Vector2.INF when it is not near one. INF rather than the
-## cursor position on purpose: a caller that forgets to check would otherwise silently fall
-## back to free placement, and the marks would become a decoration over the old behaviour.
-func nearest_pad(pos: Vector2) -> Vector2:
-	var best := Vector2.INF
-	var best_d := PAD_SNAP
-	for pad in pads():
-		var d: float = pos.distance_to(pad)
-		if d < best_d:
-			best_d = d
-			best = pad
-	return best
 
 ## Loads `board_id`'s open-ground mask, or null if it has none. Called once per board swap,
 ## never per placement check.

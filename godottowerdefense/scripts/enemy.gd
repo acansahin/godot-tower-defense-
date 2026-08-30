@@ -623,7 +623,7 @@ func _draw() -> void:
 		# contrary motion is what reads as ALTITUDE — the lift alone could just as well be a
 		# creep drawn a bit higher up, and a still frame cannot tell the two apart.
 		var drop := 0.5 + 0.5 * cos(_wing_phase)  # 1 at the top of the stroke, when it flies lowest
-		draw_set_transform(Vector2(0, radius + 15.0), 0.0, Vector2(1.0, 0.32))
+		draw_set_transform(Vector2(0, radius + 15.0), 0.0, Vector2(1.0, Game.GROUND_SQUASH))
 		draw_circle(Vector2.ZERO, radius * (0.58 + 0.16 * drop),
 				Color(0, 0, 0, 0.12 + 0.09 * drop))
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
@@ -635,7 +635,7 @@ func _draw() -> void:
 		# walked point; putting its shadow at the blob's old radius*0.85 left a visible gap
 		# and made every ground runner look airborne.
 		var ground_y := radius * 0.22 if Sprites.enemy(kind) != null else radius * 0.85
-		draw_set_transform(Vector2(0, ground_y), 0.0, Vector2(1.0, 0.4))
+		draw_set_transform(Vector2(0, ground_y), 0.0, Vector2(1.0, Game.GROUND_SQUASH))
 		draw_circle(Vector2.ZERO, radius * 0.9, Color(0, 0, 0, 0.18))
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	_draw_element_ring()
@@ -685,7 +685,7 @@ func _draw_element_ring() -> void:
 	if armor_element == "" or Sprites.enemy(kind) == null:
 		return
 	var ec: Color = Game.ELEMENT_COLORS.get(armor_element, Color.WHITE)
-	draw_set_transform(Vector2(0, radius * 0.85), 0.0, Vector2(1.0, 0.4))
+	draw_set_transform(Vector2(0, radius * 0.85), 0.0, Vector2(1.0, Game.GROUND_SQUASH))
 	draw_circle(Vector2.ZERO, radius * 1.15, Color(ec.r, ec.g, ec.b, 0.30))
 	draw_arc(Vector2.ZERO, radius * 1.15, 0.0, TAU, 20, Color(ec.r, ec.g, ec.b, 0.85), 3.0, true)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
@@ -741,7 +741,9 @@ func _draw_sprite(ci: CanvasItem, art: Texture2D) -> void:
 	# Feet a little below the walked point, so the creep stands ON the road rather than
 	# behind it — the towers get the same nudge, scaled here because creeps vary in size.
 	where.position.y += radius * 0.22
-	ci.draw_texture_rect(art, where, false)
+	# Game.ART_TINT, the same grade the towers pass through, so the creeps and the buildings
+	# cannot end up lit for two different boards. WHITE unless a board and the art drift.
+	ci.draw_texture_rect(art, where, false, Game.ART_TINT)
 	# Impact pop. Over-bright modulate washes every lit pixel of the sprite towards white,
 	# which is the painted equivalent of the white circle the blob flashes: it lights up the
 	# creep's own shape instead of stamping a ball over it.
