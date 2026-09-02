@@ -228,7 +228,7 @@ func _spawn_count(n: int, type_def: Dictionary, wave_def: Dictionary) -> int:
 ## generated wave for a fight that Game.declare_victory() means will never happen.
 func _preview_text(n: int) -> String:
 	if n > Balance.STANDARD_WAVES:
-		return "Final wave"
+		return tr("WAVE_FINAL")
 	var def: Dictionary = _wave_def(n)
 	# An avatar wave is one boss and nothing else, so "x12" would be a lie. Naming its ELEMENT
 	# here is the point of the reveal: the four arrive in a random order, and this prep gap is
@@ -236,8 +236,8 @@ func _preview_text(n: int) -> String:
 	if String(def.get("boss_rule", "")) == "element_avatar":
 		var avatar := Run.boss_element_for_wave(n)
 		if avatar == "":
-			return "Next: Element Avatar  BOSS"
-		return "Next: %s Avatar  BOSS" % avatar.capitalize()
+			return tr("WAVE_AVATAR_UNKNOWN") + "  BOSS"
+		return tr("WAVE_AVATAR") % avatar.capitalize() + "  BOSS"
 	var t: Dictionary = Game.WAVE_TYPES[def["type"]]
 	var cnt := _spawn_count(n, t, def)
 	var boss := "  BOSS" if def.get("boss", false) else ""
@@ -246,8 +246,8 @@ func _preview_text(n: int) -> String:
 	var elite := "  ELITE" if not def.get("boss", false) and float(def.get("hp", 1.0)) > 1.0 else ""
 	var elem := String(def.get("element", ""))
 	var epfx := (elem.capitalize() + " ") if elem != "" else ""
-	return "Next: %s%s x%d%s%s" % [epfx,
-			str(def.get("name", t.get("name", def["type"]))), cnt, boss, elite]
+	return tr("HUD_NEXT") % ("%s%s x%d%s%s" % [epfx,
+			str(def.get("name", t.get("name", def["type"]))), cnt, boss, elite])
 
 ## Colour for the preview label: the wave's element, or a default gold if neutral.
 func _preview_color(n: int) -> Color:

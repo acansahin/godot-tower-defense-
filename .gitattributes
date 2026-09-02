@@ -1,0 +1,19 @@
+# LF in the working tree, on every platform.
+#
+# This is not a style preference. Git here is configured `core.autocrlf=true`, so a Windows
+# checkout used to turn every LF-committed file into CRLF — and Godot renders the carriage
+# return inside a `.tscn`'s embedded multi-line string as its own line break. Menu.tscn's
+# "How to Play" body is 21 lines that became 42, growing the panel past the bottom of the
+# screen with its Back button off it, i.e. the player was trapped in the panel. CI builds
+# from a fresh Linux checkout and never saw it, which is why it sat unnoticed.
+#
+# The blobs were already LF, so this file changes no content — only what lands on disk.
+* text=auto eol=lf
+
+# Never touched, whatever they contain.
+*.png binary
+*.mp3 binary
+*.ttf binary
+*.otf binary
+*.wav binary
+*.ogg binary

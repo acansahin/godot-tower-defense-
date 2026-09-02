@@ -1,14 +1,24 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/menu.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/map.gd" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/Workshop.tscn" id="3"]
+[ext_resource type="Theme" path="res://assets/theme/ui_theme.tres" id="4"]
+[ext_resource type="Texture2D" path="res://assets/art/menu/menu_bg.png" id="5"]
+[ext_resource type="PackedScene" path="res://scenes/HowToPlay.tscn" id="6"]
+
+[sub_resource type="Gradient" id="scrim_gradient"]
+offsets = PackedFloat32Array(0, 0.30, 0.56)
+colors = PackedColorArray(0, 0, 0, 0.82, 0, 0, 0, 0.42, 0, 0, 0, 0)
+
+[sub_resource type="GradientTexture2D" id="scrim"]
+gradient = SubResource("scrim_gradient")
+width = 256
+height = 8
+fill_from = Vector2(0, 0)
+fill_to = Vector2(1, 0)
 
 [node name="Menu" type="Node2D"]
 script = ExtResource("1")
-
-[node name="Map" type="Node2D" parent="."]
-script = ExtResource("2")
 
 [node name="UI" type="CanvasLayer" parent="."]
 
@@ -17,120 +27,107 @@ process_mode = 3
 layout_mode = 3
 anchor_right = 1.0
 anchor_bottom = 1.0
+theme = ExtResource("4")
 
-[node name="Dim" type="ColorRect" parent="UI/Root"]
+[node name="Background" type="TextureRect" parent="UI/Root"]
+texture_filter = 3
 layout_mode = 1
 anchor_right = 1.0
 anchor_bottom = 1.0
-color = Color(0, 0, 0, 0.45)
+mouse_filter = 2
+texture = ExtResource("5")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="Scrim" type="TextureRect" parent="UI/Root"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+texture = SubResource("scrim")
+expand_mode = 1
 
 [node name="Center" type="CenterContainer" parent="UI/Root"]
 layout_mode = 1
-anchor_right = 1.0
 anchor_bottom = 1.0
+offset_left = 44.0
+offset_right = 424.0
+grow_vertical = 2
 
-[node name="Panel" type="PanelContainer" parent="UI/Root/Center"]
+[node name="Column" type="VBoxContainer" parent="UI/Root/Center"]
 layout_mode = 2
+theme_override_constants/separation = 18
 
-[node name="VBox" type="VBoxContainer" parent="UI/Root/Center/Panel"]
+[node name="Title" type="Label" parent="UI/Root/Center/Column"]
 layout_mode = 2
-theme_override_constants/separation = 14
-
-[node name="Title" type="Label" parent="UI/Root/Center/Panel/VBox"]
-layout_mode = 2
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.85)
+theme_override_constants/outline_size = 10
 theme_override_font_sizes/font_size = 56
 text = "ELEMENT TD"
 horizontal_alignment = 1
 
-[node name="Subtitle" type="Label" parent="UI/Root/Center/Panel/VBox"]
+[node name="Subtitle" type="Label" parent="UI/Root/Center/Column"]
 layout_mode = 2
+theme_override_colors/font_color = Color(0.78, 0.82, 0.88, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.85)
+theme_override_constants/outline_size = 6
 theme_override_font_sizes/font_size = 18
-text = "Element-matching tower defense"
+text = "MENU_SUBTITLE"
 horizontal_alignment = 1
 
-[node name="StatusLabel" type="Label" parent="UI/Root/Center/Panel/VBox"]
+[node name="Panel" type="PanelContainer" parent="UI/Root/Center/Column"]
+layout_mode = 2
+size_flags_horizontal = 0
+
+[node name="VBox" type="VBoxContainer" parent="UI/Root/Center/Column/Panel"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="StatusLabel" type="Label" parent="UI/Root/Center/Column/Panel/VBox"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.62, 0.9, 1, 1)
 theme_override_font_sizes/font_size = 17
 text = ""
 horizontal_alignment = 1
 
-[node name="RulesetButton" type="Button" parent="UI/Root/Center/Panel/VBox"]
+[node name="RulesetButton" type="Button" parent="UI/Root/Center/Column/Panel/VBox"]
 custom_minimum_size = Vector2(220, 40)
 layout_mode = 2
 text = "Difficulty: Normal"
 
-[node name="PlayButton" type="Button" parent="UI/Root/Center/Panel/VBox"]
-custom_minimum_size = Vector2(220, 52)
+[node name="PlayButton" type="Button" parent="UI/Root/Center/Column/Panel/VBox"]
+custom_minimum_size = Vector2(220, 56)
 layout_mode = 2
-text = "Play"
+theme_type_variation = &"PlayButton"
+text = "MENU_PLAY"
 
-[node name="WorkshopButton" type="Button" parent="UI/Root/Center/Panel/VBox"]
+[node name="WorkshopButton" type="Button" parent="UI/Root/Center/Column/Panel/VBox"]
 custom_minimum_size = Vector2(220, 46)
 layout_mode = 2
-text = "Workshop"
+text = "MENU_WORKSHOP"
 
-[node name="HowButton" type="Button" parent="UI/Root/Center/Panel/VBox"]
+[node name="HowButton" type="Button" parent="UI/Root/Center/Column/Panel/VBox"]
 custom_minimum_size = Vector2(220, 46)
 layout_mode = 2
-text = "How to Play"
+text = "MENU_HOW"
 
-[node name="SoundButton" type="Button" parent="UI/Root/Center/Panel/VBox"]
+[node name="SoundButton" type="Button" parent="UI/Root/Center/Column/Panel/VBox"]
 custom_minimum_size = Vector2(220, 46)
 layout_mode = 2
 text = "Sound: On"
 
-[node name="QuitButton" type="Button" parent="UI/Root/Center/Panel/VBox"]
+[node name="LanguageButton" type="Button" parent="UI/Root/Center/Column/Panel/VBox"]
 custom_minimum_size = Vector2(220, 46)
 layout_mode = 2
-text = "Quit"
+text = "Language: English"
 
-[node name="HowPanel" type="CenterContainer" parent="UI/Root"]
+[node name="QuitButton" type="Button" parent="UI/Root/Center/Column/Panel/VBox"]
+custom_minimum_size = Vector2(220, 46)
+layout_mode = 2
+text = "MENU_QUIT"
+
+[node name="HowPanel" parent="UI/Root" instance=ExtResource("6")]
 visible = false
-layout_mode = 1
-anchor_right = 1.0
-anchor_bottom = 1.0
-
-[node name="Panel" type="PanelContainer" parent="UI/Root/HowPanel"]
-layout_mode = 2
-
-[node name="VBox" type="VBoxContainer" parent="UI/Root/HowPanel/Panel"]
-layout_mode = 2
-theme_override_constants/separation = 12
-
-[node name="Title" type="Label" parent="UI/Root/HowPanel/Panel/VBox"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 32
-text = "How to Play"
-horizontal_alignment = 1
-
-[node name="Body" type="Label" parent="UI/Root/HowPanel/Panel/VBox"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 17
-text = "• Play starts the run immediately.
-• Drag a tower from the palette on the right onto clear ground to build it.
-• Tap a tower to upgrade it (up to level 5). Reaching level 3 asks you to
-    pick a branch — a permanent choice that changes what the tower does.
-    Tap the small × in its corner to sell it: full refund if it never fired
-    a shot, most of it back otherwise. The green ▲ marks a tower whose next
-    level you can already afford.
-• Towers always shoot the enemy nearest the exit — the one about to cost a life.
-• Pause / Space freezes the game; the speed button / F cycles 1x, 2x, 3x.
-• Earth is ground-only — it cannot hit flyers. Water and Nature can.
-• Immune enemies shrug off slows, stuns and knockback — but poison and burn
-    still hurt them.
-• Elements: water → fire → nature → earth → water. You deal ×1.6 to the
-    element you beat, ×0.85 to the one that beats you. Big gold damage
-    numbers mean a bonus; small grey ones mean you are resisted.
-• Send Next ▶ starts the next wave early for bonus gold.
-• Press M to mute all sound.
-• Standard mode is 20 waves — clear them all to win. See how few lives
-    you lose along the way for more stars."
-
-[node name="BackButton" type="Button" parent="UI/Root/HowPanel/Panel/VBox"]
-custom_minimum_size = Vector2(180, 46)
-layout_mode = 2
-text = "Back"
 
 [node name="Workshop" parent="UI/Root" instance=ExtResource("3")]
 visible = false

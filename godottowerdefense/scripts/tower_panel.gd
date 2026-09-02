@@ -65,10 +65,10 @@ func _build_rows() -> void:
 		return
 	if _tower.can_upgrade():
 		_rows.append({"kind": "upgrade", "cost": _tower.upgrade_cost(),
-				"label": "Level %d" % (_tower.level + 1)})
+				"label": tr("PANEL_LEVEL") % (_tower.level + 1)})
 	elif _tower.upgrade_locked_by_avatar():
 		_rows.append({"kind": "locked_upgrade", "cost": 0,
-				"label": "Level %d — beat the %s avatar"
+				"label": tr("PANEL_LEVEL_LOCKED")
 						% [_tower.level + 1, _tower.element.capitalize()]})
 	# Fusion is offered only where it branches from (Tower.can_fuse): Lv2 for a base tower,
 	# always for a fused one. Asking can_fuse() once here rather than per element keeps the
@@ -86,7 +86,7 @@ func _build_rows() -> void:
 	for e in Game.TOWER_ORDER:
 		if not _tower.elements.has(String(e)) and not Run.is_avatar_beaten(String(e)):
 			_locked.append(String(e))
-	_rows.append({"kind": "sell", "cost": -_tower.sell_value(), "label": "Sell"})
+	_rows.append({"kind": "sell", "cost": -_tower.sell_value(), "label": tr("PANEL_SELL")})
 
 ## Opens the panel for `tower`, parked above it and nudged to stay fully on screen.
 func open_for(tower: Tower) -> void:
@@ -228,10 +228,10 @@ func _draw() -> void:
 	draw_string(font, Vector2(hx + 18.0, hy), _tower.display_name,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 16, TEXT)
 	var name_w := font.get_string_size(_tower.display_name, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x
-	draw_string(font, Vector2(hx + 26.0 + name_w, hy), "Lv %d" % _tower.level,
+	draw_string(font, Vector2(hx + 26.0 + name_w, hy), tr("PANEL_LV") % _tower.level,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 13, TEXT_DIM)
 	# Damage on the right, because it is the number a player compares between two towers.
-	draw_string(font, Vector2(r.position.x, hy), "%d dmg  " % int(round(_tower.damage)),
+	draw_string(font, Vector2(r.position.x, hy), (tr("PANEL_DMG") + "  ") % int(round(_tower.damage)),
 			HORIZONTAL_ALIGNMENT_RIGHT, r.size.x - PAD, 13, TEXT_DIM)
 
 	for i in _rows.size():
@@ -249,12 +249,12 @@ func _draw() -> void:
 		# The one irreversible choice in the game, said out loud BEFORE it is made: at Lv2 a
 		# base tower is offered both roads, and taking either closes the other for good.
 		if note == "" and String(hovered.get("kind", "")) == "upgrade" and _tower.can_fuse():
-			note = "Going to Lv%d closes the fusion branch" % (_tower.level + 1)
+			note = tr("PANEL_CLOSES_FUSION") % (_tower.level + 1)
 	if note == "" and not _locked.is_empty():
 		var names := PackedStringArray()
 		for e in _locked:
 			names.append(String(e).capitalize())
-		note = "Locked: %s — beat their avatar boss" % ", ".join(names)
+		note = tr("PANEL_LOCKED") % ", ".join(names)
 	if note != "":
 		draw_string(font, Vector2(r.position.x + PAD, r.end.y - PAD + 2.0), note,
 				HORIZONTAL_ALIGNMENT_LEFT, r.size.x - PAD * 2.0, 12, TEXT_DIM)
@@ -285,7 +285,7 @@ func _draw_row(font: Font, rect: Rect2, row: Dictionary, hovered: bool) -> void:
 	var label := String(row["label"])
 	var prefix := ""
 	if kind == "upgrade":
-		prefix = "Upgrade to "
+		prefix = tr("PANEL_UPGRADE_TO")
 	elif kind == "fuse":
 		prefix = "+%s  ->  " % String(row["element"]).capitalize()
 	draw_string(font, Vector2(rect.position.x + 10.0, rect.position.y + 25.0), prefix + label,

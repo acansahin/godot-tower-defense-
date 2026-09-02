@@ -68,7 +68,7 @@ offset_top = 2.0
 offset_right = 1272.0
 offset_bottom = 36.0
 focus_mode = 0
-text = "Send Next ▶"
+text = "HUD_SEND_NEXT"
 
 [node name="PauseButton" type="Button" parent="."]
 layout_mode = 1
@@ -80,7 +80,7 @@ offset_right = 112.0
 offset_bottom = -8.0
 focus_mode = 0
 theme_override_font_sizes/font_size = 18
-text = "Pause"
+text = "HUD_PAUSE"
 
 [node name="HintLabel" type="Label" parent="."]
 layout_mode = 1

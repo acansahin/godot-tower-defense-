@@ -41,16 +41,19 @@ func _ready() -> void:
 	# fresh level must always re-assert it (Main._ready does the same for `paused`).
 	_apply_speed()
 	_apply_pause()
+	# Until the first wave starts nothing calls set_wave(), so without this the label would
+	# sit on the scene file's own English literal for the whole prep phase.
+	wave_label.text = tr("HUD_WAVE") % 0
 
 func set_gold(value: int) -> void:
-	gold_label.text = "Gold: %d" % value
+	gold_label.text = tr("HUD_GOLD") % value
 
 func set_lives(value: int) -> void:
-	lives_label.text = "Lives: %d" % value
+	lives_label.text = tr("HUD_LIVES") % value
 
 ## No "/ total" — waves are endless, so the number counts up with nothing to count toward.
 func set_wave(number: int) -> void:
-	wave_label.text = "Wave: %d" % number
+	wave_label.text = tr("HUD_WAVE") % number
 	send_button.disabled = true  # a wave is active now
 
 ## Shows a hint along the bottom, or clears it when handed "". The HUD only renders this —
@@ -98,7 +101,7 @@ func cycle_speed() -> void:
 
 func _apply_pause() -> void:
 	get_tree().paused = _paused
-	pause_button.text = "Resume" if _paused else "Pause"
+	pause_button.text = tr("HUD_RESUME") if _paused else tr("HUD_PAUSE")
 
 func _apply_speed() -> void:
 	Engine.time_scale = SPEEDS[_speed_index]

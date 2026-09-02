@@ -176,8 +176,8 @@ func _on_wave_starting(number: int) -> void:
 		return
 	var moved := _relocate_towers_for_board()
 	Game.towers_changed.emit()
-	hud.set_hint("New map: %s%s" % [Game.active_board_id.capitalize(),
-			" — %d towers moved to clear ground" % moved if moved > 0 else ""])
+	hud.set_hint(tr("HUD_NEW_MAP") % Game.active_board_id.capitalize()
+			+ (tr("HUD_TOWERS_MOVED") % moved if moved > 0 else ""))
 	_clear_map_hint_later()
 	if _fill_board_requested():
 		print("--- MAP CHANGE @ wave %d: %s (%d towers moved) ---"
@@ -1514,7 +1514,7 @@ func _on_panel_sell(tower: Tower) -> void:
 ## towers_changed is emitted because the upgrade HINT drawn on a tower reads can_upgrade(),
 ## which just changed for every tower of this element without any of them being touched.
 func _on_avatar_beaten(element: String) -> void:
-	hud.set_hint("%s avatar down — %s towers can reach Lv%d, and any tower can fuse %s"
+	hud.set_hint(tr("HINT_AVATAR_DOWN")
 			% [element.capitalize(), element.capitalize(), Balance.MAX_LEVEL,
 				element.capitalize()])
 	Game.towers_changed.emit()

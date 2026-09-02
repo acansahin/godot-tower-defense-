@@ -13,7 +13,11 @@ signal closed
 
 const ROW_HEIGHT := 74.0
 const ROW_GAP := 10.0
-const PANEL := Rect2(240.0, 96.0, 800.0, 528.0)
+const PANEL_W := 800.0
+## Above the first row: the WORKSHOP title, the subtitle and the wallet.
+const HEADER_H := 96.0
+## Below the last row: the Back button, plus the gap above it and the margin under it.
+const FOOTER_H := 92.0
 const BUY_W := 150.0
 const BUY_H := 54.0
 
@@ -25,9 +29,22 @@ func open() -> void:
 	show()
 	queue_redraw()
 
+## The panel GROWS WITH THE ROWS instead of standing at a fixed height. It used to be a
+## `const PANEL := Rect2(240, 96, 800, 528)` with the Back button placed 62px up from that
+## fixed bottom edge, so every row added to Game.WORKSHOP_DEFS walked the last row further
+## down into the button. At five rows they overlapped — and that is a click ambiguity, not
+## only a cosmetic one, because `_gui_input` tests `_close_rect()` BEFORE `_buy_at()`: the
+## Back button silently swallowed the bottom row's Buy.
+func _panel_rect() -> Rect2:
+	var rows := maxi(Game.WORKSHOP_DEFS.size(), 1)
+	var h := HEADER_H + rows * ROW_HEIGHT + (rows - 1) * ROW_GAP + FOOTER_H
+	return Rect2((Game.SCREEN_SIZE.x - PANEL_W) * 0.5,
+			maxf((Game.SCREEN_SIZE.y - h) * 0.5, 8.0), PANEL_W, h)
+
 func _row_rect(i: int) -> Rect2:
-	return Rect2(PANEL.position.x + 22.0, PANEL.position.y + 96.0 + i * (ROW_HEIGHT + ROW_GAP),
-			PANEL.size.x - 44.0, ROW_HEIGHT)
+	var p := _panel_rect()
+	return Rect2(p.position.x + 22.0, p.position.y + HEADER_H + i * (ROW_HEIGHT + ROW_GAP),
+			p.size.x - 44.0, ROW_HEIGHT)
 
 ## The Buy button inside row `i`, right-aligned.
 func _buy_rect(i: int) -> Rect2:
@@ -36,8 +53,9 @@ func _buy_rect(i: int) -> Rect2:
 			r.position.y + (ROW_HEIGHT - BUY_H) * 0.5, BUY_W, BUY_H)
 
 func _close_rect() -> Rect2:
-	return Rect2(PANEL.position.x + PANEL.size.x * 0.5 - 90.0,
-			PANEL.position.y + PANEL.size.y - 62.0, 180.0, 46.0)
+	var p := _panel_rect()
+	return Rect2(p.position.x + p.size.x * 0.5 - 90.0,
+			p.position.y + p.size.y - 62.0, 180.0, 46.0)
 
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion:
@@ -75,18 +93,19 @@ func _buy_at(pos: Vector2) -> int:
 
 func _draw() -> void:
 	var font := get_theme_default_font()
+	var p := _panel_rect()
 	draw_rect(Rect2(Vector2.ZERO, Game.SCREEN_SIZE), Color(0.03, 0.03, 0.06, 0.88))
-	draw_rect(PANEL, Color(0.10, 0.10, 0.14, 0.98))
-	draw_rect(PANEL, Color(1, 1, 1, 0.20), false, 2.0)
+	draw_rect(p, Color(0.10, 0.10, 0.14, 0.98))
+	draw_rect(p, Color(1, 1, 1, 0.20), false, 2.0)
 
-	draw_string(font, Vector2(PANEL.position.x, PANEL.position.y + 46.0), "WORKSHOP",
-			HORIZONTAL_ALIGNMENT_CENTER, PANEL.size.x, 34, Color(1, 0.95, 0.8))
-	draw_string(font, Vector2(PANEL.position.x, PANEL.position.y + 76.0),
-			"Permanent upgrades — they apply to every run from now on",
-			HORIZONTAL_ALIGNMENT_CENTER, PANEL.size.x, 17, Color(0.72, 0.72, 0.80))
+	draw_string(font, Vector2(p.position.x, p.position.y + 46.0), tr("WORKSHOP_TITLE"),
+			HORIZONTAL_ALIGNMENT_CENTER, p.size.x, 34, Color(1, 0.95, 0.8))
+	draw_string(font, Vector2(p.position.x, p.position.y + 76.0),
+			tr("WORKSHOP_SUBTITLE"),
+			HORIZONTAL_ALIGNMENT_CENTER, p.size.x, 17, Color(0.72, 0.72, 0.80))
 	# Wallet, top-right of the panel.
-	draw_string(font, Vector2(PANEL.position.x - 22.0, PANEL.position.y + 46.0),
-			"%d Essence" % Meta.essence, HORIZONTAL_ALIGNMENT_RIGHT, PANEL.size.x, 22,
+	draw_string(font, Vector2(p.position.x - 22.0, p.position.y + 46.0),
+			tr("WORKSHOP_WALLET") % Meta.essence, HORIZONTAL_ALIGNMENT_RIGHT, p.size.x, 22,
 			Color(0.62, 0.90, 1.00))
 
 	for i in Game.WORKSHOP_DEFS.size():
@@ -95,7 +114,7 @@ func _draw() -> void:
 	var cr := _close_rect()
 	draw_rect(cr, Color(0.22, 0.22, 0.28) if _close_hover else Color(0.17, 0.17, 0.22))
 	draw_rect(cr, Color(1, 1, 1, 0.28), false, 2.0)
-	draw_string(font, Vector2(cr.position.x, cr.position.y + 31.0), "Back",
+	draw_string(font, Vector2(cr.position.x, cr.position.y + 31.0), tr("BTN_BACK"),
 			HORIZONTAL_ALIGNMENT_CENTER, cr.size.x, 21, Color.WHITE)
 
 func _draw_row(i: int, d: Dictionary, font: Font) -> void:
@@ -108,9 +127,9 @@ func _draw_row(i: int, d: Dictionary, font: Font) -> void:
 
 	draw_rect(r, Color(0.15, 0.15, 0.19, 0.95))
 	draw_rect(r, Color(1, 1, 1, 0.12), false, 2.0)
-	draw_string(font, Vector2(r.position.x + 16.0, r.position.y + 30.0), String(d["name"]),
+	draw_string(font, Vector2(r.position.x + 16.0, r.position.y + 30.0), tr("WS_NAME_" + String(d["id"]).to_upper()),
 			HORIZONTAL_ALIGNMENT_LEFT, 320.0, 22, Color(1, 0.95, 0.85))
-	draw_string(font, Vector2(r.position.x + 16.0, r.position.y + 55.0), String(d["desc"]),
+	draw_string(font, Vector2(r.position.x + 16.0, r.position.y + 55.0), tr("WS_DESC_" + String(d["id"]).to_upper()),
 			HORIZONTAL_ALIGNMENT_LEFT, 420.0, 16, Color(0.78, 0.78, 0.86))
 
 	# Level pips: the fastest read of "how far along am I", and they make the max obvious

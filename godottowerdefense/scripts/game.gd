@@ -1095,6 +1095,56 @@ var _path_cum: PackedFloat32Array = PackedFloat32Array()
 
 func _ready() -> void:
 	use_main_board()
+	_load_locale()
+
+# --- Language -----------------------------------------------------------------------
+## The languages the CSV in assets/i18n has a column for, in the order the menu cycles them.
+## Adding a third is a column in strings.csv, an entry here, a `LANG_<CODE>` key, and a path
+## in project.godot's `internationalization/locale/translations` -- no other code change.
+const LOCALES: Array = ["en", "tr"]
+const LOCALE_SECTION := "settings"
+
+## Emitted after the locale actually changed. Godot re-translates a Control's own `text` on
+## its own, so most of the UI needs nothing -- this exists for the strings built in code with
+## a format argument ("Gold: %d"), which are only rebuilt when their value next changes.
+signal locale_changed(locale: String)
+
+var locale: String = String(LOCALES[0])
+
+## Reads the stored choice, falling back to the SYSTEM language when there is none: a Turkish
+## phone should not have to find the button on its first launch. Anything we have no column
+## for lands on English.
+func _load_locale() -> void:
+	# TEMPORARY harness: `-- --locale:en` forces a language for one run without touching the
+	# save. The button is the only other way to switch, and no harness can click one, so
+	# without this only whichever column the machine's own language selects is ever seen.
+	for arg in OS.get_cmdline_user_args():
+		if String(arg).begins_with("--locale:"):
+			set_locale(String(arg).split(":")[1], false)
+			return
+	var stored := String(Save.get_section(LOCALE_SECTION).get("locale", ""))
+	if stored == "":
+		stored = OS.get_locale_language()
+	set_locale(stored if LOCALES.has(stored) else String(LOCALES[0]), false)
+
+func set_locale(id: String, persist: bool = true) -> void:
+	if not LOCALES.has(id):
+		return
+	locale = id
+	TranslationServer.set_locale(id)
+	if persist:
+		var s := Save.get_section(LOCALE_SECTION)
+		s["locale"] = locale
+		Save.flush()
+	locale_changed.emit(locale)
+
+func cycle_locale() -> void:
+	set_locale(String(LOCALES[(maxi(LOCALES.find(locale), 0) + 1) % LOCALES.size()]))
+
+## "LANG_EN" / "LANG_TR" -- each language names itself in its own words in both columns, so
+## the button reads "Turkce" to someone who cannot read the current language.
+func locale_display_name() -> String:
+	return tr("LANG_" + locale.to_upper())
 
 ## Restores the endless-run board. Called by Menu/Main so a scene reload always lands on the
 ## real run's profile rather than whatever a previous scene had installed.
