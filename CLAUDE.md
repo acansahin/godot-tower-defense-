@@ -39,6 +39,18 @@ correct). Everything after a bare `--` reaches `OS.get_cmdline_user_args()`:
     res://scenes/Main.tscn --quit-after 1800 -- --fill-board
 ```
 
+`menu.gd` carries three of its own, because the title screen is a different scene and none of
+main.gd's can reach it: `--shot` / `--shot:N` (the same screenshot function, duplicated — the
+two scripts' only common ancestor is Node), `--show-workshop` and `--show-how`, which open the
+two modal panels that otherwise need a click -- `--show-how:2` opens straight onto a chosen
+tab, since the tabs need a click too. All of them exist because the menu's backdrop, theme,
+scrim and rules pages live entirely in rendering, so nothing that prints numbers can see them.
+`Game` adds `--locale:en` / `--locale:tr`, which forces a language for one run without
+touching the save; it lives in `Game._load_locale()` rather than in a scene so it reaches the
+HUD and the end screen too, and without it only whichever column the machine's own language
+selects is ever seen:
+`Godot.exe --path <project> res://scenes/Menu.tscn --quit-after 200 -- --locale:en --show-how:2 --shot:2`.
+
 Arg-gated harnesses currently in `main.gd`, none of which can fire in a normal session:
 `--dump-stats` (every tower's stats at every level — it beats all four avatars first, or the
 progression gate below would stop it at Lv2 and it would re-print that row three times
@@ -462,8 +474,44 @@ To add content, add a **data row**, not a scene or script:
 | Creep archetype | `Game.WAVE_TYPES` |
 | Tower behavior (beam/charge/…) | a `TowerBehavior` subclass + a case in `Tower._make_behavior` — but only if the CONTROL FLOW differs. An aura is data read by the neighbours; an on-kill payout is data read by the projectile. Of the eleven fusions, none needed a subclass |
 | Sound effect | a block in `audio.gd`'s `_build_all()` |
+| A user-facing string | a row in `assets/i18n/strings.csv`, then `tr("KEY")` in code or the bare KEY as a Control's `text` in a scene. See "Every string is a key" below, and run `python tools/check_i18n.py` |
 | Painted creep | `assets/art/enemies/<archetype>.png`, named for its `Game.WAVE_TYPES` key (`normal.png`, `tank.png`, …). **No code change** — `sprites.gd` `enemy()` finds it and `enemy.gd` prefers it over the blob. Art faces SCREEN-LEFT and is mirrored by `_facing`. A boss is an archetype wearing a crown, with ONE exception: the four element avatars take `boss_<element>_1..N.png` if those exist (`Enemy.art_kind()` picks them off `avatar_element` and falls back to the crowned archetype otherwise), so the four can be painted one at a time — check them with `--avatar-pose`. Numbered files (`normal_1.png`…`normal_6.png`) are an animation cycle of ANY length — `Sprites.pose_count()` counts them and both carriers divide their cycle by the answer, so re-animating a creep is a file copy; one file alone is a still. Only the `"air"` row in `WAVE_TYPES` flies, and its cycle is a WINGBEAT, not a stride. Generate sheets from [docs/creep-art-prompt.md](godottowerdefense/docs/creep-art-prompt.md) — one creature per sheet, one frame per row, TWELVE of them: the cycle is one stride played at the creep's own walking rate, so six frames measured 6.2 fps at wave 2 and the eye counts them. **The pace comes from the STRIDE the art was drawn with** (`Sprites.stride()`, the widest gap between the feet), not from the creep's radius: one cycle carries the creature the two steps it is painted taking, so a sheet drawn with a lunging stride walks slowly and one drawn at the roster's 0.6-0.9x of body height walks at a normal rate. `Enemy.WALK_TEMPO` (1.35) is the one deliberate lie — a third faster than the feet, which buys frame rate for a slip too small to read — and `Enemy.FRAME_BLEND` dissolves each pose into the next so a 5 fps cycle does not read as a slide show |
 | Painted tower set | `assets/art/towers/<name>_1..5.png`, cut from one generated sheet by `python tools/cut_sprites.py <sheet.png> <out_dir> <name> 220`. `<name>` is the element for a base tower and the combination's FIRST name for a fusion (`steam`, `flesh_golem` — never the per-tier name; `Tower.art_key()` derives it). **No code change** — `sprites.gd` picks the files up by name and `tower.gd` prefers them over the code art, so an unpainted combination just keeps drawing itself. Keep the sheet as `_source_<name>.png` beside them, and generate it from the template in [docs/tower-art-prompt.md](godottowerdefense/docs/tower-art-prompt.md) — **attach the board the tower will stand on** (the winding map, not `board_source.png`) **and, for a fusion, both parent sheets**; every set generated from words alone had to be redone |
+
+## Every string is a key
+
+The game ships in **English and Turkish**, through Godot's own TranslationServer. One table:
+`assets/i18n/strings.csv`, columns `keys,en,tr`, imported by Godot into two `.translation`
+files that `project.godot`'s `internationalization/locale/translations` lists. A third
+language is a column in that CSV, an entry in `Game.LOCALES`, a `LANG_<CODE>` row, and a path
+in that setting -- no other code change.
+
+Two mechanisms coexist and the difference matters:
+
+- **A Control's own `text` is auto-translated by Godot**, and re-translated when the locale
+  changes. So `Menu.tscn` stores the KEY (`text = "MENU_PLAY"`) and the language button takes
+  effect live with no refresh code.
+- **Anything built in code goes through `tr()`** -- the `_draw()` panels (workshop, tower
+  panel, palette, How to Play) re-evaluate every frame so they follow automatically, but a
+  label assembled around a value (`tr("HUD_GOLD") % value`) only changes when that value
+  next changes. That is what `Game.locale_changed` exists for; `menu.gd` `_refresh_localized()`
+  is the one place that listens.
+
+`Game` owns the locale (loaded in `_ready()`, stored in Save's `settings` section, the same
+shape `Audio` uses for mute). With nothing stored it takes `OS.get_locale_language()`, so a
+Turkish phone opens in Turkish without being told.
+
+**A missing key is SILENT**: `tr()` returns the key itself, so the button reads
+`HUD_SEND_NEXT` on screen and nothing is logged. That is not hypothetical -- it is how the
+Send Next button shipped English-only through this feature's first pass. Run
+**`python tools/check_i18n.py`** after touching strings; it reports keys used but not defined,
+keys defined but never used, empty cells, and duplicates, and exits non-zero. It understands
+the derived form (`tr("WS_NAME_" + id)`) and keys held in a `const Array`.
+
+**Proper names stay English on purpose.** Tower, fusion and creep names (Steam, Infernal,
+Pure, Flesh Golem, Scout) are the map's own vocabulary and are not in the table; their
+DESCRIPTIONS are. `Game.FUSIONS`' `name` also derives the art filename through
+`Tower.art_key()`, so translating it would break the sprite lookup.
 
 ## Conventions
 
@@ -484,9 +532,12 @@ To add content, add a **data row**, not a scene or script:
   mid-phrase. The full-length source is not in the repo; it is the user's original file.
 - **Art is no longer zero-asset**, but it is still *mostly* code. The board, all six element
   towers and ALL ELEVEN FUSIONS are painted PNGs under `godottowerdefense/assets/art/`, so a
-  `--fill-board` run now reports `art*` on every row; the enemies are painted too. What is
-  still `_draw()`: all effects except the Fire brazier, and all UI. The two
-  coexist on purpose: `sprites.gd` returns `null` for anything unpainted and the caller
+  `--fill-board` run now reports `art*` on every row; the enemies are painted too. The TITLE
+  SCREEN's backdrop is painted as well — `assets/art/menu/menu_bg.png`, generated from
+  [docs/menu-art-prompt.md](godottowerdefense/docs/menu-art-prompt.md) — and it is the one
+  painted asset NO tool reads, so none of the board's colour laws apply to it. What is
+  still `_draw()`: all effects except the Fire brazier, and all UI except that backdrop.
+  The two coexist on purpose: `sprites.gd` returns `null` for anything unpainted and the caller
   falls back to the code art, which is what lets the repaint proceed one element at a time
   instead of in one unplayable jump. Adding a painted set is dropping files in; it needs no
   code change. Adding an asset for anything else is still worth asking about first.
@@ -513,6 +564,16 @@ Each of these cost real time; don't rediscover them.
   `grep mipmaps/generate assets/art/towers/*.import` against the sets already there, flip
   the new ones to `true` and re-import. `.import` files are committed, which is why the
   existing sets stay correct.
+- **A CRLF working copy double-spaces every multi-line string in a `.tscn`.** Godot renders
+  the carriage return inside an embedded string as its own line break, so `Menu.tscn`'s How to
+  Play body was 21 lines drawn as 42 and the panel grew past the bottom of the screen with its
+  Back button off it — the player was trapped in the panel. It came from `core.autocrlf=true`:
+  scenes commit as LF and used to check out as CRLF. **`.gitattributes` now pins `eol=lf`**, so
+  a fresh clone is correct and this is fixed; it stays recorded because it was invisible from
+  every angle that usually catches things. CI never saw it (a Linux checkout is already LF), no
+  harness could see it (it is pure rendering — `--show-how` was added to photograph it), and
+  a whole-file `sed -i` in Git Bash silently rewrites the endings for you, so during the hunt it
+  appeared and disappeared for reasons that had nothing to do with the edit being tested.
 - **GDScript `abs()` returns Variant**, so `var s := 4.0 * abs(x) - 1.0` fails with
   "cannot infer type". Use `absf()`, or type it explicitly (`var s: float = …`). Apply the
   same care to `:=` on ternary expressions.
@@ -574,6 +635,7 @@ python tools/compose_cycle.py <out> <sheet>:<row> ...   # pick the usable rows o
 python tools/strip_ground_veil.py <keyed> <out>   # peel the puddle/spray an elemental sheet paints under its feet
 python tools/respace_frames.py <in> <out> --frames N   # separate frames that touch, by connectivity
 python tools/trim_mp3.py <in.mp3> --report        # loudness over time, so a loop point is READ not guessed
+python tools/check_i18n.py                        # does every tr() key exist, and is every key reached?
 python tools/trim_mp3.py <in> <out> --end 117.5 --fade-in 0.8 --fade-out 1.5   # cut + fade, no re-encode
 ```
 
@@ -651,6 +713,11 @@ ability — see docs/element-td-data.md §3.1.
   — the same for a creep ANIMATION sheet: the six-frame run cycle, the wingbeat variant for
   Air, and why each constraint exists (the anchor, the per-creature height scaling, the row
   split).
+- [godottowerdefense/docs/menu-art-prompt.md](godottowerdefense/docs/menu-art-prompt.md)
+  — the same for the TITLE SCREEN key art, and the shortest of the four, because it is the
+  only painted asset nothing reads: no mask, no trace, no `art_match.py`. Its constraints
+  are the UI's — a quiet left third for the menu column, and the four avatars redrawn from
+  their own sheets rather than invented.
 - [godottowerdefense/docs/board-art-prompt.md](godottowerdefense/docs/board-art-prompt.md)
   — the same for a BOARD painting, and the one whose constraints are hardest to see: four
   separate tools read colours off the board, so a shadow across the meadow deletes the

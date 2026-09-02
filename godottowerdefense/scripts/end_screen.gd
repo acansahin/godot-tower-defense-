@@ -28,19 +28,21 @@ func show_summary(earned: int, won: bool, stars: int = 0) -> void:
 	var reached: int = Game.wave_reached
 	var star_line := ""
 	if won:
-		title.text = "VICTORY"
+		title.text = tr("END_VICTORY")
 		title.modulate = Color(0.55, 0.92, 0.60)
 		star_line = "\n" + "★".repeat(stars) + "☆".repeat(3 - stars)
 	else:
-		title.text = "WAVE %d" % reached
+		title.text = tr("END_WAVE") % reached
 		title.modulate = Color(1.00, 0.82, 0.35)
 	# The Essence line comes first: it is the reason to start another run, and on a loss it
 	# is the only part of the run the player keeps. The death-reason line only makes sense
 	# on a loss — a win was not caused by any one enemy getting through.
 	var reason := "" if won else _death_reason()
 	var reason_line := ("\n" + reason) if reason != "" else ""
-	subtitle.text = "+%d Essence  ·  %s\nBest: wave %d   ·   Essence: %d%s%s" % [
-			earned, _verdict(reached), Meta.best_wave, Meta.essence, reason_line, star_line]
+	subtitle.text = "%s  ·  %s\n%s   ·   %s%s%s" % [
+			tr("END_EARNED") % earned, _verdict(reached),
+			tr("STATUS_BEST") % Meta.best_wave, tr("STATUS_ESSENCE") % Meta.essence,
+			reason_line, star_line]
 	show()
 
 ## One sentence naming the enemy that ended the run (GAME_STRATEGY_V2.md §24.1, BUILD
@@ -51,10 +53,9 @@ func show_summary(earned: int, won: bool, stars: int = 0) -> void:
 func _death_reason() -> String:
 	if Game.last_leak_wave <= 0:
 		return ""
-	var prefix := (Game.last_leak_element.capitalize() + "-armored ") \
+	var prefix := (tr("END_ARMORED") % Game.last_leak_element.capitalize()) \
 			if Game.last_leak_element != "" else ""
-	return "Wave %d — a %s%s got through" % [
-			Game.last_leak_wave, prefix, Game.last_leak_label]
+	return tr("END_LEAK") % [Game.last_leak_wave, prefix, Game.last_leak_label]
 
 ## A short line acknowledging the depth reached. Measured as a FRACTION of the run rather
 ## than in wave numbers: the milestones it names are the avatar bosses and the midpoint boss,
@@ -63,14 +64,14 @@ func _death_reason() -> String:
 func _verdict(reached: int) -> String:
 	var progress := float(reached) / float(maxi(Balance.STANDARD_WAVES, 1))
 	if progress >= 0.8:
-		return "The road held almost to the end."
+		return tr("END_FLAVOUR_5")
 	if progress >= 0.5:
-		return "Past the Guardian at the midpoint."
+		return tr("END_FLAVOUR_4")
 	if progress >= 0.2:
-		return "You took an element off its avatar."
+		return tr("END_FLAVOUR_3")
 	if progress >= 0.1:
-		return "The elements are starting to matter."
-	return "Just getting started."
+		return tr("END_FLAVOUR_2")
+	return tr("END_FLAVOUR_1")
 
 func _restart() -> void:
 	_clear_time_state()

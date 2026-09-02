@@ -93,7 +93,8 @@ func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, 0.40))
 	draw_rect(Rect2(Vector2.ZERO, size), Color(1, 1, 1, 0.18), false, 2.0)
 	var font := get_theme_default_font()
-	draw_string(font, Vector2(10, 26), "Towers", HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(1, 1, 1, 0.9))
+	draw_string(font, Vector2(10, 26), tr("PALETTE_TITLE"), HORIZONTAL_ALIGNMENT_LEFT, -1, 20,
+			Color(1, 1, 1, 0.9))
 	var ids: Array = _visible_ids()
 	var scale_y := _scale_for(ids.size())
 	for i in ids.size():

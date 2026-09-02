@@ -1,0 +1,101 @@
+keys,en,tr
+MENU_SUBTITLE,Element-matching tower defense,Element eşleştirmeli kule savunması
+MENU_PLAY,Play,Oyna
+MENU_WORKSHOP,Workshop,Atölye
+MENU_HOW,How to Play,Nasıl Oynanır
+MENU_QUIT,Quit,Çıkış
+MENU_DIFFICULTY,Difficulty: %s,Zorluk: %s
+MENU_SOUND_ON,Sound: On,Ses: Açık
+MENU_SOUND_OFF,Sound: Off,Ses: Kapalı
+MENU_LANGUAGE,Language: %s,Dil: %s
+LANG_EN,English,English
+LANG_TR,Türkçe,Türkçe
+DIFF_NORMAL,Normal,Normal
+DIFF_EASY,Easy,Kolay
+STATUS_OFFLINE,Welcome back: +%d Essence while away,Tekrar hoş geldin: yokken +%d Öz
+STATUS_ESSENCE,Essence: %d,Öz: %d
+STATUS_BEST,Best: wave %d,En iyi: dalga %d
+BTN_BACK,Back,Geri
+HOW_TITLE,How to Play,Nasıl Oynanır
+TAB_BASICS,Basics,Temel
+TAB_ELEMENTS,Elements,Elementler
+TAB_FUSIONS,Fusions,Füzyonlar
+BASIC_1,"Drag a tower from the palette on the right onto open ground. While you drag, the shaded ground is where you may NOT build: trees, cliffs, water, and the road itself.","Sağdaki paletten bir kuleyi sürükleyip açık zemine bırak. Sürüklerken koyulaşan zemin inşa EDEMEYECEĞİN yerdir: ağaçlar, kayalıklar, su ve yolun kendisi."
+BASIC_2,"Towers always shoot the enemy nearest the exit, the one about to cost you a life.",Kuleler her zaman çıkışa en yakın düşmana ateş eder; yani canını götürmek üzere olana.
+BASIC_3,"Tap a tower to open its panel: upgrade it, fuse it, or sell it. Selling refunds everything if the tower never fired a shot, and most of it otherwise.","Bir kuleye dokununca paneli açılır: yükselt, birleştir ya da sat. Hiç ateş etmemiş bir kule tam iade eder, etmişse büyük kısmını."
+BASIC_4,Gold comes from kills. Send Next starts the next wave early and pays a bonus for it.,Altın öldürmekten gelir. Send Next sonraki dalgayı erken başlatır ve bunun için bonus öder.
+BASIC_5,"Pause / Space freezes the game. The speed button / F cycles 1x, 2x, 3x. M mutes all sound.","Pause / Space oyunu dondurur. Hız düğmesi / F 1x, 2x, 3x arasında geçer. M tüm sesi kapatır."
+BASIC_6,A standard run is 50 waves. Clear them all to win. Lose 20 lives and it is over.,Standart bir oyun 50 dalgadır. Hepsini temizlersen kazanırsın. 20 can biterse oyun biter.
+BASIC_GATE_TITLE,Gold only takes a tower to Level 2.,Altın bir kuleyi ancak Seviye 2'ye çıkarır.
+BASIC_GATE_1,"On waves 10, 20, 30 and 40 an element AVATAR arrives, in an order each run picks for itself. Killing one opens two doors at once:","10., 20., 30. ve 40. dalgalarda bir element AVATARI gelir; sıralamayı her oyun kendisi seçer. Birini öldürmek aynı anda iki kapı açar:"
+BASIC_GATE_2,"towers of THAT element can now climb to Level 5,","O ELEMENTİN kuleleri artık Seviye 5'e kadar çıkabilir,"
+BASIC_GATE_3,and ANY tower can now fuse with that element.,ve HERHANGİ bir kule artık o elementle birleşebilir.
+BASIC_GATE_4,"So Level 2 is a fork. Upgrading to Level 3 closes fusion for that tower forever, and fusing closes upgrading forever. Pick one.","Yani Seviye 2 bir yol ayrımıdır. Seviye 3'e yükseltmek o kulenin füzyonunu kalıcı kapatır, birleştirmek de yükseltmeyi kalıcı kapatır. Birini seç."
+ELEM_WHEEL,water > fire > nature > earth > water,su > ateş > doğa > toprak > su
+ELEM_RULE,You deal x1.6 to the element you beat and x0.85 to the one that beats you. Big gold damage numbers mean a bonus; small grey ones mean you are being resisted.,"Yendiğin elemente x1.6, seni yenene x0.85 hasar verirsin. Büyük altın rengi hasar sayıları bonus demektir; küçük gri olanlar direniliyorsun demektir."
+ELEM_BEST,"A fused tower holds several elements and always attacks with the BEST of them, so the more elements it carries the less anything resists it.",Birleşmiş bir kule birden fazla element taşır ve her zaman bunların EN İYİSİYLE saldırır; taşıdığı element arttıkça ona direnebilen azalır.
+ELEM_IMMUNE,"Immune enemies shrug off slows, stuns and knockback, but poison and burn still hurt them.","Bağışık düşmanlar yavaşlatma, sersemletme ve itmeyi umursamaz; ama zehir ve yanma onlara yine işler."
+ELEM_DESC_FIRE,Fast shots that set a burn on every hit.,Her vuruşta yanma bırakan hızlı atışlar.
+ELEM_DESC_WATER,The fastest shot in the game. Every hit chills and slows.,Oyunun en hızlı atışı. Her vuruş üşütür ve yavaşlatır.
+ELEM_DESC_NATURE,Poison that ignores the element matchup entirely.,Element eşleşmesini tamamen yok sayan zehir.
+ELEM_DESC_EARTH,"The heaviest hit, with splash, but ground only: it cannot touch flyers.","En ağır vuruş, üstelik yayılma hasarlı; ama sadece kara: uçanlara dokunamaz."
+FUSION_INTRO_1,"Fuse a Level 2 tower with an element whose avatar you have already killed. Two elements make a DUAL (Level 3), three a TRIPLE (Level 4), and all four make PURE (Level 5).","Seviye 2 bir kuleyi, avatarını çoktan öldürdüğün bir elementle birleştir. İki element İKİLİ (Seviye 3), üç element ÜÇLÜ (Seviye 4), dördü birden SAF (Seviye 5) yapar."
+FUSION_INTRO_2,"A fusion's level is fixed by its depth: it can never be upgraded, only fused deeper. Fire+Water and Water+Fire are the same tower.","Bir füzyonun seviyesi derinliğine sabittir: asla yükseltilemez, yalnızca daha derine birleştirilebilir. Ateş+Su ile Su+Ateş aynı kuledir."
+FUSION_DESC_CLAY,Chance to slow. The hardest-hitting dual.,Yavaşlatma şansı. En sert vuran ikili.
+FUSION_DESC_LAVA,"Splash plus burn, and it can hit flyers.",Yayılma ve yanma; üstelik uçanları vurabilir.
+FUSION_DESC_SUN,+15% damage to every tower within 170px.,170px içindeki her kuleye +%15 hasar.
+FUSION_DESC_STEAM,Fast area steam that keeps eating health.,Canı yemeye devam eden hızlı alan buharı.
+FUSION_DESC_WELL,+15% attack speed to every tower within 170px.,170px içindeki her kuleye +%15 saldırı hızı.
+FUSION_DESC_ROOTS,Roots ground enemies in place. Barely damages.,Kara düşmanları yerine kökler. Neredeyse hasar vermez.
+FUSION_DESC_INFERNAL,Chaos damage: no armour resists it.,Kaos hasarı: hiçbir zırh direnemez.
+FUSION_DESC_RAINBOW,"Chaos damage, faster than Infernal.","Kaos hasarı, Infernal'dan daha hızlı."
+FUSION_DESC_DINOSAUR,Devours enemies: holds them still and digests them.,Düşmanları yutar: yerinde tutup sindirir.
+FUSION_DESC_FLESH_GOLEM,+0.5 damage permanently for every kill it lands.,Öldürdüğü her düşman için kalıcı +0.5 hasar.
+FUSION_DESC_PURE,Pure damage. No armour and no immunity stops it.,Saf hasar. Ne zırh ne bağışıklık durdurur.
+HUD_GOLD,Gold: %d,Altın: %d
+HUD_LIVES,Lives: %d,Can: %d
+HUD_WAVE,Wave: %d,Dalga: %d
+HUD_PAUSE,Pause,Duraklat
+HUD_RESUME,Resume,Devam
+HUD_NEW_MAP,New map: %s,Yeni harita: %s
+PALETTE_TITLE,Towers,Kuleler
+PANEL_LEVEL,Level %d,Seviye %d
+PANEL_LEVEL_LOCKED,"Level %d, beat the %s avatar","Seviye %d, %s avatarını yen"
+PANEL_SELL,Sell,Sat
+PANEL_LV,Lv %d,Sv %d
+PANEL_CLOSES_FUSION,Going to Lv%d closes the fusion branch,%d. seviyeye çıkmak füzyon dalını kapatır
+PANEL_LOCKED,"Locked: %s, beat their avatar boss","Kilitli: %s, avatar bossunu yen"
+PANEL_UPGRADE_TO,Upgrade to ,Şuna yükselt: 
+WORKSHOP_TITLE,WORKSHOP,ATÖLYE
+WORKSHOP_SUBTITLE,"Permanent upgrades, they apply to every run from now on",Kalıcı yükseltmeler; bundan sonraki her oyuna uygulanır
+WS_NAME_FORGE,Forge,Demirhane
+WS_DESC_FORGE,+6% tower damage per level,Seviye başına +%6 kule hasarı
+WS_NAME_TEMPO,Tempo,Tempo
+WS_DESC_TEMPO,+4% attack speed per level,Seviye başına +%4 saldırı hızı
+WS_NAME_LENS,Lens,Mercek
+WS_DESC_LENS,+6 tower range per level,Seviye başına +6 kule menzili
+WS_NAME_TREASURY,Treasury,Hazine
+WS_DESC_TREASURY,+20 starting gold per level,Seviye başına +20 başlangıç altını
+WS_NAME_RAMPARTS,Ramparts,Surlar
+WS_DESC_RAMPARTS,+2 starting lives per level,Seviye başına +2 başlangıç canı
+END_VICTORY,VICTORY,ZAFER
+END_WAVE,WAVE %d,DALGA %d
+END_RESTART,Restart,Yeniden Başla
+END_MAIN_MENU,Main Menu,Ana Menü
+END_LEAK,"Wave %d, a %s%s got through","Dalga %d, bir %s%s sızdı"
+END_FLAVOUR_5,The road held almost to the end.,Yol neredeyse sonuna kadar dayandı.
+END_FLAVOUR_4,Past the Guardian at the midpoint.,Ortadaki Muhafız'ı geçtin.
+END_FLAVOUR_3,You took an element off its avatar.,Bir elementi avatarından söktün.
+END_FLAVOUR_2,The elements are starting to matter.,Elementler önem kazanmaya başlıyor.
+END_FLAVOUR_1,Just getting started.,Daha yeni başlıyorsun.
+END_EARNED,+%d Essence,+%d Öz
+END_ARMORED,%s-armored ,%s zırhlı 
+PANEL_DMG,%d dmg,%d hasar
+HUD_TOWERS_MOVED, - %d towers moved to clear ground, - %d kule açık zemine taşındı
+HUD_NEXT,Next: %s,Sıradaki: %s
+WAVE_FINAL,Final wave,Son dalga
+WAVE_AVATAR,Next: %s Avatar,Sıradaki: %s Avatarı
+WAVE_AVATAR_UNKNOWN,Next: Element Avatar,Sıradaki: Element Avatarı
+HINT_AVATAR_DOWN,"%s avatar down: %s towers can reach Lv%d, and any tower can fuse %s","%s avatarı düştü: %s kuleleri %d. seviyeye kadar çıkabilir, ve her kule %s ile birleşebilir"
+HUD_SEND_NEXT,Send Next ▶,Sonrakini Gönder ▶
+WORKSHOP_WALLET,%d Essence,%d Öz
