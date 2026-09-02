@@ -12,7 +12,7 @@ This is for when it is not.
 
 Usage::
 
-    python tools/key_white.py <in.png> <out.png> [--thresh N] [--keep-pockets]
+    python tools/key_white.py <in.png> <out.png> [--thresh N] [--keep-pockets] [--feather N]
 
 How it works, and why each part is not optional:
 
@@ -30,6 +30,14 @@ How it works, and why each part is not optional:
   against the nearest solid neighbour's colour — ``obs = a*F + (1-a)*255`` for ``a`` — and
   the white is divided back out, which is what makes the result composite cleanly onto a
   dark board instead of onto the white it was flattened against.
+* **``--feather N`` for art with a GLOW.** The matte above assumes the boundary is one pixel
+  wide, which holds for a hard-edged creature and fails for one that radiates: the fire
+  avatar's ember rim fades to white over several pixels, and 33% of its silhouette's edge came
+  out pale (2% is what the hand-keyed roster measures). Feathering peels that band inward N
+  times, solving each pale, near-neutral edge pixel as coverage over white. Saturated pixels
+  are never touched, so the ember rim itself survives — it is the WHITE bleeding out of it
+  that goes. Off by default, since a hard-edged sheet does not need it.
+
 * **Enclosed pockets.** A gap fully surrounded by the creature — between a wing and the
   body, between the legs — is background the border fill can never reach. Those are removed
   too, unless ``--keep-pockets``. Only regions that are ENTIRELY above the threshold go, so
@@ -101,7 +109,42 @@ def _drop_pockets(rgb, mask, w, h, thresh):
     return dropped
 
 
-def key(path_in, path_out, thresh=THRESH, keep_pockets=False):
+FEATHER_PALE = 185   # min channel at or above this is mostly white...
+FEATHER_SAT = 45     # ...and neutral enough to be bleed rather than the creature's own glow
+
+
+def _peel(px, w, h, passes):
+    """Solve the pale band left around a glowing edge, one ring of pixels per pass."""
+    for _ in range(passes):
+        touched = []
+        for i in range(w * h):
+            if px[i][3] < 40:
+                continue
+            y, x = divmod(i, w)
+            open_side = False
+            for nx, ny in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
+                if 0 <= nx < w and 0 <= ny < h and px[ny * w + nx][3] < 40:
+                    open_side = True
+                    break
+            if not open_side:
+                continue
+            r, g, b, _a = px[i]
+            if min(r, g, b) < FEATHER_PALE or max(r, g, b) - min(r, g, b) > FEATHER_SAT:
+                continue
+            cov = 1.0 - min(r, g, b) / 255.0
+            if cov <= 0.02:
+                touched.append((i, (0, 0, 0, 0)))
+                continue
+            solved = tuple(max(0, min(255, int(round((v - 255 * (1 - cov)) / cov))))
+                    for v in (r, g, b))
+            touched.append((i, solved + (int(round(cov * 255)),)))
+        if not touched:
+            break
+        for i, value in touched:
+            px[i] = value
+
+
+def key(path_in, path_out, thresh=THRESH, keep_pockets=False, feather=0):
     im = Png(path_in)
     w, h = im.width, im.height
     rgb = [im.rgb(x, y) for y in range(h) for x in range(w)]
@@ -123,7 +166,7 @@ def key(path_in, path_out, thresh=THRESH, keep_pockets=False):
                 edge.add(i)
                 break
 
-    out = bytearray()
+    px = []
     for i in range(w * h):
         r, g, b = rgb[i]
         a = alpha[i]
@@ -147,9 +190,15 @@ def key(path_in, path_out, thresh=THRESH, keep_pockets=False):
                     g = max(0, min(255, int(round((g - 255 * (1 - cov)) / cov))))
                     b = max(0, min(255, int(round((b - 255 * (1 - cov)) / cov))))
                     a = int(round(cov * 255))
-        out += bytes((r, g, b, a))
+        px.append((r, g, b, a))
+    if feather:
+        _peel(px, w, h, feather)
+    out = bytearray()
+    for value in px:
+        out += bytes(value)
     write_rgba(path_out, w, h, bytes(out))
-    print(f"    -> {path_out}  ({len(edge)} edge px matted)")
+    print(f"    -> {path_out}  ({len(edge)} edge px matted"
+          + (f", {feather} feather passes" if feather else "") + ")")
 
 
 def main() -> int:
@@ -162,10 +211,15 @@ def main() -> int:
         i = args.index("--thresh")
         thresh = int(args[i + 1])
         del args[i:i + 2]
+    feather = 0
+    if "--feather" in args:
+        i = args.index("--feather")
+        feather = int(args[i + 1])
+        del args[i:i + 2]
     if len(args) != 2:
         print(__doc__)
         return 1
-    key(args[0], args[1], thresh, keep)
+    key(args[0], args[1], thresh, keep, feather)
     return 0
 
 

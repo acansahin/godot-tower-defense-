@@ -91,7 +91,13 @@ the road on an EMPTY board so the flyer's drawing can be photographed — `--fil
 buries the road and kills them at the spawn point, and a normal run never reaches the Air
 wave without leaking away all twenty lives first), `--boss-pose` (stages both bosses' rules —
 control-immune and rotating-armor, BUILD NEXT #7 — on an empty board so the ward/ring/icon
-can be photographed without playing to wave 10 or 20 first), `--bolt-pose` (flies one of
+can be photographed without playing to wave 10 or 20 first), `--avatar-pose` (walks all FOUR
+element avatars down an empty road at once, and prints the art set each one resolved to. The
+avatars are the one creature a run cannot show on demand — they arrive on waves 10/20/30/40 in
+an order the RUN SEED picks, so photographing all four by playing means four long runs and a
+different order each time. `art=normal` on a row whose sheet exists means the sheet is not being
+picked up, which on the board is indistinguishable from an element nobody painted),
+`--bolt-pose` (flies one of
 EVERY bolt drawing — the four elements and all eleven fusions — across an empty board at a
 crawl, so the fifteen can be compared side by side. Neither other route works: a normal run
 only ever has the four base shots in the air, since a fusion needs an avatar boss to unlock
@@ -389,7 +395,7 @@ To add content, add a **data row**, not a scene or script:
 | Creep archetype | `Game.WAVE_TYPES` |
 | Tower behavior (beam/charge/…) | a `TowerBehavior` subclass + a case in `Tower._make_behavior` — but only if the CONTROL FLOW differs. An aura is data read by the neighbours; an on-kill payout is data read by the projectile. Of the eleven fusions, none needed a subclass |
 | Sound effect | a block in `audio.gd`'s `_build_all()` |
-| Painted creep | `assets/art/enemies/<archetype>.png`, named for its `Game.WAVE_TYPES` key (`normal.png`, `tank.png`, …). **No code change** — `sprites.gd` `enemy()` finds it and `enemy.gd` prefers it over the blob. Art faces SCREEN-LEFT and is mirrored by `_facing`; a boss is an archetype wearing a crown, not its own file. Numbered files (`normal_1.png`…`normal_6.png`) are an animation cycle of ANY length — `Sprites.pose_count()` counts them and both carriers divide their cycle by the answer, so re-animating a creep is a file copy; one file alone is a still. Only the `"air"` row in `WAVE_TYPES` flies, and its cycle is a WINGBEAT, not a stride. Generate sheets from [docs/creep-art-prompt.md](godottowerdefense/docs/creep-art-prompt.md) — one creature per sheet, one frame per row, TWELVE of them: the cycle is one stride played at the creep's own walking rate, so six frames measured 6.2 fps at wave 2 and the eye counts them |
+| Painted creep | `assets/art/enemies/<archetype>.png`, named for its `Game.WAVE_TYPES` key (`normal.png`, `tank.png`, …). **No code change** — `sprites.gd` `enemy()` finds it and `enemy.gd` prefers it over the blob. Art faces SCREEN-LEFT and is mirrored by `_facing`. A boss is an archetype wearing a crown, with ONE exception: the four element avatars take `boss_<element>_1..N.png` if those exist (`Enemy.art_kind()` picks them off `avatar_element` and falls back to the crowned archetype otherwise), so the four can be painted one at a time — check them with `--avatar-pose`. Numbered files (`normal_1.png`…`normal_6.png`) are an animation cycle of ANY length — `Sprites.pose_count()` counts them and both carriers divide their cycle by the answer, so re-animating a creep is a file copy; one file alone is a still. Only the `"air"` row in `WAVE_TYPES` flies, and its cycle is a WINGBEAT, not a stride. Generate sheets from [docs/creep-art-prompt.md](godottowerdefense/docs/creep-art-prompt.md) — one creature per sheet, one frame per row, TWELVE of them: the cycle is one stride played at the creep's own walking rate, so six frames measured 6.2 fps at wave 2 and the eye counts them. **The pace comes from the STRIDE the art was drawn with** (`Sprites.stride()`, the widest gap between the feet), not from the creep's radius: one cycle carries the creature the two steps it is painted taking, so a sheet drawn with a lunging stride walks slowly and one drawn at the roster's 0.6-0.9x of body height walks at a normal rate. `Enemy.WALK_TEMPO` (1.35) is the one deliberate lie — a third faster than the feet, which buys frame rate for a slip too small to read — and `Enemy.FRAME_BLEND` dissolves each pose into the next so a 5 fps cycle does not read as a slide show |
 | Painted tower set | `assets/art/towers/<name>_1..5.png`, cut from one generated sheet by `python tools/cut_sprites.py <sheet.png> <out_dir> <name> 220`. `<name>` is the element for a base tower and the combination's FIRST name for a fusion (`steam`, `flesh_golem` — never the per-tier name; `Tower.art_key()` derives it). **No code change** — `sprites.gd` picks the files up by name and `tower.gd` prefers them over the code art, so an unpainted combination just keeps drawing itself. Keep the sheet as `_source_<name>.png` beside them, and generate it from the template in [docs/tower-art-prompt.md](godottowerdefense/docs/tower-art-prompt.md) — **attach the board the tower will stand on** (the winding map, not `board_source.png`) **and, for a fusion, both parent sheets**; every set generated from words alone had to be redone |
 
 ## Conventions
@@ -497,6 +503,8 @@ python tools/art_match.py <new> --against <old>   # did an EDIT of a board move 
 python tools/cut_sprites.py <sheet> <dir> <name> <max_h>   # split a generated sheet into sprites
 python tools/key_white.py <in> <out>              # restore alpha to a sheet flattened onto white
 python tools/stitch_sheets.py <out> <a> <b>       # one cycle split across two files -> one sheet
+python tools/compose_cycle.py <out> <sheet>:<row> ...   # pick the usable rows out of several sheets -> one cycle
+python tools/strip_ground_veil.py <keyed> <out>   # peel the puddle/spray an elemental sheet paints under its feet
 python tools/respace_frames.py <in> <out> --frames N   # separate frames that touch, by connectivity
 python tools/trim_mp3.py <in.mp3> --report        # loudness over time, so a loop point is READ not guessed
 python tools/trim_mp3.py <in> <out> --end 117.5 --fade-in 0.8 --fade-out 1.5   # cut + fade, no re-encode

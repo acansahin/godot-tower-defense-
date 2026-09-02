@@ -34,6 +34,26 @@ const SPRITE_HEIGHT_PER_RADIUS := 2.6
 ## while its shadow stayed behind, which looked like hovering at the board's display scale.
 const WALK_HOP_PER_RADIUS := 0.06
 const WALK_SQUASH := 0.03
+
+## How much of one frame's slot is spent dissolving into it. Long enough to bridge the gap at
+## five frames a second, short enough that a fast creep — 22 fps and up — is drawing one sprite
+## most of the time. Under ~0.25 the bridge is too short to read at the slow end, which is the
+## end that needed it; over ~0.6 a walk becomes a permanent double exposure.
+const FRAME_BLEND := 0.4
+
+## How much faster than its own feet a painted creep is allowed to cycle.
+##
+## 1.0 is the honest value: one cycle carries the creature exactly the two steps it is painted
+## taking, and nothing slides. It is also a CEILING on the frame rate, because the cycle then
+## lasts as long as the ground takes — an avatar boss with fourteen frames plays 5.2 of them a
+## second at its first wave, and a heavy creature walking slowly cannot do better without
+## lying somewhere.
+##
+## So this lies, by a measured amount. At 1.35 the feet travel about a third further per stride
+## than the road passes under them, which at the game's zoom is a slip of a few pixels per
+## frame — under the threshold where the eye reads skating — and it buys 7 fps instead of 5.2.
+## Raising it further trades visibly: at 2.0 the creature is unmistakably running on ice.
+const WALK_TEMPO := 1.35
 const FLIGHT_LIFT_PER_RADIUS := 0.26
 
 signal removed  ## Emitted whenever the enemy leaves play (death OR escape).
@@ -79,6 +99,31 @@ var was_killed: bool = false
 ## thing that reads it is the painted sprite lookup, which is why an unset one is harmless.
 var kind: String = ""
 
+## Which painted set this creature actually DRAWS from. `kind` for everything ordinary, and
+## `boss_<element>` for an element avatar once that set has been painted.
+##
+## WaveManager cannot answer this itself: it sets `kind` from the wave's archetype, and an
+## avatar wave pins that to "normal" so the underlying row's HP multiplier cannot stack under
+## ELEMENT_BOSS_HP_MULT (Game.apply_milestone). So the four avatars all arrive claiming to be
+## the goblin, differing only by `avatar_element` — which is exactly the field to ask.
+##
+## FALLS BACK RATHER THAN FAILING, like every other art lookup here: an avatar whose sheet has
+## not been painted yet keeps drawing the crowned archetype it always drew, and does not drop
+## to the blob. That is what lets the four sheets land one at a time.
+##
+## Resolved ONCE and cached. Not only to save the probe: the sprite is hung and scaled off
+## frame 0 of whichever set this is (_draw_sprite), so a creature that answered differently
+## between two draws would jump and resize. Neither `kind` nor `avatar_element` is written
+## after spawn, so once is the whole life.
+var _art_set: String = ""
+
+func art_kind() -> String:
+	if _art_set == "":
+		_art_set = kind
+		if avatar_element != "" and Sprites.enemy("boss_" + avatar_element) != null:
+			_art_set = "boss_" + avatar_element
+	return _art_set
+
 var _path: Array = []
 var _target_index: int = 1
 var _dead: bool = false
@@ -92,6 +137,22 @@ var _walk_phase: float = 0.0
 ## one thing in the walk that costs a redraw — twice a stride, against a transform every
 ## frame, which is the right way round.
 var _frame: int = 0
+## The pose being dissolved OUT of, and how far that dissolve has got (1.0 = done).
+##
+## A walk cycle is played at the creature's OWN pace — phase advances with ground speed — and
+## that pace is not a frame rate anyone chose. Measured against the shipped art: a Normal at
+## wave 2 plays its twelve frames at 8.7 fps, a Tank at 5.6 and an avatar boss at 5.2, because
+## a big creature's stride is long and it walks slowly. Below about 8 the eye stops seeing a
+## walk and starts counting pictures, which is what the six-frame goblin was rejected for.
+##
+## Cycling faster is the wrong fix: the painted step length says the current rate is already
+## 1.16x quicker than the feet would carry the creature, so more of it is more skating. What
+## is missing is what a film camera would have given for free — the exposure across the change.
+## So each pose dissolves into the next over the first FRAME_BLEND of its slot: the outgoing
+## frame is drawn solid and the incoming one fades over it, which at 5 fps reads as motion
+## rather than as a slide show, and costs one extra textured quad while it lasts.
+var _prev_frame: int = 0
+var _frame_blend: float = 1.0
 ## +1 while walking the way the art is drawn (screen-left), -1 while walking the other way.
 ## Painted creeps are drawn facing ONE direction and mirrored for the other, because the road
 ## is a spiral and a creep meets every heading on it. Folded into `_body.scale` alongside the
@@ -359,7 +420,7 @@ func _process(delta: float) -> void:
 ## only ONE pose, which is why each branch below carries a fake it can drop when a second pose
 ## arrives.
 func _animate_body(delta: float) -> void:
-	if Sprites.enemy(kind) == null:
+	if Sprites.enemy(art_kind()) == null:
 		var br := sin(_anim_phase)
 		_body.scale = Vector2(_facing * (1.0 + 0.05 * br), 1.0 - 0.05 * br)
 		return
@@ -373,7 +434,7 @@ func _animate_body(delta: float) -> void:
 ## from in the first place. That is the whole reason this is not the walk below.
 func _animate_flight() -> void:
 	var beat := _wing_phase
-	var poses := Sprites.pose_count(kind)
+	var poses := Sprites.pose_count(art_kind())
 	# ONE beat per TAU — wings up at 0, fully down at PI, back up at TAU. That matters beyond
 	# taste: _set_frame cuts the same TAU into however many frames were painted, so a six-frame
 	# sheet drawn as one down-and-up stroke lines up with this and nothing else does. (The walk
@@ -416,6 +477,19 @@ func _animate_walk(delta: float) -> void:
 	if _stun_time > 0.0:
 		walk_speed = 0.0
 	var rate := clampf(walk_speed / maxf(radius, 1.0) * 1.6, 0.0, 14.0)
+	# Painted creeps get their pace from the STRIDE THEY WERE DRAWN WITH instead. The line
+	# above is a size rule — one cycle per 3.9 radii of ground — and it was the only rule while
+	# every creep was a blob. It cannot survive a roster whose steps differ: the goblin's stride
+	# measures 0.77 of its own height and the fire avatar's 1.22, so the same divisor over-cycles
+	# one and under-cycles the other, and both come out as feet skating over the cobbles. With
+	# the real stride the feet very nearly stick: one cycle carries the creature exactly the two
+	# steps it is painted taking.
+	var painted := Sprites.enemy(art_kind(), 0)
+	if painted != null:
+		var figure := Sprites.figure_height(painted)
+		var stride_px := Sprites.stride(art_kind()) * (radius * SPRITE_HEIGHT_PER_RADIUS / maxf(figure, 1.0))
+		if stride_px > 1.0:
+			rate = clampf(TAU * walk_speed * WALK_TEMPO / (2.0 * stride_px), 0.0, 14.0)
 	_walk_phase += delta * rate
 	# abs(sin) raised to <1 gives a snappier push-off and a longer hang than the bare curve —
 	# which is most of the difference between a walk and a run.
@@ -436,7 +510,7 @@ func _animate_walk(delta: float) -> void:
 	# cannot see a transform, so sliding the body sideways slides it out from under its bar.
 	_body.position = Vector2(0.0, -hop)
 	_body.scale = Vector2(_facing * (1.0 + squash), 1.0 - squash)
-	_set_frame(_walk_phase, Sprites.pose_count(kind))
+	_set_frame(_walk_phase, Sprites.pose_count(art_kind()))
 
 ## Picks the pose for a point in the cycle and swaps it if it changed. The one thing in either
 ## cycle that costs a redraw — n times per cycle, against a transform every frame, which is
@@ -451,10 +525,20 @@ func _animate_walk(delta: float) -> void:
 func _set_frame(phase: float, poses: int) -> void:
 	if poses < 2:
 		return
-	var f := int(fposmod(phase, TAU) / (TAU / float(poses)))
+	var slot := TAU / float(poses)
+	var f := int(fposmod(phase, TAU) / slot)
 	if f != _frame:
+		_prev_frame = _frame
 		_frame = f
-		_repaint_body()
+	# Where in this frame's slot we are, turned into the dissolve. Derived from the phase
+	# rather than counted in seconds so it follows the creep's speed for free: a slowed creep
+	# dissolves slowly, a stunned one holds, and nothing has to be reset when either changes.
+	var blend := clampf(fposmod(phase, slot) / slot / FRAME_BLEND, 0.0, 1.0)
+	if blend < 1.0 or _frame_blend < 1.0:
+		_frame_blend = blend
+		_repaint_body()  # mid-dissolve, so this layer is redrawn every frame until it lands
+	else:
+		_frame_blend = 1.0
 
 ## Advances slow / poison timers and applies poison damage over time.
 func _tick_status(delta: float) -> void:
@@ -628,13 +712,13 @@ func _draw() -> void:
 				Color(0, 0, 0, 0.12 + 0.09 * drop))
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		_draw_flight_streaks(drop)
-		if Sprites.enemy(kind) == null:
+		if Sprites.enemy(art_kind()) == null:
 			_draw_wings()
 	else:
 		# Flat ground shadow. A painted figure is hung by its feet at radius*0.22 below the
 		# walked point; putting its shadow at the blob's old radius*0.85 left a visible gap
 		# and made every ground runner look airborne.
-		var ground_y := radius * 0.22 if Sprites.enemy(kind) != null else radius * 0.85
+		var ground_y := radius * 0.22 if Sprites.enemy(art_kind()) != null else radius * 0.85
 		draw_set_transform(Vector2(0, ground_y), 0.0, Vector2(1.0, Game.GROUND_SQUASH))
 		draw_circle(Vector2.ZERO, radius * 0.9, Color(0, 0, 0, 0.18))
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
@@ -682,10 +766,15 @@ func _draw_flight_streaks(drop: float) -> void:
 ## no art: the ground. Drawn under everything, and only for elemental waves; neutral ones
 ## stay clean.
 func _draw_element_ring() -> void:
-	if armor_element == "" or Sprites.enemy(kind) == null:
+	if armor_element == "" or Sprites.enemy(art_kind()) == null:
 		return
 	var ec: Color = Game.ELEMENT_COLORS.get(armor_element, Color.WHITE)
-	draw_set_transform(Vector2(0, radius * 0.85), 0.0, Vector2(1.0, Game.GROUND_SQUASH))
+	# The same radius * 0.22 the shadow above stands on, and for the same reason: a painted
+	# figure is hung by its feet that far below the walked point, while the blob's old 0.85 is
+	# where the BOTTOM OF A BALL was. The shadow was moved when the creeps were painted and
+	# this ring was not, so it hung a further 0.63 radii low — 24 px under an avatar boss,
+	# which reads as the creature hovering over its own element rather than standing in it.
+	draw_set_transform(Vector2(0, radius * 0.22), 0.0, Vector2(1.0, Game.GROUND_SQUASH))
 	draw_circle(Vector2.ZERO, radius * 1.15, Color(ec.r, ec.g, ec.b, 0.30))
 	draw_arc(Vector2.ZERO, radius * 1.15, 0.0, TAU, 20, Color(ec.r, ec.g, ec.b, 0.85), 3.0, true)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
@@ -696,9 +785,16 @@ func _draw_element_ring() -> void:
 func _draw_body(ci: CanvasItem) -> void:
 	# Painted creep if this archetype has been drawn; the blob below is the fallback, and it
 	# is what the board still looks like everywhere the art has not landed.
-	var art := Sprites.enemy(kind, _frame)
+	var art := Sprites.enemy(art_kind(), _frame)
 	if art != null:
-		_draw_sprite(ci, art)
+		# The outgoing pose goes down SOLID and the incoming one fades over it, rather than
+		# both being drawn at partial alpha: two half-transparent sprites would let the board
+		# through the creature wherever they fail to overlap, which is every limb in motion.
+		if _frame_blend < 1.0 and _prev_frame != _frame:
+			var previous := Sprites.enemy(art_kind(), _prev_frame)
+			if previous != null:
+				_draw_sprite(ci, previous)
+		_draw_sprite(ci, art, _frame_blend)
 		return
 	# Body with a soft top-left highlight for volume.
 	ci.draw_circle(Vector2.ZERO, radius, color)
@@ -725,7 +821,7 @@ func _draw_body(ci: CanvasItem) -> void:
 ## archetype and per armour element because a coloured circle is all the identity it had; a
 ## painted creep carries its own, and multiplying a tint over it turns a colour scheme into
 ## mud. The element instead reads from the ring drawn on the ground beneath it (see _draw).
-func _draw_sprite(ci: CanvasItem, art: Texture2D) -> void:
+func _draw_sprite(ci: CanvasItem, art: Texture2D, alpha: float = 1.0) -> void:
 	var size := art.get_size()
 	# Hung and scaled off the FIRST frame, not this one — one anchor and one scale for the
 	# whole cycle. A cycle is cut on a single window with its frames bottom-aligned inside it
@@ -734,7 +830,7 @@ func _draw_sprite(ci: CanvasItem, art: Texture2D) -> void:
 	# where the trailing leg reaches back is that boot, and the goblin jumps forward once per
 	# stride. `figure_height` rather than the file height, because the window is as tall as the
 	# LONGEST frame and the empty band above the head in the others is the bounce itself.
-	var first := Sprites.enemy(kind, 0)
+	var first := Sprites.enemy(art_kind(), 0)
 	var anchor := Sprites.anchor(first)
 	var scale := (radius * SPRITE_HEIGHT_PER_RADIUS) / Sprites.figure_height(first)
 	var where := Rect2(Vector2(-anchor.x * scale, -anchor.y * scale), size * scale)
@@ -743,7 +839,9 @@ func _draw_sprite(ci: CanvasItem, art: Texture2D) -> void:
 	where.position.y += radius * 0.22
 	# Game.ART_TINT, the same grade the towers pass through, so the creeps and the buildings
 	# cannot end up lit for two different boards. WHITE unless a board and the art drift.
-	ci.draw_texture_rect(art, where, false, Game.ART_TINT)
+	var tint := Game.ART_TINT
+	ci.draw_texture_rect(art, where, false,
+			tint if alpha >= 1.0 else Color(tint.r, tint.g, tint.b, tint.a * alpha))
 	# Impact pop. Over-bright modulate washes every lit pixel of the sprite towards white,
 	# which is the painted equivalent of the white circle the blob flashes: it lights up the
 	# creep's own shape instead of stamping a ball over it.
@@ -759,7 +857,7 @@ func _draw_sprite(ci: CanvasItem, art: Texture2D) -> void:
 ## painted scout reaches 2.6 radii up, so a bar 20px above -radius was drawn across its
 ## chest. Everything that sits "above the head" reads this instead.
 func _head_y() -> float:
-	if Sprites.enemy(kind) == null:
+	if Sprites.enemy(art_kind()) == null:
 		return -radius
 	return -(radius * SPRITE_HEIGHT_PER_RADIUS - radius * 0.22)
 
@@ -770,7 +868,7 @@ func _head_y() -> float:
 ## therefore hangs it off to one side of the creature it belongs to. Mirrored with the
 ## facing, since the lean mirrors with it.
 func _visual_dx() -> float:
-	var art := Sprites.enemy(kind, 0)
+	var art := Sprites.enemy(art_kind(), 0)
 	if art == null:
 		return 0.0
 	# Same anchor and same scale the sprite itself is drawn with — see _draw_sprite. On a
@@ -788,7 +886,7 @@ func _visual_dx() -> float:
 ## into the road. A ring says "this CREATURE is slowed / immune / burning", so it follows the
 ## figure that is drawn, not the point that walks.
 func _ring_center() -> Vector2:
-	if Sprites.enemy(kind) == null:
+	if Sprites.enemy(art_kind()) == null:
 		return Vector2.ZERO
 	return Vector2(_visual_dx(), _head_y() * 0.5)
 
@@ -796,7 +894,7 @@ func _ring_center() -> Vector2:
 ## is a fraction of its drawn height rather than half of it: half would hoop it at arm's
 ## length and read as a spell effect on the ground rather than a mark on the creature.
 func _ring_radius() -> float:
-	if Sprites.enemy(kind) == null:
+	if Sprites.enemy(art_kind()) == null:
 		return radius
 	return radius * SPRITE_HEIGHT_PER_RADIUS * 0.32
 

@@ -21,6 +21,7 @@ static var _textures: Dictionary = {}  ## path -> Texture2D or null
 static var _anchors: Dictionary = {}   ## path -> Vector2 in texture pixels
 static var _cycle: Dictionary = {}     ## creep kind -> number of painted poses
 static var _heights: Dictionary = {}   ## path -> standing height in texture pixels
+static var _strides: Dictionary = {}   ## creep kind -> widest foot separation in texture pixels
 
 ## The sprite for an element at a level, or null if that one has not been painted yet.
 static func tower(element: String, level: int) -> Texture2D:
@@ -131,6 +132,42 @@ static func figure_height(texture: Texture2D) -> float:
 	var found := float(anchor(texture).y - top)
 	_heights[path] = found
 	return found
+
+## How far apart the creature's FEET get at the widest point of its cycle, in texture pixels.
+##
+## This is the walk's own stride, read off the art instead of guessed from the creep's radius —
+## and it is the number that decides whether a walk reads as walking or as sliding. The cycle is
+## played at the creature's ground speed, so the pace that makes the feet stick is
+## `speed / (2 * stride)` cycles a second; drive it off anything else and the difference comes
+## out as the feet skating over the road. It was driven off `radius` before, which is a size and
+## not a stride: measured, the shipped goblin steps 0.77 of its own height and a generated fire
+## avatar 1.22, so no one rule fits both. See Enemy._animate_walk.
+##
+## Measured over the whole cycle from the bottom 5% of each frame — the feet, not the fists,
+## which on a knuckle-walker hang almost as low. Cached per cycle: it costs one image read per
+## frame, and the answer cannot change while the game runs.
+static func stride(kind: String) -> float:
+	if _strides.has(kind):
+		return _strides[kind]
+	var widest := 0.0
+	for i in pose_count(kind):
+		var texture := enemy(kind, i)
+		if texture == null:
+			continue
+		var image := texture.get_image()
+		var ground := int(anchor(texture).y) - 1
+		var band := maxi(2, int(round(figure_height(texture) * 0.05)))
+		var lo := image.get_width()
+		var hi := -1
+		for y in range(maxi(0, ground - band + 1), mini(image.get_height(), ground + 1)):
+			for x in image.get_width():
+				if image.get_pixel(x, y).a > 0.15:
+					lo = mini(lo, x)
+					hi = maxi(hi, x)
+		if hi > lo:
+			widest = maxf(widest, float(hi - lo))
+	_strides[kind] = widest
+	return widest
 
 ## Horizontal middle of one row's opaque span, or -1 if the row is empty.
 static func _row_middle(image: Image, y: int) -> float:

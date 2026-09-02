@@ -288,7 +288,10 @@ func _spawn_boss(def: Dictionary) -> void:
 			_reward * reward_mult,
 			Game.ELEMENT_COLORS.get(_element, Balance.BOSS_TINT) if avatar else Balance.BOSS_TINT)
 	boss.armor_element = _element
-	boss.kind = _art_kind  # a boss is an archetype wearing a crown, not a creature of its own
+	# A boss is an archetype wearing a crown — unless it is an element avatar and that
+	# element's own sheet has been painted, which Enemy.art_kind() decides off avatar_element
+	# below. Set that BEFORE the node enters the tree, since the art set is resolved once.
+	boss.kind = _art_kind
 	boss.radius = Balance.BOSS_RADIUS
 	boss.life_cost = Balance.ELEMENT_BOSS_LIFE_COST if avatar else Balance.BOSS_LIFE_COST
 	boss.is_boss = true

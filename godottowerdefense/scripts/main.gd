@@ -110,6 +110,8 @@ func _ready() -> void:
 		_air_pose()
 	if OS.get_cmdline_user_args().has("--boss-pose"):
 		_boss_pose()
+	if OS.get_cmdline_user_args().has("--avatar-pose"):
+		_avatar_pose()
 	if OS.get_cmdline_user_args().has("--bolt-pose"):
 		_bolt_pose()
 	if OS.get_cmdline_user_args().has("--hit-pose"):
@@ -591,6 +593,56 @@ func _boss_pose() -> void:
 		e.set_progress(step)
 		e.global_position = Game.active_path[step]
 		e.take_damage(2000.0 * 0.35)  # dent the health bar so it reads against a full boss
+
+## TEMPORARY verification harness: walks all FOUR element avatars down an empty road at once,
+## so the boss sheets can be photographed and compared side by side.
+##
+## The avatars are the one creature a run cannot show you on demand: they arrive on waves
+## 10/20/30/40 in an order the RUN SEED picks (Run.boss_element_for_wave), so photographing all
+## four means four wave-40 runs and getting a different order each time. `--boss-pose` does not
+## cover it either — it stages one avatar to photograph the SIGIL, in whatever element, on the
+## `tank` art every boss used to wear.
+##
+## Set up so a MISSING sheet is visible rather than silent: each avatar prints the art set it
+## resolved to (Enemy.art_kind), so `boss_fire` against `normal` says the sheet is not being
+## picked up — which was the whole failure mode before the lookup existed, and it looks exactly
+## like a boss that was never painted.
+##
+## Pair with --shot and WITHOUT --headless — _draw never runs headless:
+##   Godot.exe --path <project> res://scenes/Main.tscn --quit-after 600 -- --avatar-pose --shot:3
+func _avatar_pose() -> void:
+	wave_manager.set_process(false)
+	var enemy_scene: PackedScene = load("res://scenes/Enemy.tscn")
+	print("--- AVATAR POSE ---")
+	for i in Game.TOWER_ORDER.size():
+		var element := String(Game.TOWER_ORDER[i])
+		var e := enemy_scene.instantiate() as Enemy
+		# The same fields WaveManager._spawn_boss sets for an avatar, and in its order: the
+		# art set is resolved from `avatar_element`, so a harness that set it later than the
+		# spawner does would photograph a creature the game never produces.
+		# The REAL speed an avatar walks at, not a slow one chosen to make photography easy.
+		# It was 24 px/s, and that is worth writing down because it produced a wrong verdict on
+		# the art: the walk cycle is played at the creep's own pace, so at 24 the twelve frames
+		# ran at 1.9 fps and the first painted boss was judged — by eye, correctly — to be
+		# stepping. At the first avatar wave's real speed the same art plays at 5.2.
+		var real_speed := Balance.wave_speed(int(Balance.ELEMENT_BOSS_WAVES[0])) * Balance.BOSS_SPEED_MULT
+		e.setup(4000.0, real_speed, 50, Game.ELEMENT_COLORS.get(element, Balance.BOSS_TINT))
+		e.kind = "normal"   # what an avatar wave pins its archetype to (Game.apply_milestone)
+		e.radius = Balance.BOSS_RADIUS
+		e.is_boss = true
+		e.armor_element = element
+		e.avatar_element = element
+		enemies_root.add_child(e)
+		# Spread across the MIDDLE of the road, not evenly along the whole of it: the last
+		# leg runs off to the right behind the tower palette (Game.PLAY_RIGHT), and an even
+		# split put the fourth avatar under the panel where it cannot be photographed.
+		var span := float(Game.active_path.size() - 2)
+		var step := int(span * (0.12 + 0.52 * float(i) / float(Game.TOWER_ORDER.size() - 1))) + 1
+		e.set_progress(step)
+		e.global_position = Game.active_path[step]
+		e.take_damage(4000.0 * 0.3)  # dent the bar so it reads against a full boss
+		print("    %-7s art=%s" % [element, e.art_kind()])
+	print("--- AVATAR POSE END ---")
 
 ## TEMPORARY verification harness: flies one of EVERY bolt drawing across an empty board at a
 ## crawl, so all fifteen can be photographed side by side and compared.
@@ -1180,8 +1232,7 @@ func _update_ghost(world_pos: Vector2) -> void:
 	var at := _placement_point(world_pos)
 	var legal := at.is_finite() 			and Game.can_build_at(at, towers_root.get_children()) 			and Game.gold >= _cost(_drag_kind)
 	preview.show_at(at if at.is_finite() else world_pos, legal,
-			minf(d.get("range", 160.0) * Balance.WC3_RANGE_SCALE, Balance.MAX_TOWER_RANGE),
-			d.get("color", Color.WHITE))
+			minf(d.get("range", 160.0) * Balance.WC3_RANGE_SCALE, Balance.MAX_TOWER_RANGE))
 
 func _drop(world_pos: Vector2) -> void:
 	var kind := _drag_kind
