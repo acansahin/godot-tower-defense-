@@ -970,6 +970,18 @@ const FUSION_GLOW_WIDTH := 0.36
 ## Sun's 195 and Well's 215), so the two rings never lie on top of each other.
 const AURA_RING_PERIOD := 3.2  ## Seconds for one ring to travel from the tower out to the edge.
 
+## The standing edge is BROKEN, and slowly turning, so that hue is not the only thing telling
+## it apart from the drag ghost's circle. That ghost is now green for "you may build here" and
+## red for "you may not" whatever element is being dragged (see placement_preview.gd), and
+## Well's aura is teal — close enough that a continuous ring of each, both faint, both read
+## off the same board, are one circle at a glance. The aura keeps its own element colour;
+## what separates the two is that this one is dashed and drifting and the ghost's is solid
+## and still. A player dragging a tower into a Sun's reach sees both circles at once, so they
+## have to be distinguishable at that moment and not merely in principle.
+const AURA_DASHES := 24
+const AURA_DASH_FILL := 0.55         ## Of each slot, how much is drawn. The rest is the gap.
+const AURA_DASH_DRIFT := 0.09        ## Radians per second the dash pattern turns.
+
 func _draw_aura_ring() -> void:
 	var radius: float = float(_eff.get("aura_radius", 0.0))
 	if radius <= 0.0:
@@ -981,7 +993,12 @@ func _draw_aura_ring() -> void:
 	# The standing edge: quiet, but always there. The travelling ring alone would only answer
 	# "how far does this reach" during the fraction of a second it happens to be passing the
 	# spot you are looking at, and the question is asked while PLACING a neighbour.
-	draw_arc(Vector2.ZERO, radius, 0.0, TAU, 48, Color(ec.r, ec.g, ec.b, 0.26), 2.0, true)
+	var edge := Color(ec.r, ec.g, ec.b, 0.26)
+	var slot := TAU / float(AURA_DASHES)
+	var spin := t * AURA_DASH_DRIFT
+	for i in AURA_DASHES:
+		var a := spin + float(i) * slot
+		draw_arc(Vector2.ZERO, radius, a, a + slot * AURA_DASH_FILL, 6, edge, 2.0, true)
 	# One ring travelling out, fading in off the tower as well as out at the edge — the same
 	# reason Water's ripples do: a ring that arrives at full strength on a point reads as an
 	# impact landing rather than as something spreading.
