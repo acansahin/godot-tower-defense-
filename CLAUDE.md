@@ -40,11 +40,22 @@ correct). Everything after a bare `--` reaches `OS.get_cmdline_user_args()`:
 ```
 
 Arg-gated harnesses currently in `main.gd`, none of which can fire in a normal session:
-`--dump-stats` (every tower's stats at every level), `--dump-waves` (60 wave definitions
+`--dump-stats` (every tower's stats at every level — it beats all four avatars first, or the
+progression gate below would stop it at Lv2 and it would re-print that row three times
+without erroring), `--dump-waves` (60 wave definitions
 plus a generator-purity check), `--dump-fusions` (all eleven `Game.FUSIONS` rows at every
-level, each as a DPS multiple of the base elements printed above it, plus every fusion key
+level, each as a DPS multiple of the base elements printed above it, plus the ONE level each
+row can actually fire at and which tiers/names that leaves unread, plus every fusion key
 round-tripped through `fusion_key()` — a typo'd key silently falls back to the base
 definition, so the tower keeps working, keeps its old stats and pockets the gold),
+`--dump-ladder` (the two roads a tower can walk — depth to Lv5 behind its own avatar, or
+breadth through dual/triple/Pure — printed side by side with cumulative gold and DPS at
+every step, then all eleven fusions at their fixed level. **This is the table to balance the
+progression gate against**, and it is the only one that shows what a player can actually
+reach: `--dump-stats` and `--dump-fusions` both still report all five levels of everything,
+because both were written when all five were reachable. It walks a real `Tower` through the
+real `can_upgrade()`/`can_fuse()`/`upgrade()`/`add_element()`, so it can disagree with the
+game rather than restate the tables),
 `--dump-bosses` (20 run seeds' avatar-boss orders: proves each element appears exactly once
 and that the SEED, not the global RNG, picks the order), `--dump-matchup`
 (`element_mult_best` for every element set against every armour — the table to read before
@@ -84,9 +95,13 @@ chosen against the wave's armour, and it never sells. A human plays better than 
 run it clears is not proof the run is easy — but a run it dies early in IS proof of a
 problem. It is what `FINAL_HP_FACTOR` 40 -> 55 and the Pure damage cut were read off),
 `--show-fusion-panel`
-(stands one Lv3 tower on an empty board with two elements unlocked and opens its panel, so
-the panel's `_draw` can be photographed without playing to an avatar boss
-first), `--air-pose` (parks eight Air creeps along
+(stands one Lv2 tower on an empty board, fuses it once, unlocks three of the four elements
+and opens its panel, so the panel's `_draw` can be photographed without playing to an avatar
+boss first — the tower's OWN element is the locked one, so one screenshot carries all three
+states of the gate: offered fusion rows, the locked-elements footer, and the dim
+locked-upgrade row. `--show-locked-upgrade` is the same scenario with the fusion skipped,
+i.e. a base tower sitting at the Lv2 branch point with both roads on screen at once),
+`--air-pose` (parks eight Air creeps along
 the road on an EMPTY board so the flyer's drawing can be photographed — `--fill-board`
 buries the road and kills them at the spawn point, and a normal run never reaches the Air
 wave without leaking away all twenty lives first), `--boss-pose` (stages both bosses' rules —
@@ -347,6 +362,58 @@ Two constants are tied to the road length and nothing else reads it, so they mov
 or the pacing breaks silently: `Balance.BASE_SPEED_*` (at the wrong value a wave-1 enemy
 took 186 seconds to walk the road) and the count ramp `BASE_COUNT_*`.
 
+## Progress is gated by avatar bosses, not by gold
+
+A tower climbs to **Lv2** on gold alone and no further. Past that the run's four avatar
+bosses (`Balance.ELEMENT_BOSS_WAVES`, 10/20/30/40 at `STANDARD_WAVES` 50) are the only thing
+that opens anything, and killing one opens **two** doors at once:
+
+| | needs | result |
+|---|---|---|
+| **depth** — Lv3, Lv4, Lv5 | that tower's OWN element's avatar dead | `Balance.MAX_LEVEL`, 695g all in |
+| **breadth** — dual, triple, Pure | ANY other element's avatar dead | Lv3 / Lv4 / Lv5, 2330g all in |
+
+**Lv2 is a branch point, and the two roads do not compose.** Taking a base tower to Lv3
+closes its fusion row for good (`Tower.can_fuse` refuses above `Balance.FREE_LEVEL_CAP`);
+fusing closes its upgrade row for good (`Tower.can_upgrade` refuses for any tower carrying
+more than one element). A fusion's level is **fixed by its depth** — dual 3, triple 4, Pure
+5, `Balance.FUSED_LEVELS` — set by `add_element()` and never moved again.
+
+Three things about this are load-bearing:
+
+- **The level gate on fusion is not decoration.** Without it a maxed Lv5 Fire could be
+  absorbed into a Lv3 dual, which is a straight DOWNGRADE — a purchase that makes a tower
+  worse is not a decision, it is a trap. This is why `main.gd`'s `_fuse_tower()` checks
+  `can_fuse()` and not just `available_elements()`; the panel already hides the row, but the
+  panel is a view and the guard has to hold on its own.
+- **An element whose avatar has not arrived yet is stuck at Lv2, and fusion is its only way
+  out.** Since the run seed picks the avatar ORDER (`Run.boss_elements`), which elements are
+  stuck and which are free is different every run. That is the whole shape of the design;
+  do not "fix" it by loosening the gate.
+- **It leaves data deliberately unread.** A dual never reads `damage_tiers[3]`/`[4]`, a
+  triple never reads `[4]`, and every `FUSIONS` row's 2nd and 3rd `names` entries are dead
+  (`Game.fusion_display_name` shows `name` and nothing else). The tables keep them because
+  they are the map's own numbers and the ratios between them still set each row's relative
+  strength. **`--dump-ladder` prints the one value each row actually fires at** — that is
+  the column to re-balance, not the five-wide table `--dump-fusions` shows.
+
+`Run.avatars_beaten` is the single ledger both gates read, written in exactly one place
+(`wave_manager.gd`, on wave clear, only when `Enemy.was_killed` — a boss that leaks pays
+nothing). **A harness that wants a tower at its ceiling has to beat the avatars first**,
+which is why `--fill-board`, `--dump-stats` and `--hit-pose` all open with a
+`Run.beat_avatar()` loop; without it they quietly build a board of Lv2 towers and still print
+a cheerful summary. (`--dump-ladder` beats them too, but deliberately and one road at a time,
+since which avatars are down is the very thing it is reporting on.)
+
+**Measured, not assumed.** Five `--play-sim` runs of the 50-wave standard after the gate all
+WON and all killed four avatars, finishing on **20, 1, 20, 15 and 18 lives** against the one
+pre-gate run's 20 — so the floor player survives, but it can now finish on one life where it
+used to finish untouched. `--fill-board` still wins wave 50, so `FINAL_HP_FACTOR`'s ceiling
+calibration still holds, and `--dump-stats` is byte-identical (the stat tables did not move;
+only who may reach them did). The leftover gold at the end grew from 143 to 261-1300, which
+is the fifth off the per-tower spending ceiling showing up — small, and the wrong thing to
+close by cutting costs (see the `TIER_COSTS` comment in `balance.gd` for why).
+
 ## Architecture, and where to add things
 
 Everything is **data-driven**. There is exactly one generic `Tower`, `Enemy` and
@@ -386,7 +453,7 @@ To add content, add a **data row**, not a scene or script:
 | Adding a… | Goes in |
 |---|---|
 | Tower | `Game.TOWER_DEFS` + its id in `Game.TOWER_ORDER` **to make it buildable** |
-| Fusion (dual / triple / Pure) | a row in `Game.FUSIONS`, keyed by its element names **sorted and joined with `+`** (`fusion_key()` builds the same key from a tower's element set, which is what makes Fire+Water and Water+Fire one tower). It replaces the base definition rather than layering over it, so the row must be complete: `damage_tiers`, `range`, `interval`, `color`, `names`, `desc`. **No code change for the PAYLOAD** — those fields are the ones `projectile.gd` already reads. The SHOT is the exception: `Projectile._draw()` dispatches on `shape` (the firing tower's `art_key()`, so `flesh_golem`, never `earth+nature+water`) and a row with no case there falls through to `_draw_plain_bolt` — which is silent, since a plain bolt in the row's colour looks deliberate. Add the case and check it with `--bolt-pose` |
+| Fusion (dual / triple / Pure) | a row in `Game.FUSIONS`, keyed by its element names **sorted and joined with `+`** (`fusion_key()` builds the same key from a tower's element set, which is what makes Fire+Water and Water+Fire one tower). It replaces the base definition rather than layering over it, so the row must be complete: `damage_tiers`, `range`, `interval`, `color`, `names`, `desc` — but note only ONE entry of `damage_tiers` is ever read (the row's fixed level, see the progression section above) and `names` is dead entirely. **No code change for the PAYLOAD** — those fields are the ones `projectile.gd` already reads. The SHOT is the exception: `Projectile._draw()` dispatches on `shape` (the firing tower's `art_key()`, so `flesh_golem`, never `earth+nature+water`) and a row with no case there falls through to `_draw_plain_bolt` — which is silent, since a plain bolt in the row's colour looks deliberate. Add the case and check it with `--bolt-pose` |
 | Permanent upgrade | `Game.WORKSHOP_DEFS` — effects must be **per-level steps**, not totals. This is the only thing left that writes `TowerMods` |
 | Saved field | a key in the relevant `Save` section; bump `SAVE_VERSION` + add a `_migrate` branch if the shape changes |
 | Wave (first 20 only) | `Game.WAVES` — past that, waves are generated. **No boss goes in this table**, see below |

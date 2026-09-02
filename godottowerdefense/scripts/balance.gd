@@ -59,6 +59,28 @@ func ruleset_start_lives(id: String) -> int:
 # shapes rather than as the same tower at different sizes.
 
 const MAX_LEVEL := 5
+## How far a BASE (single-element) tower climbs on gold alone. Past this its own element's
+## avatar boss must have fallen — Run.is_avatar_beaten, checked in Tower.can_upgrade.
+##
+## This is also the level at which a base tower may fuse, and it is the same number on
+## purpose: Lv2 is the branch point. Going to Lv3 commits the tower to depth and closes the
+## fusion row for good; fusing commits it to breadth and closes the upgrade row for good.
+## Neither is a trap, because the two roads cost about the same and neither can be entered
+## by accident (the panel says which one is being closed before it is closed).
+const FREE_LEVEL_CAP := 2
+## The level a FUSED tower sits at, keyed by how many elements it carries. Fixed, not a
+## floor and not a starting point: a fusion has no upgrade row at all, so its level never
+## moves again. The ladder a tower actually walks is therefore
+##
+##   Lv1 -> Lv2 -> (its avatar) Lv3 -> Lv4 -> Lv5        [depth, one element]
+##   Lv1 -> Lv2 -> dual Lv3 -> triple Lv4 -> Pure Lv5    [breadth, up to four]
+##
+## which is why the two roads end on the same level. NOTE this leaves data unread on
+## purpose: a dual never reaches damage_tiers[3]/[4], a triple never reaches [4], and every
+## FUSIONS row's 2nd and 3rd `names` entries are dead. The tables keep them as source data
+## (they are the map's), and the numbers each fusion DOES read are the ones to re-balance —
+## `--dump-ladder` prints exactly that column.
+const FUSED_LEVELS := {2: 3, 3: 4, 4: 5}
 ## Gold to BUILD a tower at tier 1, then to reach each tier above it. Replaced the WC3-ported
 ## 50/175/788/3544/24444 ladder in the V2 redesign (GAME_STRATEGY_V2.md §4.2, §29.1, BUILD
 ## NEXT #3): the map's ladder ended in a 24444-gold, five-and-a-half-digit purchase that no
@@ -85,6 +107,29 @@ const MAX_LEVEL := 5
 ## does play with real gold, where `--fill-board` grants itself a million — but what it
 ## answers is whether a gradual build-up SURVIVES, not whether the capacity ledger above adds
 ## up, so the last word on this one still belongs to an actual playthrough.
+##
+## **FREE_LEVEL_CAP / FUSED_LEVELS cut the per-tower ceiling from 2915 to 2330**, because the
+## two roads no longer compose: a tower is either maxed (50 + 645 = 695) or fused all the way
+## (50 + 60 + 240 + 630 + 1350 = 2330), never both. That is a fifth off the capacity figure
+## above — and unlike everything before it in this comment, the consequence has been PLAYED
+## rather than budgeted. Five `--play-sim` runs of the 50-wave standard, after the gate:
+##
+##   lives left   20, 1, 20, 15, 18       (before the gate, one run: 20)
+##   gold left    1174, 1280, 317, 261, 1095   (before: 143)
+##   board        33 towers, lv 154-160, elements 72-79   (before: lv 165, elements 86)
+##
+## Every one of them still WON, and every one killed all four avatars, so the gate does not
+## break the run — but the spread is the finding: a floor player that used to finish untouched
+## can now finish on one life. That is the intended tension (a leaked avatar now costs an
+## element BOTH its depth and its fusions, where it used to cost only fusions) and it is also
+## why this is the number to re-read first if the gate is ever tuned.
+##
+## The few hundred to ~1300 gold left over is the capacity shortfall showing up, and it is
+## small — 1-3% of the ~41,300 income ceiling, against the ~18,000 the 12-pad board stranded.
+## **Do not close it by cutting costs.** The sim buys the cheapest thing first, so it takes
+## the 105 upgrade over the 240 fusion and locks itself out of the fusion road tower after
+## tower — which is exactly the elements 86 -> 72-79 above. A player who picks a road on
+## purpose spends MORE than this, not less, because the breadth road costs 2330.
 const TIER_COSTS: Array = [50, 60, 105, 180, 300]
 ## Damage multiplier applied on each upgrade. Unused while every TOWER_DEFS entry supplies
 ## its own explicit `damage_tiers` (see game.gd) — kept as the documented fallback shape,

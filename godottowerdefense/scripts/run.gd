@@ -15,12 +15,13 @@ extends Node
 
 signal modifiers_changed  ## The modifier set changed; towers re-resolve their stats.
 signal roster_changed     ## A tower was unlocked; the palette gains a slot.
-## An avatar boss went down and its element is now fusable. Main raises the banner; the
-## tower panel re-reads unlocked_fusions on its own the next time it opens.
-signal fusion_unlocked(element: String)
+## An avatar boss went down. That element is now fusable by any tower AND its own towers
+## may climb past Balance.FREE_LEVEL_CAP. Main raises the banner; the tower panel re-reads
+## avatars_beaten on its own the next time it opens.
+signal avatar_beaten(element: String)
 
 ## Every upgrade taken this run, in pick order. The roguelite card pool that used to fill
-## this is gone (cross-element power comes off avatar bosses now — see unlocked_fusions
+## this is gone (cross-element power comes off avatar bosses now — see avatars_beaten
 ## below), so today only the Workshop feeds the fold, through `permanent`. Kept because it
 ## is the generic path a future run-scoped effect would use, and it costs nothing empty.
 var taken: Array[Dictionary] = []
@@ -33,12 +34,21 @@ var unlocked: Array[String] = []
 
 # --- The fusion ladder's run state ---------------------------------------------
 ## The four elements in the order their avatar bosses arrive, drawn per run from the run
-## seed. Index 0 is the wave-3 boss, index 3 the wave-15 one — see boss_element_for_wave.
+## seed. Index 0 is the first avatar wave's boss and index 3 the last one's — the waves
+## themselves come from Balance.ELEMENT_BOSS_WAVES (10/20/30/40 at STANDARD_WAVES 50), so
+## do not hard-code them here. See boss_element_for_wave.
 var boss_elements: Array[String] = []
 ## Elements whose avatar boss has actually been KILLED (not merely survived — see
-## wave_manager's `was_killed` check). A tower may absorb any element in here that it does
-## not already carry; this is the only gate on the whole fusion ladder.
-var unlocked_fusions: Array[String] = []
+## wave_manager's `was_killed` check). This one ledger gates BOTH halves of tower progress:
+##
+##   - fusion: a tower may absorb any element in here that it does not already carry
+##     (Tower.available_elements), and
+##   - depth: a base tower may climb past Balance.FREE_LEVEL_CAP only once its OWN element
+##     is in here (Tower.can_upgrade).
+##
+## So an element whose avatar has not fallen yet is stuck at Lv2, and its only way forward
+## is to fuse with an element whose avatar HAS — which is the whole shape of the run.
+var avatars_beaten: Array[String] = []
 
 ## Folded TowerMods per "id|element" key, cleared whenever the modifier set changes. The
 ## fold is cheap, but a wave with 40 towers all re-resolving would otherwise repeat the
@@ -62,7 +72,7 @@ func _ready() -> void:
 func reset(run_seed: int) -> void:
 	taken.clear()
 	unlocked.clear()
-	unlocked_fusions.clear()
+	avatars_beaten.clear()
 	_rng.seed = run_seed
 	_shuffle_boss_elements()
 	_cache.clear()
@@ -172,17 +182,18 @@ func boss_element_for_wave(wave: int) -> String:
 		return ""
 	return boss_elements[i]
 
-## Records that an avatar boss went down. Idempotent, so a double-call (a boss dying at the
-## exact moment the wave clears, say) cannot double-announce.
-func unlock_fusion(element: String) -> void:
-	if element == "" or unlocked_fusions.has(element):
+## Records that an avatar boss went down, opening both that element's fusions and its own
+## towers' Lv3-5. Idempotent, so a double-call (a boss dying at the exact moment the wave
+## clears, say) cannot double-announce.
+func beat_avatar(element: String) -> void:
+	if element == "" or avatars_beaten.has(element):
 		return
-	unlocked_fusions.append(element)
-	fusion_unlocked.emit(element)
+	avatars_beaten.append(element)
+	avatar_beaten.emit(element)
 
-## True once `element`'s avatar boss has been beaten this run.
-func is_fusion_unlocked(element: String) -> bool:
-	return unlocked_fusions.has(element)
+## True once `element`'s avatar boss has been beaten this run. Read by both gates above.
+func is_avatar_beaten(element: String) -> bool:
+	return avatars_beaten.has(element)
 
 ## Every tower the player may currently build: the four elements, plus anything granted
 ## outright. Cross-element towers are NOT here and never will be — they are grown out of a

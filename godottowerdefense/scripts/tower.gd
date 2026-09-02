@@ -200,8 +200,8 @@ static func _make_behavior(kind: String) -> TowerBehavior:
 ## its element set now names. Public, unlike _recompute(), because writing `elements`
 ## without refreshing would leave the tower showing its old identity's numbers.
 ##
-## Caller (main.gd) is responsible for the gold and for checking available_elements() first;
-## this guards only against a double-add, which would corrupt the fusion key.
+## Caller (main.gd) is responsible for the gold and for checking can_fuse() first; this
+## guards only against a double-add, which would corrupt the fusion key.
 func add_element(new_element: String) -> void:
 	if new_element == "" or elements.has(new_element):
 		return
@@ -210,6 +210,11 @@ func add_element(new_element: String) -> void:
 	# the tower travelled, not just its build and upgrades.
 	total_spent += fusion_cost()
 	elements.append(new_element)
+	# A fusion's level is its DEPTH: dual 3, triple 4, Pure 5 (Balance.FUSED_LEVELS). Set
+	# rather than kept, and set BEFORE _recompute() so the new definition's damage_tiers are
+	# read at the new level in the same pass. Nothing is charged for the jump — the fusion
+	# price is the whole price, which is what makes breadth cost about what depth costs.
+	level = int(Balance.FUSED_LEVELS.get(elements.size(), level))
 	_recompute()
 	queue_redraw()
 
@@ -221,17 +226,28 @@ func fusion_cost() -> int:
 		return 0
 	return int(Balance.FUSION_COSTS[i])
 
-## True while this tower can still absorb something: it is short of all four elements AND at
-## least one of the ones it lacks has had its avatar boss beaten.
+## True while this tower can still absorb something: it is short of all four elements, it is
+## standing at the level fusion branches from, AND at least one of the elements it lacks has
+## had its avatar boss beaten.
+##
+## The level test only ever bites a BASE tower, because a fused one cannot be upgraded and so
+## is always sitting exactly on FUSED_LEVELS[size]. What it forbids is fusing a Lv1 tower
+## (the ladder starts at Lv2) and fusing a Lv3+ one — the latter matters, because a maxed
+## Lv5 Fire absorbed into a Lv3 dual would be a straight DOWNGRADE, and a purchase that makes
+## a tower worse is not a decision, it is a trap.
 func can_fuse() -> bool:
+	if elements.size() >= Game.TOWER_ORDER.size():
+		return false
+	if elements.size() == 1 and level != Balance.FREE_LEVEL_CAP:
+		return false
 	return not available_elements().is_empty()
 
 ## Elements this tower could absorb right now: unlocked by an avatar boss this run, and not
 ## already carried. Derived on every call rather than cached, for the same reason tower stats
-## are — Run.unlocked_fusions grows mid-run and a cached list would go stale silently.
+## are — Run.avatars_beaten grows mid-run and a cached list would go stale silently.
 func available_elements() -> Array:
 	var out: Array = []
-	for e in Run.unlocked_fusions:
+	for e in Run.avatars_beaten:
 		if not elements.has(String(e)):
 			out.append(String(e))
 	return out
@@ -260,8 +276,30 @@ func note_kill() -> void:
 		_recompute()
 		queue_redraw()
 
+## Whether the upgrade row is real. Three gates, in the order they rule things out:
+##
+##   1. A FUSED tower has no upgrade road at all — its level is fixed by its depth
+##      (Balance.FUSED_LEVELS), so the only way up from a dual is another fusion.
+##   2. The old ceiling, MAX_LEVEL.
+##   3. Past FREE_LEVEL_CAP a base tower needs its OWN element's avatar boss dead. This is
+##      the run's spine: an element whose avatar has not arrived yet is stuck at Lv2, and its
+##      only way forward is to fuse with one whose avatar HAS.
+##
+## upgrade_locked_by_avatar() below is gate 3 on its own, for the panel — a tower held at Lv2
+## by a boss it has not fought yet must SAY so, or the missing row reads as a bug.
 func can_upgrade() -> bool:
-	return level < Balance.MAX_LEVEL
+	if elements.size() > 1:
+		return false
+	if level >= Balance.MAX_LEVEL:
+		return false
+	return level < Balance.FREE_LEVEL_CAP or Run.is_avatar_beaten(element)
+
+## True when the ONLY thing standing between this tower and its next level is an avatar boss
+## that is still alive. False for a fused tower (which has no next level at all) and for a
+## maxed one (which has none either) — both of those are ends of the road, not waiting rooms.
+func upgrade_locked_by_avatar() -> bool:
+	return (elements.size() == 1 and level >= Balance.FREE_LEVEL_CAP
+			and level < Balance.MAX_LEVEL and not Run.is_avatar_beaten(element))
 
 ## True when the upgrade hint should be on screen: another level exists and it's affordable.
 func _upgrade_ready() -> bool:
@@ -302,10 +340,12 @@ func _recompute() -> void:
 	# Cached on the instance so OTHER towers' aura reads (below) see this tower's current
 	# identity, not the base element it was built as.
 	_eff = _def.duplicate(true)
-	# Identity follows the definition, so a fusion renames the tower and recolours it. A
-	# fused tower also climbs the map's own tier names as it levels (Steam -> Vapor ->
-	# Immolation), which Game.fusion_name spreads across our five levels.
-	display_name = Game.fusion_name(_def, level) if not fdef.is_empty() \
+	# Identity follows the definition, so a fusion renames the tower and recolours it. The
+	# map's per-tier name ladder (Steam -> Vapor -> Immolation) is NOT walked any more: a
+	# fusion's level is fixed by its depth, so there is no second or third tier to climb into
+	# and the row's own name is the only one it can ever show. That name is also the string
+	# art_key() looks the painted set up under, so the label and the picture cannot drift.
+	display_name = Game.fusion_display_name(_def) if not fdef.is_empty() \
 			else String(_def.get("name", id))
 	element_color = _def.get("color", Color.WHITE)
 	# --- base: straight from the effective definition ---------------------------

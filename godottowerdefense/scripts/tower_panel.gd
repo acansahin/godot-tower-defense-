@@ -54,7 +54,10 @@ var _rows: Array = []
 ## instead of fusion appearing out of nowhere the first time a boss dies.
 var _locked: Array = []
 
-## `kind` is "upgrade" | "fuse" | "sell"; `element` is only set for a fuse row.
+## `kind` is "upgrade" | "locked_upgrade" | "fuse" | "sell"; `element` is only set for a fuse
+## row. A "locked_upgrade" row is the one row here that cannot be pressed: it stands in for the
+## upgrade a tower would have if its avatar boss were dead, because a row that simply vanished
+## would leave the player with no way to learn the rule that is holding their tower at Lv2.
 func _build_rows() -> void:
 	_rows = []
 	_locked = []
@@ -63,15 +66,25 @@ func _build_rows() -> void:
 	if _tower.can_upgrade():
 		_rows.append({"kind": "upgrade", "cost": _tower.upgrade_cost(),
 				"label": "Level %d" % (_tower.level + 1)})
-	for e in _tower.available_elements():
+	elif _tower.upgrade_locked_by_avatar():
+		_rows.append({"kind": "locked_upgrade", "cost": 0,
+				"label": "Level %d — beat the %s avatar"
+						% [_tower.level + 1, _tower.element.capitalize()]})
+	# Fusion is offered only where it branches from (Tower.can_fuse): Lv2 for a base tower,
+	# always for a fused one. Asking can_fuse() once here rather than per element keeps the
+	# panel's answer identical to the one main.gd's _fuse_tower() will give.
+	for e in (_tower.available_elements() if _tower.can_fuse() else []):
 		var set_after: Array = _tower.elements.duplicate()
 		set_after.append(String(e))
 		var def: Dictionary = Game.fusion_def(set_after)
+		# The level the fusion is BORN at, not the one the tower is standing at — it is the
+		# whole reason breadth is worth taking, so it belongs on the button.
 		_rows.append({"kind": "fuse", "element": String(e), "cost": _tower.fusion_cost(),
-				"label": Game.fusion_name(def, _tower.level),
+				"label": "%s (Lv%d)" % [Game.fusion_display_name(def),
+						int(Balance.FUSED_LEVELS.get(set_after.size(), _tower.level))],
 				"desc": String(def.get("desc", "")), "def": def})
 	for e in Game.TOWER_ORDER:
-		if not _tower.elements.has(String(e)) and not Run.is_fusion_unlocked(String(e)):
+		if not _tower.elements.has(String(e)) and not Run.is_avatar_beaten(String(e)):
 			_locked.append(String(e))
 	_rows.append({"kind": "sell", "cost": -_tower.sell_value(), "label": "Sell"})
 
@@ -174,6 +187,10 @@ func _gui_input(event: InputEvent) -> void:
 	var tower := _tower
 	match String(row["kind"]):
 		"upgrade": upgrade_pressed.emit(tower)
+		# Deliberately inert, and named rather than left to fall through the match: this row
+		# exists to explain why there is no upgrade, and a silent default would read as a
+		# dead button rather than as a label.
+		"locked_upgrade": return
 		"fuse": fusion_pressed.emit(tower, String(row["element"]))
 		"sell":
 			close()
@@ -227,7 +244,12 @@ func _draw() -> void:
 	# appearing out of nowhere the first time an avatar boss falls.
 	var note := ""
 	if _hover >= 0 and _hover < _rows.size():
-		note = String((_rows[_hover] as Dictionary).get("desc", ""))
+		var hovered: Dictionary = _rows[_hover]
+		note = String(hovered.get("desc", ""))
+		# The one irreversible choice in the game, said out loud BEFORE it is made: at Lv2 a
+		# base tower is offered both roads, and taking either closes the other for good.
+		if note == "" and String(hovered.get("kind", "")) == "upgrade" and _tower.can_fuse():
+			note = "Going to Lv%d closes the fusion branch" % (_tower.level + 1)
 	if note == "" and not _locked.is_empty():
 		var names := PackedStringArray()
 		for e in _locked:
@@ -243,7 +265,9 @@ func _draw_row(font: Font, rect: Rect2, row: Dictionary, hovered: bool) -> void:
 	# A sell row's "cost" is negative — it pays out. Everything else has to be affordable,
 	# and a row you cannot pay for is drawn dark rather than hidden: knowing the next step
 	# exists and costs 420 is the information that makes saving for it a decision.
-	var affordable := cost <= 0 or Game.gold >= cost
+	# A locked row is not "free", it is unbuyable — without this its cost of 0 would satisfy
+	# the `cost <= 0` test above and it would draw as brightly as an affordable purchase.
+	var affordable := kind != "locked_upgrade" and (cost <= 0 or Game.gold >= cost)
 	var accent := OK_TEXT
 	if kind == "sell":
 		accent = SELL
@@ -267,6 +291,9 @@ func _draw_row(font: Font, rect: Rect2, row: Dictionary, hovered: bool) -> void:
 	draw_string(font, Vector2(rect.position.x + 10.0, rect.position.y + 25.0), prefix + label,
 			HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 90.0, 14,
 			(TEXT if affordable else TEXT_DIM) if kind != "sell" else SELL)
+	# No price on a locked row: there is nothing to save up for, the gate is a boss.
+	if kind == "locked_upgrade":
+		return
 	var price := "+%d" % (-cost) if cost < 0 else str(cost)
 	draw_string(font, Vector2(rect.position.x, rect.position.y + 25.0), price + "  ",
 			HORIZONTAL_ALIGNMENT_RIGHT, rect.size.x, 14,

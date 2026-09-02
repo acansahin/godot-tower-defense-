@@ -320,7 +320,7 @@ func _on_enemy_removed() -> void:
 		# element arrives at the moment the player is free to spend it — during prep, with
 		# the panel one tap away — rather than mid-fight.
 		if _avatar_defeated:
-			Run.unlock_fusion(_element)
+			Run.beat_avatar(_element)
 			_avatar_defeated = false
 		_grant_wave_rewards()
 		# Standard mode ends in a win here (GAME_STRATEGY_V2.md §11.1, BUILD NEXT #4) — no

@@ -36,13 +36,31 @@ rate any more; each is an endpoint plus a slope derived from the length.
 Every fifth of the run — waves **10, 20, 30 and 40** — an **element avatar boss** arrives
 **alone**, with no ordinary creeps in the wave at all. One for each of the four elements, in a
 random order every run, named in the next-wave preview so you have the prep gap to build its
-counter. Beat it and that element unlocks for **fusion** for the rest of the run; let it walk
-off the end of the road and you lose it. Two set-piece bosses hold the midpoint (**25**) and
-the final wave (**50**), and those keep their escort.
+counter. Beat it and **two** doors open for the rest of the run: that element unlocks for
+**fusion** on every tower, and that element's OWN towers come off the level cap and can climb
+to Lv5. Let it walk off the end of the road and you lose both. Two set-piece bosses hold the
+midpoint (**25**) and the final wave (**50**), and those keep their escort.
+
+**Gold alone only takes a tower to Lv2.** Everything past that is paid for with bosses, and
+Lv2 is where a tower's two roads fork:
+
+- **Depth** — Lv3, Lv4, Lv5, once that tower's own avatar is dead. 695 gold all in.
+- **Breadth** — fuse into a dual, then a triple, then Pure, once ANY other element's avatar
+  is dead. 2330 gold all in.
+
+The two do not compose. Going to Lv3 closes the fusion row for good; fusing closes the
+upgrade row for good, because **a fusion's level is fixed by its depth** — a dual is Lv3, a
+triple Lv4, Pure Lv5, and none of them ever levels again. The panel names whichever road you
+are about to close before you close it, and neither is a trap: the two cost about the same
+per point of damage.
+
+Because the run seed picks the avatar ORDER, which of your elements are stuck at Lv2 and
+which are free to climb is different every run — and an element whose avatar has not arrived
+yet has exactly one way forward, which is to fuse with one whose avatar has.
 
 Fusion is how cross-element power enters a run, and it happens on the board rather than on a
-card. Tap any tower and its panel offers to absorb an unlocked element for gold. The set of
-elements a tower carries is its whole identity:
+card. Tap any Lv2 tower and its panel offers to absorb an unlocked element for gold. The set
+of elements a tower carries is its whole identity:
 
 | Elements | What it becomes |
 |---|---|
@@ -110,11 +128,14 @@ the only audio file that ships is the background music track. See §6.
   The ghost never disappears over bad ground; it turns red, because a ghost that vanishes
   tells you nothing
   about why.
-- **Click / tap a tower to upgrade it** (up to level 5) — each level raises **damage only**,
+- **Click / tap a tower to upgrade it** (up to level 5, and only to level 2 until its
+  element's avatar boss falls) — each level raises **damage only**,
   and a painted tower swaps to that tier's art *at the same size*: an upgrade never takes
   more board than the tower already stood on. A green ▲ chevron floats beside any tower whose
   next level you can already afford, so you can spot upgrade candidates at a glance.
-- **Tap a tower to open its panel** — upgrade, absorb an unlocked element, or sell.
+- **Tap a tower to open its panel** — upgrade, absorb an unlocked element, or sell. A tower
+  held at Lv2 by a boss it has not fought yet says so on a dim row rather than simply having
+  no upgrade to offer, so the rule is legible from the first tower you place.
   Selling refunds most of everything you spent on it, fusion costs included. The panel
   replaced a 26px sell "×" tucked into the corner of the tower's cell, which was the
   smallest tap target in the game and the one thing that could not be made bigger.
@@ -462,11 +483,12 @@ editing three files and hunting for un-named literals; it is now one file.
 | Aura towers | `TOWER_DEFS` `aura_stat`/`aura_radius`/`aura_mult` | Moon and Sun boost nearby damage, Well nearby attack speed, deepening with the provider's level. Read by the NEIGHBOURS in `tower.gd` `_recompute()`, so selling the provider returns the buff exactly. The reach is DRAWN — a standing ring at `aura_radius` plus one travelling out to it (`tower.gd` `_draw_aura_ring`), inside the range circle rather than on it, because an aura tower otherwise looked exactly like a weak damage tower |
 | On-kill payloads | `TOWER_DEFS` `gold_on_kill`/`life_on_kill_chance`/`execute_chance` | Money pays gold, Life has a 2% chance to return a life, Death has a 4% chance to kill outright (never a boss). Applied in `projectile.gd` `_apply()`, which is the only place a kill can be attributed to the tower that earned it |
 | Upgrade: max level / growth | `balance.gd` `MAX_LEVEL`, `TOWER_DEFS.damage_tiers` | 5 tiers; damage only, listed explicitly per element (×5 a tier, ×10 into Pure — with the map's own Pure-row typos preserved). Range and interval never change |
+| Progression gate | `balance.gd` `FREE_LEVEL_CAP`, `FUSED_LEVELS` | 2, and `{2: 3, 3: 4, 4: 5}`. A base tower stops at Lv2 until its own element's avatar boss is dead; a fusion's level is FIXED by how many elements it carries and it has no upgrade row at all. Both read one ledger, `Run.avatars_beaten`. Read `--dump-ladder` before touching either — it is the only dump that shows what a player can actually reach, and it prints the ONE `damage_tiers` entry each fusion ever fires at |
 | Upgrade cost | `balance.gd` `TIER_COSTS` | Build 50, then 60 / 105 / 180 / 300 to climb to Lv5 — 695 for a maxed tower, the same ladder for every element. (The map's own ladder is 175 / 788 / 3544 / 24444; ours is far flatter because V2 replaced the base tower stats.) The build cost is held at 50 so START_GOLD still buys two towers on wave 1; only the upgrades were raised when the board shrank to 12 pads |
 | Sell refund | `balance.gd` `SELL_REFUND` / `SELL_REFUND_UNFIRED` | 80% of total gold spent, or 100% if the tower never got a shot off. `total_spent` includes fusion costs, so a Pure tower refunds against the whole road it travelled. Sell from the tower panel |
 | Fusion cost | `balance.gd` `FUSION_COSTS` | 240 / 630 / 1350 gold for the 2nd, 3rd and 4th element. Scaled from the map's own 275 / 1017 combination costs against its 50-gold base tower; the map has no four-element tower, so Pure's is roughly double the triple. Raised by half with `TIER_COSTS` when the board went from 47 build spots to 12 — capacity is `pads x (build + upgrades + fusions)` and had fallen to 23,520 against a ~41,300 income ceiling. **Sized against that budget, not against a played run** — `--play-sim` does play with real gold, but it measures whether a gradual build-up SURVIVES, not whether the capacity ledger adds up |
 | Run length | `balance.gd` `STANDARD_WAVES` | 50. **The dial everything else hangs off** — `ELEMENT_BOSS_WAVES`, `MIDPOINT_BOSS_WAVE`, `hp_growth()` and `speed_slope()` are all derived from it, so 60 or 100 re-times the whole run instead of moving its finish line |
-| Avatar bosses | `balance.gd` `ELEMENT_BOSS_*`, `game.gd` `apply_milestone()` | Waves 10/20/30/40 — a fifth of the run apart, derived from `STANDARD_WAVES`. Each walks **ALONE** (`count` 0): no ordinary creeps share the wave. One per element in a random order per run (`Run.boss_elements`, drawn from the run seed) and named in the preview. Type pinned to `normal` so the four differ by element only, never by an inherited archetype's HP multiplier. HP ×5, speed ×0.7, reward ×8, costs 3 lives. Killing one unlocks its element for fusion; leaking it does not |
+| Avatar bosses | `balance.gd` `ELEMENT_BOSS_*`, `game.gd` `apply_milestone()` | Waves 10/20/30/40 — a fifth of the run apart, derived from `STANDARD_WAVES`. Each walks **ALONE** (`count` 0): no ordinary creeps share the wave. One per element in a random order per run (`Run.boss_elements`, drawn from the run seed) and named in the preview. Type pinned to `normal` so the four differ by element only, never by an inherited archetype's HP multiplier. HP ×5, speed ×0.7, reward ×8, costs 3 lives. Killing one unlocks its element for fusion **and lifts its own towers off the Lv2 cap**; leaking it does neither. These four kills are the only thing in the game that moves a tower past Lv2 by either road |
 | Set-piece bosses | `game.gd` `MIDPOINT_BOSS` / `FINAL_BOSS` | Muhafız on `MIDPOINT_BOSS_WAVE` (25) is immune to every control effect; Uyanmış Muhafız on the final wave (50) cycles its own armour every 5s. Unlike the avatars these keep their creep wave — the escort is part of the wall |
 | Targeting | `tower.gd` `_find_target()` | Fixed to "First" — the enemy furthest along the path (closest to the exit); no per-tower picker |
 | Game speed | `hud.gd` `SPEEDS` | 1x / 2x / 3x via `Engine.time_scale`; pause via `get_tree().paused` |

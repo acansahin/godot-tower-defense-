@@ -615,11 +615,15 @@ const TOWER_ORDER: Array = ["water", "fire", "nature", "earth"]
 # other range read site expects (px / Balance.WC3_RANGE_SCALE = 0.35).
 #
 # `damage_tiers` follows the same 1.0/1.8/3.2/5.6/10.0 growth every tower in the game climbs
-# (§4.2) — fusing changes what a tower IS, levelling still only changes how hard it hits.
+# (§4.2). A fusion no longer WALKS that ladder, though: its level is fixed by its depth
+# (Balance.FUSED_LEVELS), so a dual only ever reads tiers[2], a triple tiers[3] and Pure
+# tiers[4]. The unread entries stay because they are the map's own numbers and because the
+# ratio between them is what sets each row's relative strength — but the ONE value each row
+# actually fires at is the one to re-balance. `--dump-ladder` prints exactly that column.
 #
-# `names` is the map's own tier ladder for that combination, spread across our five levels
-# by fusion_name(): three names (a dual) split 1-2 / 3-4 / 5, two names (a triple) split
-# 1-3 / 4-5, one name never changes. Free identity depth, straight out of the source.
+# `names` is the map's own tier ladder for that combination. It is DEAD DATA today for the
+# same reason: with the level fixed there is no second or third tier to climb into, so a
+# fused tower shows `name` and nothing else (Game.fusion_display_name). Kept as source.
 const FUSIONS := {
 	# --- Duals (2 elements) --------------------------------------------------------
 	## map: Clay Tower, 600 dmg @ 1.05s (the cooldown IS in the object data here).
@@ -790,15 +794,15 @@ func fusion_def(elements: Array) -> Dictionary:
 		return {}
 	return FUSIONS.get(fusion_key(elements), {})
 
-## The name a fused tower shows at `level`: the map's own tier ladder for that combination,
-## spread over our five levels. Three names (a dual) split 1-2 / 3-4 / 5; two names (a
-## triple) split 1-3 / 4-5; one name never changes. Integer division does the whole job.
-func fusion_name(def: Dictionary, level: int) -> String:
-	var names: Array = def.get("names", [])
-	if names.is_empty():
-		return String(def.get("name", "?"))
-	var i: int = (level - 1) * names.size() / Balance.MAX_LEVEL
-	return String(names[clampi(i, 0, names.size() - 1)])
+## The name a fused tower shows. This used to spread the map's per-tier `names` ladder across
+## the five levels, which stopped meaning anything once a fusion's level became fixed by its
+## depth (Balance.FUSED_LEVELS) — every dual would have sat on names[1] forever and names[0],
+## the name players actually know the tower by, would never have been seen.
+##
+## So it is the row's own `name`, which is also the string Tower.art_key() looks the painted
+## set up under: the label and the picture are now the same string and cannot drift apart.
+func fusion_display_name(def: Dictionary) -> String:
+	return String(def.get("name", "?"))
 
 # --- Wave definitions ----------------------------------------------------------
 # Each wave picks an archetype from WAVE_TYPES; its stats = the base scaling
@@ -901,8 +905,9 @@ const FINAL_BOSS := {
 ##   underlying wave happened to be.
 ## * no `element`: theirs is this run's draw (Run.boss_element_for_wave), filled in by
 ##   wave_manager._start_wave, which is what makes the four arrive in a different order every
-##   run. Beating one unlocks that element for fusion (Run.unlock_fusion) — the only way
-##   cross-element power enters a run, see FUSIONS above.
+##   run. Beating one both unlocks that element for fusion AND lifts its own towers off
+##   Balance.FREE_LEVEL_CAP (Run.beat_avatar) — these four kills are the only thing that
+##   moves a tower past Lv2 by either road, see FUSIONS above.
 func apply_milestone(n: int, base: Dictionary) -> Dictionary:
 	if Balance.ELEMENT_BOSS_WAVES.has(n):
 		return {"type": "normal", "boss": true, "boss_rule": "element_avatar", "count": 0.0}
