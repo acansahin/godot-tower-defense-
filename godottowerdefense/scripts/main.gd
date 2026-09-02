@@ -24,6 +24,12 @@ var _shake: float = 0.0      ## Current camera shake magnitude in px; decays to 
 ## Harness only (--fill-board/--auto-pick): buy every fusion a tower is offered as soon as it
 ## is affordable, so an unattended run exercises the whole ladder up to Pure.
 var _auto_pick: bool = false
+## Harness only (`--play-sim`): drives the simulated player. See _play_sim().
+var _play_sim_on: bool = false
+var _sim_spend_clock: float = 0.0
+var _sim_next_element: int = 0
+## How often the simulated player checks whether it can afford anything, in game seconds.
+const SIM_SPEND_EVERY := 0.5
 ## Standard mode's one board (GAME_STRATEGY_V2.md §28 Phase 1: "1 harita", BUILD NEXT #8).
 ## `Game.use_board_for_wave()`'s 10-wave winding->spiral->s rotation (Game.BOARD_SEQUENCE)
 ## is now Endless-only infrastructure, unreached from here — same treatment step 4 gave
@@ -71,7 +77,7 @@ func _ready() -> void:
 	tower_panel.upgrade_pressed.connect(_on_panel_upgrade)
 	tower_panel.fusion_pressed.connect(_on_panel_fusion)
 	tower_panel.sell_pressed.connect(_on_panel_sell)
-	Run.fusion_unlocked.connect(_on_fusion_unlocked)
+	Run.avatar_beaten.connect(_on_avatar_beaten)
 
 	# Frame the WHOLE world, once. There is no panning: a tower defense you have to scroll
 	# is one where the leak that just cost you a life happened somewhere you were not
@@ -104,18 +110,28 @@ func _ready() -> void:
 		_air_pose()
 	if OS.get_cmdline_user_args().has("--boss-pose"):
 		_boss_pose()
+	if OS.get_cmdline_user_args().has("--avatar-pose"):
+		_avatar_pose()
+	if OS.get_cmdline_user_args().has("--bolt-pose"):
+		_bolt_pose()
+	if OS.get_cmdline_user_args().has("--hit-pose"):
+		_hit_pose()
 	# TEMPORARY: buys every fusion the moment it is unlocked and affordable, so an unattended
 	# run climbs the ladder to Pure instead of finishing on four base towers. Nothing pauses
 	# the tree any more (the three popups that did are gone), so unlike the old card screen
 	# this is no longer required just to keep a delayed `--shot:N` alive.
 	if OS.get_cmdline_user_args().has("--auto-pick"):
 		_auto_pick = true
+	if OS.get_cmdline_user_args().has("--play-sim"):
+		_play_sim()
 	if OS.get_cmdline_user_args().has("--dump-waves"):
 		_dump_waves()
 	if OS.get_cmdline_user_args().has("--dump-board"):
 		_dump_board()
 	if OS.get_cmdline_user_args().has("--dump-fusions"):
 		_dump_fusions()
+	if OS.get_cmdline_user_args().has("--dump-ladder"):
+		_dump_ladder()
 	if OS.get_cmdline_user_args().has("--dump-bosses"):
 		_dump_bosses()
 	if OS.get_cmdline_user_args().has("--dump-matchup"):
@@ -130,7 +146,11 @@ func _ready() -> void:
 		Meta._persist()
 		print("--- clock rewound 4h; relaunch to collect ---")
 	if OS.get_cmdline_user_args().has("--show-fusion-panel"):
-		call_deferred("_show_fusion_panel")
+		call_deferred("_show_fusion_panel", true)
+	# The same board, left unfused at Lv2 with its own element locked: the state that draws
+	# the dim "beat the Fire avatar" row next to the fusion rows.
+	if OS.get_cmdline_user_args().has("--show-locked-upgrade"):
+		call_deferred("_show_fusion_panel", false)
 	for arg in OS.get_cmdline_user_args():
 		if String(arg).begins_with("--shot"):
 			# `--shot` grabs the opening board; `--shot:20` waits 20 seconds first, which is
@@ -305,16 +325,30 @@ func _dump_fusions() -> void:
 		t._recompute()
 		print(line)
 		print("      %s  rng=%.0f int=%.2f fly=%s%s%s"
-				% [Game.fusion_name(def, 1).rpad(14), t.tower_range, t.fire_interval,
+				% [Game.fusion_display_name(def).rpad(14), t.tower_range, t.fire_interval,
 					"y" if t.can_hit_flying else "n",
 					"  CHAOS" if t.ignores_matchup else "",
 					"  PIERCES" if t.pierces_rules else ""])
-		# Every name the ladder will show, so a three-name dual and a two-name triple can be
-		# seen splitting across five levels the way fusion_name() intends.
-		var names := PackedStringArray()
-		for lv in range(1, Balance.MAX_LEVEL + 1):
-			names.append(Game.fusion_name(def, lv))
-		print("      names: %s" % ", ".join(names))
+		# The five columns above are what the row COULD do; this is the one it will ever
+		# actually do. A fusion's level is fixed by its depth (Balance.FUSED_LEVELS), so
+		# exactly one of those tiers is live and the rest are unread — printing which one
+		# keeps that visible here rather than only in --dump-ladder.
+		var fixed: int = int(Balance.FUSED_LEVELS.get(els.size(), Balance.MAX_LEVEL))
+		t.level = fixed
+		t._recompute()
+		# Pure sits ON MAX_LEVEL, so it is the one row with nothing unread — say so rather
+		# than printing the empty range "6..5", which reads as an off-by-one in this dump.
+		var dead_tiers := "none"
+		if fixed < Balance.MAX_LEVEL:
+			dead_tiers = "%d..%d" % [fixed + 1, Balance.MAX_LEVEL]
+		var dead_names: Array = Array(def.get("names", [])).slice(1)
+		var names_txt := "none"
+		if not dead_names.is_empty():
+			names_txt = ", ".join(PackedStringArray(dead_names))
+		print("      fixed at L%d -> %.1f dps  (unread tiers: %s; unread names: %s)"
+				% [fixed, _tower_dps(t), dead_tiers, names_txt])
+		t.level = 1
+		t._recompute()
 		towers_root.remove_child(t)
 		t.queue_free()
 	print("--- FUSION DUMP END ---")
@@ -325,6 +359,100 @@ func _dump_fusions() -> void:
 func _tower_dps(t: Tower) -> float:
 	var dps := t.damage / maxf(t.fire_interval, 0.001)
 	return dps + t.poison_dps + t.burn_dps
+
+## TEMPORARY verification harness (`--dump-ladder`): the two roads a tower can walk, side by
+## side, with what each step costs and what it buys.
+##
+## This is the table the avatar gate has to be balanced against, and no other dump shows it.
+## --dump-stats reports every tower at all five levels and --dump-fusions reports every
+## fusion at all five, because both were written when all five were reachable. Since
+## Balance.FREE_LEVEL_CAP and Balance.FUSED_LEVELS landed most of those cells are dead: a
+## base tower stops at Lv2 until its OWN avatar falls, and a fusion never levels at all. What
+## a player actually chooses between is the two ROADS below, and this prints exactly those.
+##
+## Both are walked on a real Tower through the real can_upgrade() / can_fuse() / upgrade() /
+## add_element(), never by arithmetic over the tables — which is the only reason this dump is
+## able to DISAGREE with the game, and so the only reason it is worth reading.
+##
+##   Godot.exe --headless --path <project> res://scenes/Main.tscn --quit-after 60 -- --wipe-save --dump-ladder
+func _dump_ladder() -> void:
+	print("--- LADDER DUMP BEGIN ---")
+	print("gold is CUMULATIVE from an empty board; dps includes the DoT channels")
+	var beaten_before: Array = Run.avatars_beaten.duplicate()
+	for tid in Game.TOWER_ORDER:
+		var el := String(tid)
+		print("")
+		print("%s" % el.to_upper())
+		# --- depth: its own avatar is down, so it climbs to MAX_LEVEL and never fuses -------
+		Run.avatars_beaten.clear()
+		Run.beat_avatar(el)
+		var t := TOWER.instantiate() as Tower
+		towers_root.add_child(t)
+		t.setup_def(el)
+		var spent := t.build_cost
+		print("  depth   (its own avatar; fusion closes at Lv%d)" % Balance.FREE_LEVEL_CAP)
+		print("    L%d  %-16s %6.0f dmg  %7.1f dps  %6dg"
+				% [t.level, t.display_name, t.damage, _tower_dps(t), spent])
+		while t.can_upgrade():
+			spent += t.upgrade_cost()
+			t.upgrade()
+			print("    L%d  %-16s %6.0f dmg  %7.1f dps  %6dg"
+					% [t.level, t.display_name, t.damage, _tower_dps(t), spent])
+		towers_root.remove_child(t)
+		t.queue_free()
+		# --- breadth: everyone ELSE's avatar is down, so it stops at Lv2 and fuses upward ---
+		# Every avatar beaten (not just the others): the depth road above already proved the own
+		# element gate, and what this road needs is simply for every absorb to be legal.
+		for e2 in Game.TOWER_ORDER:
+			Run.beat_avatar(String(e2))
+		var f := TOWER.instantiate() as Tower
+		towers_root.add_child(f)
+		f.setup_def(el)
+		var fspent := f.build_cost
+		while f.level < Balance.FREE_LEVEL_CAP and f.can_upgrade():
+			fspent += f.upgrade_cost()
+			f.upgrade()
+		print("  breadth (any other avatar; upgrades close on the first fusion)")
+		print("    L%d  %-16s %6.0f dmg  %7.1f dps  %6dg"
+				% [f.level, f.display_name, f.damage, _tower_dps(f), fspent])
+		# Absorb in a rotation that starts one PAST the base element, so the four elements do
+		# not all walk the same three combinations — the same trick --fill-board uses.
+		var base_at := Game.TOWER_ORDER.find(el)
+		for k in Game.TOWER_ORDER.size():
+			var cand := String(Game.TOWER_ORDER[(base_at + 1 + k) % Game.TOWER_ORDER.size()])
+			if f.elements.has(cand) or not f.can_fuse():
+				continue
+			fspent += f.fusion_cost()
+			f.add_element(cand)
+			print("    L%d  %-16s %6.0f dmg  %7.1f dps  %6dg  +%s"
+					% [f.level, f.display_name, f.damage, _tower_dps(f), fspent, cand])
+		towers_root.remove_child(f)
+		f.queue_free()
+	print("")
+	print("every FUSIONS row at the ONE level it can ever fire at:")
+	var keys: Array = Game.FUSIONS.keys()
+	keys.sort()
+	for key in keys:
+		var els: Array = String(key).split("+")
+		var p := TOWER.instantiate() as Tower
+		towers_root.add_child(p)
+		p.setup_def(String(els[0]))
+		for j in range(1, els.size()):
+			p.elements.append(String(els[j]))
+		p.level = int(Balance.FUSED_LEVELS.get(els.size(), Balance.MAX_LEVEL))
+		p._recompute()
+		# A row whose key does not resolve falls back to the base element and would print a
+		# perfectly plausible line, so say so out loud rather than trusting the numbers.
+		if p.fusion_def().is_empty():
+			push_error("LADDER: '%s' did not resolve to a FUSIONS row" % key)
+		print("  %d %-24s L%d  %-16s %6.0f dmg  %7.1f dps"
+				% [els.size(), String(key), p.level, p.display_name, p.damage, _tower_dps(p)])
+		towers_root.remove_child(p)
+		p.queue_free()
+	# Left as it was found: this harness is usually run alongside others in one launch, and a
+	# ledger it quietly filled would change what every later dump measures.
+	Run.avatars_beaten.assign(beaten_before)
+	print("--- LADDER DUMP END ---")
 
 ## TEMPORARY verification harness for the avatar boss draw. Prints Run.boss_elements for a
 ## spread of run seeds and checks the two properties the fusion ladder depends on: every
@@ -396,29 +524,38 @@ func _dump_matchup() -> void:
 					% [worst, Game.ELEMENT_STRONG])
 	print("--- MATCHUP DUMP END ---")
 
-## TEMPORARY verification harness: stands one tower on an empty board, unlocks two elements
+## TEMPORARY verification harness: stands one tower on an empty board, unlocks three elements
 ## and opens its panel, so the panel's _draw() can be photographed without playing to an
 ## avatar boss first. Pair with --shot and WITHOUT --headless — _draw never runs headless.
 ##   Godot.exe --path <project> res://scenes/Main.tscn -- --show-fusion-panel --shot:1
-func _show_fusion_panel() -> void:
+##
+## `--show-locked-upgrade` photographs the OTHER half of the same rule from the same setup:
+## it leaves the tower unfused at Lv2 with its own element still locked, which is the state
+## that draws the dim, unpressable "beat the Fire avatar" row. Two flags rather than two
+## harnesses, because the interesting difference between them is three lines.
+func _show_fusion_panel(fused: bool = true) -> void:
 	wave_manager.set_process(false)
 	Game.add_gold(2000)
 	var t := TOWER.instantiate() as Tower
 	t.setup_def("fire")
 	t.position = Vector2(Game.WORLD_SIZE.x * 0.42, Game.WORLD_SIZE.y * 0.62)
 	towers_root.add_child(t)
-	# upgrade(), not `t.level = 3`: level alone leaves total_spent at the build cost, and the
-	# panel's sell row would then quote a refund no real Lv3 tower would ever offer.
+	# upgrade(), not `t.level = 2`: level alone leaves total_spent at the build cost, and the
+	# panel's sell row would then quote a refund no real Lv2 tower would ever offer. ONE
+	# upgrade now, not two — Lv2 is where fusion branches from, and a Lv3 tower would have no
+	# fusion rows left to photograph (Tower.can_fuse).
 	t.upgrade()
-	t.upgrade()
-	# Three unlocked, one still locked, so the panel shows offered rows AND the locked line.
-	Run.unlock_fusion("nature")
-	Run.unlock_fusion("water")
-	Run.unlock_fusion("earth")
-	# Already fused once, which is the more interesting state to photograph: it proves the
-	# painted set of a COMBINATION is picked up (Tower.art_key) rather than the base element's,
-	# and the panel's rows are the triples above it rather than the duals below.
-	t.add_element("water")
+	# Three unlocked and FIRE deliberately left out, so the panel shows offered fusion rows,
+	# the locked footer, AND — because the tower's own element is the locked one — the dim
+	# locked-upgrade row. All three states of the gate in one screenshot.
+	Run.beat_avatar("nature")
+	Run.beat_avatar("water")
+	Run.beat_avatar("earth")
+	# Fusing once is the more interesting state for the fusion rows: it proves the painted set
+	# of a COMBINATION is picked up (Tower.art_key) rather than the base element's, that the
+	# dual is born at Lv3, and that the rows above it are the triples rather than the duals.
+	if fused:
+		t.add_element("water")
 	tower_panel.open_for(t)
 
 ## TEMPORARY verification harness for meta progression. Checks the things that only show up
@@ -580,6 +717,186 @@ func _boss_pose() -> void:
 		e.global_position = Game.active_path[step]
 		e.take_damage(2000.0 * 0.35)  # dent the health bar so it reads against a full boss
 
+## TEMPORARY verification harness: walks all FOUR element avatars down an empty road at once,
+## so the boss sheets can be photographed and compared side by side.
+##
+## The avatars are the one creature a run cannot show you on demand: they arrive on waves
+## 10/20/30/40 in an order the RUN SEED picks (Run.boss_element_for_wave), so photographing all
+## four means four wave-40 runs and getting a different order each time. `--boss-pose` does not
+## cover it either — it stages one avatar to photograph the SIGIL, in whatever element, on the
+## `tank` art every boss used to wear.
+##
+## Set up so a MISSING sheet is visible rather than silent: each avatar prints the art set it
+## resolved to (Enemy.art_kind), so `boss_fire` against `normal` says the sheet is not being
+## picked up — which was the whole failure mode before the lookup existed, and it looks exactly
+## like a boss that was never painted.
+##
+## Pair with --shot and WITHOUT --headless — _draw never runs headless:
+##   Godot.exe --path <project> res://scenes/Main.tscn --quit-after 600 -- --avatar-pose --shot:3
+func _avatar_pose() -> void:
+	wave_manager.set_process(false)
+	var enemy_scene: PackedScene = load("res://scenes/Enemy.tscn")
+	print("--- AVATAR POSE ---")
+	for i in Game.TOWER_ORDER.size():
+		var element := String(Game.TOWER_ORDER[i])
+		var e := enemy_scene.instantiate() as Enemy
+		# The same fields WaveManager._spawn_boss sets for an avatar, and in its order: the
+		# art set is resolved from `avatar_element`, so a harness that set it later than the
+		# spawner does would photograph a creature the game never produces.
+		# The REAL speed an avatar walks at, not a slow one chosen to make photography easy.
+		# It was 24 px/s, and that is worth writing down because it produced a wrong verdict on
+		# the art: the walk cycle is played at the creep's own pace, so at 24 the twelve frames
+		# ran at 1.9 fps and the first painted boss was judged — by eye, correctly — to be
+		# stepping. At the first avatar wave's real speed the same art plays at 5.2.
+		var real_speed := Balance.wave_speed(int(Balance.ELEMENT_BOSS_WAVES[0])) * Balance.BOSS_SPEED_MULT
+		e.setup(4000.0, real_speed, 50, Game.ELEMENT_COLORS.get(element, Balance.BOSS_TINT))
+		e.kind = "normal"   # what an avatar wave pins its archetype to (Game.apply_milestone)
+		e.radius = Balance.BOSS_RADIUS
+		e.is_boss = true
+		e.armor_element = element
+		e.avatar_element = element
+		enemies_root.add_child(e)
+		# Spread across the MIDDLE of the road, not evenly along the whole of it: the last
+		# leg runs off to the right behind the tower palette (Game.PLAY_RIGHT), and an even
+		# split put the fourth avatar under the panel where it cannot be photographed.
+		var span := float(Game.active_path.size() - 2)
+		var step := int(span * (0.12 + 0.52 * float(i) / float(Game.TOWER_ORDER.size() - 1))) + 1
+		e.set_progress(step)
+		e.global_position = Game.active_path[step]
+		e.take_damage(4000.0 * 0.3)  # dent the bar so it reads against a full boss
+		print("    %-7s art=%s" % [element, e.art_kind()])
+	print("--- AVATAR POSE END ---")
+
+## TEMPORARY verification harness: flies one of EVERY bolt drawing across an empty board at a
+## crawl, so all fifteen can be photographed side by side and compared.
+##
+## Neither of the other two ways works. A normal run only ever has the four base shots in the
+## air — a fusion needs an avatar boss to unlock its second element first — and `--fill-board`
+## buries the road, so every creep dies at its spawn point and its bolts exist for a handful
+## of frames in one corner of the map. This was written when the eleven fusions stopped
+## throwing their build origin's shot and started throwing their own; the thing it checks is
+## the half of projectile.gd that no number can reach, which is whether the fifteen drawings
+## are actually told apart by SILHOUETTE at the size they fly at.
+##
+## Rows run top to bottom in the order printed to stdout. Pair with --shot, WITHOUT --headless
+## (a headless run does no drawing at all, so it passes this silently):
+##   Godot.exe --path <project> res://scenes/Main.tscn --quit-after 900 -- --bolt-pose --shot:4
+## Delete this and its call above once the fusion bolts have been checked.
+func _bolt_pose() -> void:
+	wave_manager.set_process(false)
+	# Built from the tables rather than listed, so a new fusion row appears here for free —
+	# and, more to the point, a row whose `shape` does not match a case in Projectile._draw()
+	# shows up as a plain bolt in the photograph instead of passing unnoticed.
+	var rows: Array = []
+	for el in Game.TOWER_ORDER:
+		rows.append({"shape": String(el), "color": Game.TOWER_DEFS[el]["color"],
+				"elements": [String(el)]})
+	for key in Game.FUSIONS:
+		var def: Dictionary = Game.FUSIONS[key]
+		# The same expression Tower.art_key() uses. Derived, not written down, so the harness
+		# cannot drift from the key the game actually passes.
+		rows.append({"shape": String(def["name"]).to_lower().replace(" ", "_"),
+				"color": def["color"], "elements": Array(String(key).split("+"))})
+	var enemy_scene: PackedScene = load("res://scenes/Enemy.tscn")
+	var pool := get_node("Projectiles")
+	var top := 120.0
+	var gap := (Game.WORLD_SIZE.y - 200.0) / float(rows.size())
+	for i in rows.size():
+		var row: Dictionary = rows[i]
+		var y := top + gap * float(i)
+		# A stationary dummy far off the right edge. The bolt homes on it, so it never
+		# arrives, never recycles and keeps animating for the whole run — which is the only
+		# way to hold a shot that normally lives for a third of a second still enough to look
+		# at. Speed 0 rather than a paused node: an Enemy that stops processing also stops
+		# being a valid target, and the bolt would recycle itself on the next frame.
+		var e := enemy_scene.instantiate() as Enemy
+		e.setup(1.0e9, 0.0, 0, Color(1, 1, 1, 0))
+		e.kind = "normal"
+		e.radius = 1.0
+		enemies_root.add_child(e)
+		e.set_progress(1)
+		e.global_position = Vector2(Game.WORLD_SIZE.x + 2400.0, y)
+		var p := pool.acquire() as Projectile
+		p.color = row["color"]
+		p.shape = String(row["shape"])
+		p.elements = row["elements"]
+		p.speed = 34.0
+		p.setup(Vector2(110.0, y), e, 0.0)
+		print("bolt row %2d  y=%4d  %s" % [i, int(y), row["shape"]])
+
+## TEMPORARY verification harness: stands one REAL tower of each impact-relevant identity in
+## front of a creep it cannot kill, so every kind of impact lands over and over in a known
+## spot and can be photographed.
+##
+## Real towers firing real bolts, deliberately. The impact branch lives in Projectile._hit()
+## and reads five payload fields; a harness that spawned bolts itself would have to set those
+## fields the way Tower.fire_bolt() does, and would then be free to disagree with it — which
+## is exactly the bug such a harness exists to catch. So this builds towers the way
+## _fill_board() does and lets the game decide what a hit looks like. It bypasses the PAD rule
+## (it places on a fixed grid, not by the placement rule) because what is photographed is the impact,
+## not the placement.
+##
+## `--fill-board` cannot do this: a maxed board kills every creep in the first frame or two
+## after it spawns, so all seventeen kinds of impact happen on top of one another in one
+## corner of the map, and catching a chosen one is down to luck with `--shot:N`.
+##
+## Pair with --shot, WITHOUT --headless (a headless run does no drawing, so it passes this
+## silently), and take two so a burst caught mid-life in one is caught early in the other:
+##   Godot.exe --path <project> res://scenes/Main.tscn --quit-after 700 -- --hit-pose --shot:6 --shot:7
+## Delete this and its call above once the impact effects have been checked.
+func _hit_pose() -> void:
+	wave_manager.set_process(false)
+	Game.add_gold(1000000)
+	# Built from the tables, so a row that stops splashing — or starts — shows up here without
+	# this list being edited. The three columns are the three things the impact branch keys
+	# on: a splash radius, a burn payload, and chaos.
+	var rows: Array = [
+		["fire", ["fire"]],                                  # burn, no splash: embers only
+		["water", ["water"]],                                # neither: the quiet reference
+		["earth", ["earth"]],                                # splash 90, no burn
+		["lava", ["earth", "fire"]],                         # splash 110 AND burn
+		["steam", ["fire", "water"]],                        # splash 80, fires 2.5x/s
+		["roots", ["earth", "nature"]],                      # neither, and the slowest tower
+		["infernal", ["earth", "fire", "water"]],            # chaos
+		["rainbow", ["fire", "nature", "water"]],            # chaos, another colour
+		["earth+fire+nature+water", ["earth", "fire", "nature", "water"]],  # Pure
+	]
+	var enemy_scene: PackedScene = load("res://scenes/Enemy.tscn")
+	# Same reason --fill-board opens this way: an impact's payload scales with the firing
+	# tower's level, and without the avatars beaten every base row below would stand at Lv2
+	# (Tower.can_upgrade) and quietly photograph a weaker splash/burn than the one shipped.
+	for e in Game.TOWER_ORDER:
+		Run.beat_avatar(String(e))
+	var xs: Array = [280.0, 700.0, 1120.0]
+	var ys: Array = [220.0, 480.0, 740.0]
+	for i in rows.size():
+		var elems: Array = rows[i][1]
+		var at := Vector2(float(xs[i % 3]), float(ys[i / 3]))
+		var t := TOWER.instantiate() as Tower
+		# Every tower is BUILT as its first element and then absorbs the rest, which is the
+		# only route a real tower has to a fusion — and the route that used to leave the shot
+		# and the impact reading off the build origin instead of the result.
+		t.setup_def(String(elems[0]))
+		t.position = at
+		towers_root.add_child(t)
+		while t.can_upgrade():
+			t.upgrade()
+		for j in range(1, elems.size()):
+			t.add_element(String(elems[j]))
+		# A creep it cannot kill, parked inside its reach. Speed 0 rather than a paused node:
+		# an Enemy that stops processing also stops being a valid target, and the bolt in the
+		# air would recycle itself instead of landing.
+		var e := enemy_scene.instantiate() as Enemy
+		e.setup(1.0e9, 0.0, 0, Color(0.85, 0.85, 0.85))
+		e.kind = "normal"
+		e.radius = Balance.ENEMY_BASE_RADIUS
+		enemies_root.add_child(e)
+		e.set_progress(1)
+		e.global_position = at + Vector2(120.0, 0.0)
+		print("hit row %d  tower=%-12s at (%4d,%4d)  target +120x  splash=%.0f" % [
+				i, t.display_name, int(at.x), int(at.y),
+				float(t._eff.get("splash_radius", 0.0))])
+
 ## TEMPORARY verification harness: covers every buildable cell with towers, cycling the
 ## roster, so a headless run actually exercises targeting, firing, the projectile pool and
 ## the effect payloads. Without it a headless run has no towers and proves nothing about
@@ -621,14 +938,26 @@ func _fill_board() -> void:
 		print("--- RUN %s: wave %d | best %d | essence %d | runs %d | elapsed %.1fs (%.1fmin) ---"
 				% [outcome, Game.wave_reached, Meta.best_wave, Meta.essence, Meta.total_runs,
 					elapsed_s, elapsed_s / 60.0])
-		# The avatar bosses are the whole reward loop, and a filled board kills all four
-		# without the player noticing — so say out loud which ones actually paid out. A run
-		# that reached wave 20 with fewer than four here means a boss leaked, or the
-		# was_killed / wave-clear plumbing came apart.
-		print("--- FUSIONS UNLOCKED: %s (order was %s) ---"
-				% [str(Run.unlocked_fusions), str(Run.boss_elements)])
+		# The avatar ORDER this seed drew, which is still worth printing — it is what
+		# decides which combinations the board below could have been built out of.
+		#
+		# What this line canNOT report any more is whether the four avatars were actually
+		# KILLED: this harness beats all four at wave 0 so it can build a maxed board, so
+		# avatars_beaten is full before the first creep walks. That check lives in
+		# `--play-sim` now, which unlocks them the only honest way — by fighting them.
+		print("--- AVATAR ORDER: %s (all four pre-unlocked at wave 0) ---"
+				% str(Run.boss_elements))
 	Game.game_over.connect(func() -> void: report.call("OVER"))
 	Game.victory.connect(func() -> void: report.call("WON"))
+	# Every avatar, beaten, before a single tower is placed. This is not decoration: the whole
+	# point of this harness is the CEILING a board can reach, and both roads to that ceiling
+	# now run through Run.avatars_beaten — a base tower stops at Balance.FREE_LEVEL_CAP
+	# without its own element's avatar (Tower.can_upgrade), and no tower can fuse at all
+	# without somebody else's. Skip this and the harness quietly builds a board of Lv2 towers
+	# and still prints a cheerful summary, which is the exact failure it exists to catch.
+	# (Same call the --show-fusion-panel scenario uses, for the same reason.)
+	for e in Game.TOWER_ORDER:
+		Run.beat_avatar(String(e))
 	var i := 0
 	# No cells to walk any more: sweep the play area on the tower spacing and take every
 	# spot the placement rule allows, which is the closest thing to "a full board" that free
@@ -639,19 +968,24 @@ func _fill_board() -> void:
 		t.setup_def(kind)
 		t.position = spot
 		towers_root.add_child(t)
-		# Max them out: the area-slow (and the frost ring it spawns) only exists from Lv2, so
-		# a board of Lv1 towers would never touch that path.
-		while t.can_upgrade():
-			t.upgrade()
 		# Every fourth tower is walked all the way up the fusion ladder to Pure, and the rest
 		# are spread across base / dual / triple, so one run exercises every row of
-		# Game.FUSIONS rather than the four base elements over and over. add_element is called
-		# directly, bypassing the avatar-boss gate — no boss has been fought at wave 0, and the
-		# point here is to put every combination on the board, not to replay how they unlock.
+		# Game.FUSIONS rather than the four base elements over and over.
 		# Divided by the roster size, NOT `i % 4`: the element above is picked with `i % 4` too,
 		# so sharing the modulus locked each element to one depth forever — Water was always
 		# left unfused and Fire/Nature/Earth were never seen maxed in their own painted art.
 		var depth := (i / Game.TOWER_ORDER.size()) % 4  # 0 base, 1 dual, 2 triple, 3 Pure
+		# Depth is chosen BEFORE any upgrading now, because the two roads no longer compose:
+		# a tower that is going to fuse must stop at FREE_LEVEL_CAP (past it Tower.can_fuse
+		# refuses, and rightly — a Lv5 absorbed into a Lv3 dual is a downgrade), while a tower
+		# that is staying base climbs to MAX_LEVEL. Either way it ends at ITS ceiling, which is
+		# what "a full board" means now. Fusing does the rest of the levelling by itself:
+		# add_element() sets the level from Balance.FUSED_LEVELS.
+		#
+		# Lv2 is also still past the area-slow threshold (and the frost ring it spawns), so
+		# that path is exercised on every tower here regardless of which road it took.
+		while t.can_upgrade() and (depth == 0 or t.level < Balance.FREE_LEVEL_CAP):
+			t.upgrade()
 		# WHICH extra elements, not just how many: scanning TOWER_ORDER from its start always
 		# took the first element the tower was missing, so every dual came out Steam, Well or
 		# Clay and every triple Rainbow or Infernal -- half the roster, including all of Lava,
@@ -669,7 +1003,8 @@ func _fill_board() -> void:
 				t.add_element(candidate)
 				added += 1
 		i += 1
-	print("--- FILL BOARD: placed %d towers, all at max level ---" % i)
+	print("--- FILL BOARD: placed %d towers, each at ITS ceiling (base Lv%d, fusions Lv%s) ---"
+			% [i, Balance.MAX_LEVEL, str(Balance.FUSED_LEVELS.values())])
 	# Which SETS are standing there, and whether each one is painted. --shot photographs a
 	# board of 47 towers where a single new set is three of them, so "did the art land?" was
 	# being answered by hunting through a screenshot. `art*` means assets/art/towers has the
@@ -687,15 +1022,130 @@ func _fill_board() -> void:
 		var painted := ResourceLoader.exists("res://assets/art/towers/%s_5.png" % key)
 		print("    %-12s x%d  art%s" % [key, int(tally[key]), "*" if painted else "-"])
 
+## Harness (`--play-sim`): plays the run the way a PLAYER does, and fills the one hole the
+## rest of the suite has always had. `--fill-board` grants itself a million gold and stands a
+## maxed tower on every pad, which measures the ceiling; nothing measured the thing the game
+## is actually tuned for, which is whether a run that has to EARN its board survives. Every
+## HP and cost note in `Balance` that says "sized against a budget, not a played run" was
+## written against this gap.
+##
+## It buys through the same functions a tap does — the placement rule, `_upgrade_tower()`,
+## `_fuse_tower()` — so the simulated player cannot do anything the real one cannot, and
+## cannot miss a rule they are subject to. It starts on START_GOLD, it leaks lives, and it
+## loses.
+##
+## THE POLICY IS DELIBERATELY MODEST, and reading a result means remembering which player it
+## is: cheapest useful purchase first, board before depth. It buys a base tower whenever a
+## pad is free, then the cheapest upgrade, then the cheapest fusion. It does not choose
+## elements against the wave's armour, it does not place for coverage (the pad it takes is
+## simply the first free one), and it never sells. So it is a FLOOR, not an average: a human
+## who reads the next wave and picks the matchup beats it. Tune so this player finishes
+## around the last wave and a good one finishes with room.
+func _play_sim() -> void:
+	_play_sim_on = true
+	_auto_pick = true
+	Engine.time_scale = 8.0
+	var start_ms := Time.get_ticks_msec()
+	var report := func(outcome: String) -> void:
+		await get_tree().process_frame
+		var elapsed := float(Time.get_ticks_msec() - start_ms) / 1000.0
+		print("--- PLAY-SIM %s: wave %d | lives %d | gold %d | %s | %.0fs ---"
+				% [outcome, Game.wave_reached, Game.lives, Game.gold, _sim_board(), elapsed])
+		# The avatar-kill check, which used to live in --fill-board and cannot any more (that
+		# harness pre-unlocks all four). This one earns them: it fights the avatars with the
+		# board it managed to afford, so a run that passed an avatar wave without the element
+		# appearing here means the boss LEAKED — a real outcome for this player, and also
+		# what a broken was_killed / wave-clear path would look like. Compare with the order:
+		# the elements missing are the ones it could neither deepen nor fuse.
+		print("--- AVATARS BEATEN: %s of order %s ---"
+				% [str(Run.avatars_beaten), str(Run.boss_elements)])
+	Game.game_over.connect(func() -> void: report.call("LOST"))
+	Game.victory.connect(func() -> void: report.call("WON"))
+	wave_manager.wave_starting.connect(func(n: int) -> void:
+		print("  w%02d lives=%2d gold=%5d %s" % [n, Game.lives, Game.gold, _sim_board()]))
+
+## One line describing what the simulated player has built: how many towers, their total
+## levels, and how deep the fusion ladder has gone.
+func _sim_board() -> String:
+	var n := 0
+	var levels := 0
+	var elements := 0
+	for c in towers_root.get_children():
+		var t := c as Tower
+		if t == null:
+			continue
+		n += 1
+		levels += t.level
+		elements += t.elements.size()
+	return "towers=%d lv=%d el=%d" % [n, levels, elements]
+
+## Spends everything affordable, cheapest first, until nothing else can be bought. Called on
+## a clock rather than per wave because gold arrives from kills mid-wave, and a player does
+## not wait for the wave to end before spending it.
+func _sim_spend() -> void:
+	if Game.is_over:
+		return
+	for _i in 40:            # bounded: one tick cannot loop forever on a rounding bug
+		if not _sim_buy_one():
+			return
+
+## The single cheapest useful purchase, or false when nothing is affordable. Board first,
+## then depth — see the policy note on _play_sim().
+func _sim_buy_one() -> bool:
+	# 1. an empty pad, if one is left. Elements are cycled so the board does not come out
+	#    monochrome, which would make the armour matchup meaningless.
+	var kind := String(Game.TOWER_ORDER[_sim_next_element % Game.TOWER_ORDER.size()])
+	if Game.gold >= _cost(kind):
+		for spot in _buildable_lattice():
+			if not Game.can_build_at(spot, towers_root.get_children()):
+				continue
+			if not Game.spend_gold(_cost(kind)):
+				break
+			var t := TOWER.instantiate() as Tower
+			t.setup_def(kind)
+			t.position = spot
+			towers_root.add_child(t)
+			Game.towers_changed.emit()
+			_sim_next_element += 1
+			return true
+	# 2. the cheapest upgrade.
+	var best: Tower = null
+	var best_cost := 0
+	for c in towers_root.get_children():
+		var t := c as Tower
+		if t == null or not t.can_upgrade():
+			continue
+		var cost := t.upgrade_cost()
+		if cost <= Game.gold and (best == null or cost < best_cost):
+			best = t
+			best_cost = cost
+	if best != null:
+		_upgrade_tower(best)
+		return true
+	# 3. the cheapest fusion the avatar bosses have unlocked.
+	var fuse: Tower = null
+	var fuse_cost := 0
+	for c in towers_root.get_children():
+		var t := c as Tower
+		if t == null or not t.can_fuse():
+			continue
+		var cost := t.fusion_cost()
+		if cost <= Game.gold and (fuse == null or cost < fuse_cost):
+			fuse = t
+			fuse_cost = cost
+	if fuse != null:
+		_fuse_tower(fuse, String(fuse.available_elements()[0]))
+		return true
+	return false
+
 ## Every position a tower could stand, swept on the tower spacing. Used by --fill-board and
-## by --dump-board, which need "the set of places you may build" now that the board no
-## longer keeps one.
+## by --dump-board, which need "the set of places you may build".
+##
+## Placement is free, so that set is CONTINUOUS and this is a sample of it rather than an
+## enumeration: it sweeps at half the tower spacing and keeps whatever clears `_far_enough`,
+## which is one plausible packing. A player placing by hand will fit a slightly different
+## number, so read the count as a capacity estimate and not as a board specification.
 func _buildable_lattice(step := -1.0) -> Array:
-	# A board that marks pads has already answered this, and the harnesses must sweep the
-	# same spots the player is offered or they measure a game nobody plays. `step` is
-	# ignored there: the pads ARE the resolution.
-	if Game.has_pads():
-		return Game.pads().duplicate()
 	var pitch: float = Game.TOWER_GAP if step <= 0.0 else step
 	var out: Array = []
 	var y := Game.PLAY_TOP + Game.TOWER_RADIUS
@@ -757,9 +1207,8 @@ func _dump_board() -> void:
 	# actually poses: how much road can one tower watch from the best place it may stand.
 	var spots: Array = _buildable_lattice()
 	print("  road length      : %.0f px over %d waypoints" % [total, path.size()])
-	print("  buildable spots  : %d (%s)" % [spots.size(),
-			"marked pads, %.0fpx hex pitch" % Game.PAD_PITCH if Game.has_pads()
-				else "free placement, %.0fpx sweep" % Game.TOWER_GAP])
+	print("  buildable spots  : %d (free placement, sampled every %.0fpx)"
+			% [spots.size(), Game.TOWER_GAP * 0.5])
 	print("  road samples     : %d (every %.0f px)" % [samples.size(), STEP])
 	print("  %-10s %7s %8s %8s  %-12s %7s %8s"
 			% ["element", "range", "best 1", "median", "cover 95%", "raw", "raw best"])
@@ -835,6 +1284,14 @@ func _best_seen(spots: Array, samples: Array[Vector2], r: float) -> int:
 ## Delete this and its call above once the refactor has landed and been verified.
 func _dump_tower_stats() -> void:
 	print("--- TOWER STATS DUMP BEGIN ---")
+	# What this dump measures is the STAT TABLE, not who is allowed to reach it, so every
+	# avatar is beaten first and all five levels stay walkable (Tower.can_upgrade now stops a
+	# base tower at Balance.FREE_LEVEL_CAP without its own element's boss). Without this the
+	# loop below re-prints L2 three times — and since it prints t.level rather than the loop
+	# counter, it does so without any error, which would quietly hollow out the byte-for-byte
+	# before/after diff that CLAUDE.md leans on for every "no behaviour change" refactor.
+	for e in Game.TOWER_ORDER:
+		Run.beat_avatar(String(e))
 	for tid in Game.TOWER_ORDER:
 		var t := TOWER.instantiate() as Tower
 		towers_root.add_child(t)
@@ -862,6 +1319,11 @@ func _add_shake(amount: float) -> void:
 	_shake = maxf(_shake, amount)
 
 func _process(delta: float) -> void:
+	if _play_sim_on:
+		_sim_spend_clock -= delta
+		if _sim_spend_clock <= 0.0:
+			_sim_spend_clock = SIM_SPEND_EVERY
+			_sim_spend()
 	if _shake <= 0.0:
 		return
 	_shake = maxf(0.0, _shake - SHAKE_DECAY * delta)
@@ -910,11 +1372,14 @@ func _set_hovered(tower: Tower) -> void:
 	if is_instance_valid(_hovered):
 		_hovered.set_highlighted(true)
 
-## Where a tower dropped at `world_pos` would actually stand: the pad under the cursor on a
-## board that marks them, the cursor itself on a padless one. Vector2.INF when the cursor is
-## nowhere near a pad — the caller shows a refusal rather than guessing.
+## Where a tower dropped at `world_pos` would actually stand: the cursor itself, since
+## placement is free and `Game.can_build_at()` is the whole rule.
+##
+## Kept as a named function rather than inlined, because it is the one place placement could
+## ever be snapped, quantised or nudged again, and the ghost and the drop MUST agree about
+## it — a preview that answers a different question from the drop is worse than no preview.
 func _placement_point(world_pos: Vector2) -> Vector2:
-	return Game.nearest_pad(world_pos) if Game.has_pads() else world_pos
+	return world_pos
 
 func _update_ghost(world_pos: Vector2) -> void:
 	var d: Dictionary = Game.TOWER_DEFS[_drag_kind]
@@ -922,16 +1387,14 @@ func _update_ghost(world_pos: Vector2) -> void:
 	# bad ground tells the player nothing about WHY, and the board has to keep answering
 	# "can I build here" continuously.
 	#
-	# It SNAPS to the pad it would land on, so the answer the ghost gives is the answer the
-	# drop will give. Off the lattice it stays under the cursor and reads red, which is what
-	# makes "there is no pad here" visible rather than mysterious.
+	# It sits under the cursor, so the answer the ghost gives is the answer the drop gives;
+	# `grid.gd` shades the closed ground behind it, so a red ghost has a visible reason.
 	# TOWER_DEFS stores range in Warcraft III units — scale to pixels, exactly as
 	# tower.gd's _recompute does, or the ghost circle lies about the tower's reach.
 	var at := _placement_point(world_pos)
 	var legal := at.is_finite() 			and Game.can_build_at(at, towers_root.get_children()) 			and Game.gold >= _cost(_drag_kind)
 	preview.show_at(at if at.is_finite() else world_pos, legal,
-			minf(d.get("range", 160.0) * Balance.WC3_RANGE_SCALE, Balance.MAX_TOWER_RANGE),
-			d.get("color", Color.WHITE))
+			minf(d.get("range", 160.0) * Balance.WC3_RANGE_SCALE, Balance.MAX_TOWER_RANGE))
 
 func _drop(world_pos: Vector2) -> void:
 	var kind := _drag_kind
@@ -1009,8 +1472,13 @@ func _upgrade_tower(tower: Tower) -> void:
 ## Absorbs `element` into `tower`, turning it into whatever combination its element set now
 ## names. The gold and the board-wide refresh live here rather than in Tower.add_element for
 ## the same reason upgrading does: one place mutates a tower, and the panel only reports.
+## can_fuse() as well as available_elements(): the first is the LEVEL gate (Lv2 for a base
+## tower) and the second is the AVATAR gate, and a guard holding only the second would let a
+## maxed Lv5 tower be fused down into a Lv3 dual. The panel already refuses to draw the row,
+## but the panel is a view — this is the function that must be impossible to get wrong.
 func _fuse_tower(tower: Tower, element: String) -> void:
-	if not tower.available_elements().has(element) or not Game.spend_gold(tower.fusion_cost()):
+	if not tower.can_fuse() or not tower.available_elements().has(element) \
+			or not Game.spend_gold(tower.fusion_cost()):
 		Audio.play("denied")
 		return
 	tower.add_element(element)
@@ -1037,10 +1505,19 @@ func _on_panel_sell(tower: Tower) -> void:
 	_sell_tower(tower)
 
 ## An avatar boss went down. The banner is the whole announcement — there is no popup and
-## nothing to dismiss, because the reward is not a choice: the element is simply available
-## from now on, in every tower's panel.
-func _on_fusion_unlocked(element: String) -> void:
-	hud.set_hint("%s unlocked — tap a tower to fuse" % element.capitalize())
+## nothing to dismiss, because the reward is not a choice: both roads simply open from now on.
+##
+## Two of them, and the banner has to say both: every tower may now fuse this element, AND
+## this element's own towers come off Balance.FREE_LEVEL_CAP and can climb to Lv5. A player
+## told only about fusion would never look at their Fire towers again.
+##
+## towers_changed is emitted because the upgrade HINT drawn on a tower reads can_upgrade(),
+## which just changed for every tower of this element without any of them being touched.
+func _on_avatar_beaten(element: String) -> void:
+	hud.set_hint("%s avatar down — %s towers can reach Lv%d, and any tower can fuse %s"
+			% [element.capitalize(), element.capitalize(), Balance.MAX_LEVEL,
+				element.capitalize()])
+	Game.towers_changed.emit()
 	Audio.play("upgrade")
 
 ## Removes the tower and refunds the gold sunk into it — all of it if the tower never fired,

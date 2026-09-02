@@ -40,11 +40,22 @@ correct). Everything after a bare `--` reaches `OS.get_cmdline_user_args()`:
 ```
 
 Arg-gated harnesses currently in `main.gd`, none of which can fire in a normal session:
-`--dump-stats` (every tower's stats at every level), `--dump-waves` (60 wave definitions
+`--dump-stats` (every tower's stats at every level — it beats all four avatars first, or the
+progression gate below would stop it at Lv2 and it would re-print that row three times
+without erroring), `--dump-waves` (60 wave definitions
 plus a generator-purity check), `--dump-fusions` (all eleven `Game.FUSIONS` rows at every
-level, each as a DPS multiple of the base elements printed above it, plus every fusion key
+level, each as a DPS multiple of the base elements printed above it, plus the ONE level each
+row can actually fire at and which tiers/names that leaves unread, plus every fusion key
 round-tripped through `fusion_key()` — a typo'd key silently falls back to the base
 definition, so the tower keeps working, keeps its old stats and pockets the gold),
+`--dump-ladder` (the two roads a tower can walk — depth to Lv5 behind its own avatar, or
+breadth through dual/triple/Pure — printed side by side with cumulative gold and DPS at
+every step, then all eleven fusions at their fixed level. **This is the table to balance the
+progression gate against**, and it is the only one that shows what a player can actually
+reach: `--dump-stats` and `--dump-fusions` both still report all five levels of everything,
+because both were written when all five were reachable. It walks a real `Tower` through the
+real `can_upgrade()`/`can_fuse()`/`upgrade()`/`add_element()`, so it can disagree with the
+game rather than restate the tables),
 `--dump-bosses` (20 run seeds' avatar-boss orders: proves each element appears exactly once
 and that the SEED, not the global RNG, picks the order), `--dump-matchup`
 (`element_mult_best` for every element set against every armour — the table to read before
@@ -61,8 +72,9 @@ towers out of 47 — then each wave with `earned=`, the gold gained since the pr
 run-over line with real WALL-CLOCK elapsed time plus which fusions unlocked. `earned` is a
 DELTA on purpose: this harness grants itself a million gold so placement never fails, so the
 absolute balance measures nothing while the delta is real income. Because a maxed board
-leaks nothing it is an UPPER bound. **Nothing simulates a player's gradual build-up, so the
-costs are sized on paper rather than by playing**: kills pay `3 + wave` on a count curve
+leaks nothing it is an UPPER bound. **The COST arithmetic below is still sized on paper
+rather than by playing** (`--play-sim` measures whether a gradual build-up survives, not
+whether the ledger adds up): kills pay `3 + wave` on a count curve
 capped at 28, which with the interest cap and the leak-free bonus totals ~41,300 gold over a
 50-wave run, and `Balance.TIER_COSTS` + `Balance.FUSION_COSTS` are set so a full board
 absorbs ~85% of that. Re-do that arithmetic whenever the pad count moves — at 12 pads the
@@ -70,16 +82,53 @@ board could originally take only 23,520 even taken to the last upgrade of the la
 tower, so a player finished it and sat on ~18,000 spare gold. Elapsed is meaningless at 8x, but
 `--fill-board:1x` skips the speed-up for exactly this: BUILD NEXT #10 used it to measure a
 real Standard run at ~4.7 minutes, though that is a maxed-board LOWER BOUND, not proof of the
-~10.5 min target for an actual player's gradual build-up — nothing currently simulates that),
+~10.5 min target for an actual player's gradual build-up — `--play-sim` is the one that
+plays that out),
+`--play-sim` (the counterpart to `--fill-board`, and the harness that closed the hole the
+line above describes: it starts on `START_GOLD`, buys through the SAME functions a tap goes
+through — the placement rule, `_upgrade_tower()`, `_fuse_tower()` — so the simulated player
+can do nothing the real one cannot and can skip no rule they are subject to. It leaks lives
+and it loses, and the wave it dies on is the number to read. **It is a FLOOR, not an
+average**, and reading a result means remembering which player it is: cheapest useful
+purchase first, board before depth, the first free pad rather than the best one, no element
+chosen against the wave's armour, and it never sells. A human plays better than this, so a
+run it clears is not proof the run is easy — but a run it dies early in IS proof of a
+problem. It is what `FINAL_HP_FACTOR` 40 -> 55 and the Pure damage cut were read off),
 `--show-fusion-panel`
-(stands one Lv3 tower on an empty board with two elements unlocked and opens its panel, so
-the panel's `_draw` can be photographed without playing to an avatar boss
-first), `--air-pose` (parks eight Air creeps along
+(stands one Lv2 tower on an empty board, fuses it once, unlocks three of the four elements
+and opens its panel, so the panel's `_draw` can be photographed without playing to an avatar
+boss first — the tower's OWN element is the locked one, so one screenshot carries all three
+states of the gate: offered fusion rows, the locked-elements footer, and the dim
+locked-upgrade row. `--show-locked-upgrade` is the same scenario with the fusion skipped,
+i.e. a base tower sitting at the Lv2 branch point with both roads on screen at once),
+`--air-pose` (parks eight Air creeps along
 the road on an EMPTY board so the flyer's drawing can be photographed — `--fill-board`
 buries the road and kills them at the spawn point, and a normal run never reaches the Air
 wave without leaking away all twenty lives first), `--boss-pose` (stages both bosses' rules —
 control-immune and rotating-armor, BUILD NEXT #7 — on an empty board so the ward/ring/icon
-can be photographed without playing to wave 10 or 20 first), `--shot` (saves one drawn frame to
+can be photographed without playing to wave 10 or 20 first), `--avatar-pose` (walks all FOUR
+element avatars down an empty road at once, and prints the art set each one resolved to. The
+avatars are the one creature a run cannot show on demand — they arrive on waves 10/20/30/40 in
+an order the RUN SEED picks, so photographing all four by playing means four long runs and a
+different order each time. `art=normal` on a row whose sheet exists means the sheet is not being
+picked up, which on the board is indistinguishable from an element nobody painted),
+`--bolt-pose` (flies one of
+EVERY bolt drawing — the four elements and all eleven fusions — across an empty board at a
+crawl, so the fifteen can be compared side by side. Neither other route works: a normal run
+only ever has the four base shots in the air, since a fusion needs an avatar boss to unlock
+its second element, and `--fill-board` buries the road so its bolts live for a handful of
+frames in one corner. Rows are printed top-to-bottom in the order they are laid out, and the
+list is built FROM `Game.FUSIONS`, so a row whose shape has no case in `projectile.gd` shows
+up as a plain bolt in the photograph instead of passing unnoticed), `--hit-pose` (the same
+idea for the other end of the shot: stands one REAL tower of each impact-relevant identity —
+splash, burn, chaos and neither — in front of a creep it cannot kill, on a grid, so every kind
+of impact lands over and over in a known spot. Real towers on purpose: the impact branch reads
+five payload fields, and a harness that spawned its own bolts would set them the way
+`Tower.fire_bolt()` does and would then be free to DISAGREE with it. `--fill-board` cannot do
+this either — a maxed board kills every creep within a frame or two of its spawn, so all
+seventeen kinds of impact happen on top of one another in one corner. Take two or three shots:
+a slow tower fires every 1.4s and a ring lives 0.35s, so any single frame misses it three times
+out of four), `--shot` (saves one drawn frame to
 `user://shot.png` and prints the path — the only harness that shows you the board rather
 than describing it, so **drop `--headless` for this one**; `--shot:20` waits 20s first and
 lands in `shot_20.png`, and several may be passed at once to watch a run across waves),
@@ -148,50 +197,30 @@ same tool's scan found. Re-trace after any change to the art and check the resul
 `map.gd`'s `show_road` overlay — it draws the traced line back over the painting, which is
 the only check that catches enemies walking beside the road rather than on it.
 
-**The legal ground is continuous; what the player is OFFERED is a lattice of pads.**
-`Game.can_build_at()` is still the whole rule and still answers about any point: off the road
-by `ROAD_KEEPOUT`, out of `OBSTACLES`, inside `PLAY_TOP`/`PLAY_RIGHT`, on open ground (below),
-and `TOWER_GAP` from its neighbours. `Game.pads()` marks the subset of it a tower may
-actually be dropped on, and `main.gd` `_placement_point()` snaps the ghost and the drop to
-it — returning `Vector2.INF`, never the cursor, when there is no pad nearby, so a caller that
-forgets to check cannot silently fall back to free placement. `grid.gd` draws them.
+**Placement is FREE: `Game.can_build_at()` is the whole rule and it answers about any
+point.** Off the road by `ROAD_KEEPOUT`, out of `OBSTACLES`, inside `PLAY_TOP`/`PLAY_RIGHT`,
+on open ground (below), and `TOWER_GAP` from its neighbours. `main.gd` `_placement_point()`
+returns the cursor, and both the ghost and the drop validate through `can_build_at()`, so
+the preview cannot disagree with the result. `grid.gd` shades the ground the rule REFUSES,
+and only while a tower is being dragged, so the answer is visible before the question.
 
-Four things about the pads are measured rather than chosen:
+**A hex lattice of marked pads used to stand between the two, and it has been removed.** It
+existed because free placement produced boards that looked accidental, and it was paid for
+in a way that only became clear later: at `PAD_PITCH` 112 the winding board offered **12**
+spots where free placement offers **87**. That is the number every balance constant since
+was set against — see the warnings on `Balance.WC3_RANGE_SCALE` and
+`Balance.GLOBAL_DAMAGE_MULT`, both of which were raised to compensate for a scarcity that no
+longer exists. **Re-run `--dump-board`, `--fill-board` and `--play-sim` before trusting any
+of those numbers.**
 
-- **The lattice is HEXAGONAL.** At the same pitch a square lattice marks fewer spots than
-  the staggered one, because the open meadows are small and roundish. Rows still line up,
-  which is the part the player sees — and the reason the pads exist at all is that free
-  placement produced boards that looked accidental.
-- **The ORIGIN is searched, not written down.** Where the lattice starts is worth more than
-  its pitch when the meadows are scattered islands: measured at the old 70px pitch, the
-  worst origin on this board marked 27 pads and the best 47. `_rebuild_pads()` tries
-  `PAD_ORIGIN_STEPS`² origins across one cell and keeps the best, so a repaint re-tunes
-  itself the way the build mask does.
-- **`PAD_PITCH` and `Game.TOWER_SPRITE_HEIGHT` are one pair, and moving them is a
-  FOUR-NUMBER change.** A row of towers reads as separate buildings or as one mass by drawn
-  WIDTH against the pitch, so the size and the spacing move together; the board sits at
-  **112px, 12 pads, sprites 96 tall** — 60% larger than the 60px it shipped with. Measured
-  counts fall far faster than the pitch rises and are NOT monotonic (the origin search finds
-  lucky alignments): with the keepout scaled to the art, 98px marks 17 pads, 112px 12, 126px
-  10, 140px 7. Always measure with `--dump-board`.
-  **Twelve towers neither reach nor kill what forty-seven did, and both halves are paid for
-  in `Balance`.** Reach first, because a creep on road no tower can reach is never shot
-  whatever the damage is: `WC3_RANGE_SCALE` 0.35 -> 0.45 puts coverage back at 88/82/89/87%
-  against the old 86/79/87/85. Take the SMALLEST scale that does it — 0.65 also works and
-  puts one water tower on 44% of the road with three towers covering 95% of it, which ends
-  placement as a decision. Then kill: `GLOBAL_DAMAGE_MULT` 4.2. The gate is `--fill-board`
-  clearing the LAST wave and it is not a formality — 3.5 died on wave 48 of 50.
-- **The placement rule reserves room for what is DRAWN, not for `TOWER_RADIUS`.**
-  `ROAD_KEEPOUT` is `ROAD_HALF + TOWER_SPRITE_HEIGHT * TOWER_BASE_HALF`, and the top bound
-  tests `pos.y - TOWER_SPRITE_HEIGHT`. Both used to be sized off the 30px footprint, which
-  was invisible while sprites were 60px and produced two immediate bugs at 160: towers near
-  the top lost their upper half behind the HUD, and towers beside the road stood on it.
-  `TOWER_BASE_HALF` (0.45) is measured, not guessed — across the 75 reachable sprites the
-  painted footing spans a median 0.75 of a sprite's width, which against height is ~0.45.
-- **It is built lazily and prefiltered.** Eager building in `configure_board()` cost 509ms
-  per launch and ran twice, because the autoload installs the endless board before Main
-  replaces it. Deferring to first use and rejecting closed ground with one mask texel before
-  `can_build_at()` walks all 140 road segments brings it to 133ms, once.
+What went with it: `PAD_PITCH`, `PAD_SNAP`, `PAD_ORIGIN_STEPS`, `Game.pads()`,
+`has_pads()`, `nearest_pad()`, the origin search, and `grid.gd`'s pad drawing. What stayed
+is everything that was actually load-bearing — the build mask, `ROAD_KEEPOUT`,
+`TOWER_GAP`, `FOOTPRINT_PROBE` and the `PLAY_TOP`/`PLAY_RIGHT` bounds.
+
+`--dump-board` and `--fill-board` sweep `main.gd` `_buildable_lattice()`, which now SAMPLES
+the continuous legal set at half the tower spacing rather than enumerating slots. Read its
+count as a capacity estimate: a player placing by hand fits a slightly different number.
 
 A board that supplies an explicit `active_build_zones` allowlist gets NO pads — its own rings
 would already be its guides. No shipped board sets this today (the interactive tutorial that
@@ -199,6 +228,59 @@ used to, drawing rings around six pockets, has been removed), but the mechanism 
 `Game` for a future board that wants to name its own legal spots. `--dump-board` and
 `--fill-board` sweep the pads when a board has them (`main.gd` `_buildable_lattice()`), so
 the harnesses measure the spots the player is actually offered.
+
+## The towers and the board are not the same picture, and that is measured too
+
+`python tools/art_match.py` answers "do these belong together?" the way `--dump-board`
+answers "can you build here?" — with numbers instead of a screenshot. It reports four things
+and the played board currently fails all four.
+
+The first is about PLACEMENT rather than looks, and it is the one no other tool reports:
+**how much of the band 70-300px from the road is open ground** — the only ground a tower can
+both stand on and shoot from. `--dump-board` counts pads, an answer that also depends on
+`PAD_PITCH` and the origin search; `build_mask.py` reports open ground over the whole image,
+which a board can win with one empty corner the road never goes near. The winding board
+measures **22.6%** against a target of 80%, and that is what 12 pads looks like as a
+fraction. The other three:
+
+| | winding (played) | board_source (what the roster was painted against) | the roster |
+|---|---|---|---|
+| Open-ground luminance | 73.3 | 106.4 | masonry 50-125 |
+| Open-ground blue | 25.1 | 35.6 | masonry median 46.5 |
+| Ground squash | **1.000** | — | **0.24-0.30** |
+
+Three separate faults, and only the third is unfixable in code:
+
+- **The value gap is an accident of history.** The six element sets were generated with
+  `board_source.png` attached — the spiral — and a Standard run has played on the winding
+  board since. The roster is lit for a board 45% brighter than the one it stands on.
+  `docs/tower-art-prompt.md` caught this for the FUSION sheets and told them to attach the
+  winding board instead; they still measure bright (clay 92, pure 93, rainbow 125), so
+  attaching the right board was not on its own enough.
+- **The hue gap is why grey stone floats.** Nothing painted on the winding board carries
+  blue above ~32. Neutral masonry carries 44-114. A multiply can darken stone; it cannot put
+  back a hue the board does not contain.
+- **The camera gap is the big one.** `art_match.py` reads it off the road: a ribbon of
+  constant width is drawn narrower where it runs east-west than where it runs north-south,
+  and the ratio is `sin(elevation)`. The winding board measures **1.000** — painted straight
+  down — against tower sheets painted at 0.24-0.30 (`tower.gd`'s hand-measured `WATER_POOL`
+  and `NATURE_RUNE` tables are ground circles, so they report the sheets' camera directly).
+  **No colour work closes 60 degrees.** The fix is a board repaint, and
+  `docs/board-art-prompt.md` now asks for 0.50 — halfway, because matching the sheets
+  exactly would lay the playfield nearly edge-on.
+
+**`Game.GROUND_SQUASH` is the engine's half of that number.** Every shadow, pad, aura ring
+and ground glow is drawn `Vector2(1.0, Game.GROUND_SQUASH)`; before it there were four
+values across seven sites and `grid.gd`'s comment claiming its 0.45 matched the towers'
+contact shadows had gone stale against their 0.40. What is NOT on the ground stays out of
+it — Fire's brazier glow and the pool/rune/fusion rings sit on top of a tower and follow the
+art's plane, not the board's. When a new board lands, move this constant to whatever
+`art_match.py` measures on it.
+
+`Game.ART_TINT` is the matching knob for value: one `Color` multiplied over every painted
+tower and creep, at the single `draw_texture_rect` each passes through. It is `WHITE`, which
+is the honest state — it exists so a roster that lands slightly hot can be trimmed in one
+place, not as a substitute for the repaint.
 
 **You cannot build on trees, cliffs or water, and that rule is read off the painting.**
 `python tools/build_mask.py <board.png>` writes `<board>_build.png`, a 1-texel-per-8px mask
@@ -280,6 +362,58 @@ Two constants are tied to the road length and nothing else reads it, so they mov
 or the pacing breaks silently: `Balance.BASE_SPEED_*` (at the wrong value a wave-1 enemy
 took 186 seconds to walk the road) and the count ramp `BASE_COUNT_*`.
 
+## Progress is gated by avatar bosses, not by gold
+
+A tower climbs to **Lv2** on gold alone and no further. Past that the run's four avatar
+bosses (`Balance.ELEMENT_BOSS_WAVES`, 10/20/30/40 at `STANDARD_WAVES` 50) are the only thing
+that opens anything, and killing one opens **two** doors at once:
+
+| | needs | result |
+|---|---|---|
+| **depth** — Lv3, Lv4, Lv5 | that tower's OWN element's avatar dead | `Balance.MAX_LEVEL`, 695g all in |
+| **breadth** — dual, triple, Pure | ANY other element's avatar dead | Lv3 / Lv4 / Lv5, 2330g all in |
+
+**Lv2 is a branch point, and the two roads do not compose.** Taking a base tower to Lv3
+closes its fusion row for good (`Tower.can_fuse` refuses above `Balance.FREE_LEVEL_CAP`);
+fusing closes its upgrade row for good (`Tower.can_upgrade` refuses for any tower carrying
+more than one element). A fusion's level is **fixed by its depth** — dual 3, triple 4, Pure
+5, `Balance.FUSED_LEVELS` — set by `add_element()` and never moved again.
+
+Three things about this are load-bearing:
+
+- **The level gate on fusion is not decoration.** Without it a maxed Lv5 Fire could be
+  absorbed into a Lv3 dual, which is a straight DOWNGRADE — a purchase that makes a tower
+  worse is not a decision, it is a trap. This is why `main.gd`'s `_fuse_tower()` checks
+  `can_fuse()` and not just `available_elements()`; the panel already hides the row, but the
+  panel is a view and the guard has to hold on its own.
+- **An element whose avatar has not arrived yet is stuck at Lv2, and fusion is its only way
+  out.** Since the run seed picks the avatar ORDER (`Run.boss_elements`), which elements are
+  stuck and which are free is different every run. That is the whole shape of the design;
+  do not "fix" it by loosening the gate.
+- **It leaves data deliberately unread.** A dual never reads `damage_tiers[3]`/`[4]`, a
+  triple never reads `[4]`, and every `FUSIONS` row's 2nd and 3rd `names` entries are dead
+  (`Game.fusion_display_name` shows `name` and nothing else). The tables keep them because
+  they are the map's own numbers and the ratios between them still set each row's relative
+  strength. **`--dump-ladder` prints the one value each row actually fires at** — that is
+  the column to re-balance, not the five-wide table `--dump-fusions` shows.
+
+`Run.avatars_beaten` is the single ledger both gates read, written in exactly one place
+(`wave_manager.gd`, on wave clear, only when `Enemy.was_killed` — a boss that leaks pays
+nothing). **A harness that wants a tower at its ceiling has to beat the avatars first**,
+which is why `--fill-board`, `--dump-stats` and `--hit-pose` all open with a
+`Run.beat_avatar()` loop; without it they quietly build a board of Lv2 towers and still print
+a cheerful summary. (`--dump-ladder` beats them too, but deliberately and one road at a time,
+since which avatars are down is the very thing it is reporting on.)
+
+**Measured, not assumed.** Five `--play-sim` runs of the 50-wave standard after the gate all
+WON and all killed four avatars, finishing on **20, 1, 20, 15 and 18 lives** against the one
+pre-gate run's 20 — so the floor player survives, but it can now finish on one life where it
+used to finish untouched. `--fill-board` still wins wave 50, so `FINAL_HP_FACTOR`'s ceiling
+calibration still holds, and `--dump-stats` is byte-identical (the stat tables did not move;
+only who may reach them did). The leftover gold at the end grew from 143 to 261-1300, which
+is the fifth off the per-tower spending ceiling showing up — small, and the wrong thing to
+close by cutting costs (see the `TIER_COSTS` comment in `balance.gd` for why).
+
 ## Architecture, and where to add things
 
 Everything is **data-driven**. There is exactly one generic `Tower`, `Enemy` and
@@ -319,7 +453,7 @@ To add content, add a **data row**, not a scene or script:
 | Adding a… | Goes in |
 |---|---|
 | Tower | `Game.TOWER_DEFS` + its id in `Game.TOWER_ORDER` **to make it buildable** |
-| Fusion (dual / triple / Pure) | a row in `Game.FUSIONS`, keyed by its element names **sorted and joined with `+`** (`fusion_key()` builds the same key from a tower's element set, which is what makes Fire+Water and Water+Fire one tower). It replaces the base definition rather than layering over it, so the row must be complete: `damage_tiers`, `range`, `interval`, `color`, `names`, `desc`. **No code change** — the payload fields are the ones `projectile.gd` already reads |
+| Fusion (dual / triple / Pure) | a row in `Game.FUSIONS`, keyed by its element names **sorted and joined with `+`** (`fusion_key()` builds the same key from a tower's element set, which is what makes Fire+Water and Water+Fire one tower). It replaces the base definition rather than layering over it, so the row must be complete: `damage_tiers`, `range`, `interval`, `color`, `names`, `desc` — but note only ONE entry of `damage_tiers` is ever read (the row's fixed level, see the progression section above) and `names` is dead entirely. **No code change for the PAYLOAD** — those fields are the ones `projectile.gd` already reads. The SHOT is the exception: `Projectile._draw()` dispatches on `shape` (the firing tower's `art_key()`, so `flesh_golem`, never `earth+nature+water`) and a row with no case there falls through to `_draw_plain_bolt` — which is silent, since a plain bolt in the row's colour looks deliberate. Add the case and check it with `--bolt-pose` |
 | Permanent upgrade | `Game.WORKSHOP_DEFS` — effects must be **per-level steps**, not totals. This is the only thing left that writes `TowerMods` |
 | Saved field | a key in the relevant `Save` section; bump `SAVE_VERSION` + add a `_migrate` branch if the shape changes |
 | Wave (first 20 only) | `Game.WAVES` — past that, waves are generated. **No boss goes in this table**, see below |
@@ -328,7 +462,7 @@ To add content, add a **data row**, not a scene or script:
 | Creep archetype | `Game.WAVE_TYPES` |
 | Tower behavior (beam/charge/…) | a `TowerBehavior` subclass + a case in `Tower._make_behavior` — but only if the CONTROL FLOW differs. An aura is data read by the neighbours; an on-kill payout is data read by the projectile. Of the eleven fusions, none needed a subclass |
 | Sound effect | a block in `audio.gd`'s `_build_all()` |
-| Painted creep | `assets/art/enemies/<archetype>.png`, named for its `Game.WAVE_TYPES` key (`normal.png`, `tank.png`, …). **No code change** — `sprites.gd` `enemy()` finds it and `enemy.gd` prefers it over the blob. Art faces SCREEN-LEFT and is mirrored by `_facing`; a boss is an archetype wearing a crown, not its own file. Numbered files (`normal_1.png`…`normal_6.png`) are an animation cycle of ANY length — `Sprites.pose_count()` counts them and both carriers divide their cycle by the answer, so re-animating a creep is a file copy; one file alone is a still. Only the `"air"` row in `WAVE_TYPES` flies, and its cycle is a WINGBEAT, not a stride. Generate sheets from [docs/creep-art-prompt.md](godottowerdefense/docs/creep-art-prompt.md) — one creature per sheet, one frame per row, TWELVE of them: the cycle is one stride played at the creep's own walking rate, so six frames measured 6.2 fps at wave 2 and the eye counts them |
+| Painted creep | `assets/art/enemies/<archetype>.png`, named for its `Game.WAVE_TYPES` key (`normal.png`, `tank.png`, …). **No code change** — `sprites.gd` `enemy()` finds it and `enemy.gd` prefers it over the blob. Art faces SCREEN-LEFT and is mirrored by `_facing`. A boss is an archetype wearing a crown, with ONE exception: the four element avatars take `boss_<element>_1..N.png` if those exist (`Enemy.art_kind()` picks them off `avatar_element` and falls back to the crowned archetype otherwise), so the four can be painted one at a time — check them with `--avatar-pose`. Numbered files (`normal_1.png`…`normal_6.png`) are an animation cycle of ANY length — `Sprites.pose_count()` counts them and both carriers divide their cycle by the answer, so re-animating a creep is a file copy; one file alone is a still. Only the `"air"` row in `WAVE_TYPES` flies, and its cycle is a WINGBEAT, not a stride. Generate sheets from [docs/creep-art-prompt.md](godottowerdefense/docs/creep-art-prompt.md) — one creature per sheet, one frame per row, TWELVE of them: the cycle is one stride played at the creep's own walking rate, so six frames measured 6.2 fps at wave 2 and the eye counts them. **The pace comes from the STRIDE the art was drawn with** (`Sprites.stride()`, the widest gap between the feet), not from the creep's radius: one cycle carries the creature the two steps it is painted taking, so a sheet drawn with a lunging stride walks slowly and one drawn at the roster's 0.6-0.9x of body height walks at a normal rate. `Enemy.WALK_TEMPO` (1.35) is the one deliberate lie — a third faster than the feet, which buys frame rate for a slip too small to read — and `Enemy.FRAME_BLEND` dissolves each pose into the next so a 5 fps cycle does not read as a slide show |
 | Painted tower set | `assets/art/towers/<name>_1..5.png`, cut from one generated sheet by `python tools/cut_sprites.py <sheet.png> <out_dir> <name> 220`. `<name>` is the element for a base tower and the combination's FIRST name for a fusion (`steam`, `flesh_golem` — never the per-tier name; `Tower.art_key()` derives it). **No code change** — `sprites.gd` picks the files up by name and `tower.gd` prefers them over the code art, so an unpainted combination just keeps drawing itself. Keep the sheet as `_source_<name>.png` beside them, and generate it from the template in [docs/tower-art-prompt.md](godottowerdefense/docs/tower-art-prompt.md) — **attach the board the tower will stand on** (the winding map, not `board_source.png`) **and, for a fusion, both parent sheets**; every set generated from words alone had to be redone |
 
 ## Conventions
@@ -429,9 +563,15 @@ rather than Pillow:
 python tools/trace_road.py                        # re-derive Game.PATH + OBSTACLES from the board art
 python tools/build_mask.py <board.png>            # where a tower may stand: open ground, not trees/cliffs/water
 python tools/water_mask.py <board.png> <mask.png> # where the water is, for map.gd's ripple shader
+python tools/art_match.py [board.png]             # do the towers and the board look like one picture? see below
+python tools/art_match.py <new> --against <old>   # did an EDIT of a board move the road? (keeps WINDING_PATH or not)
+python tools/grade_board.py <board.png>           # pull a board's GRASS onto the register the towers were painted for
+python tools/art_match.py <new> --against <old>   # did an EDIT of a board move the road? (keeps WINDING_PATH or not)
 python tools/cut_sprites.py <sheet> <dir> <name> <max_h>   # split a generated sheet into sprites
 python tools/key_white.py <in> <out>              # restore alpha to a sheet flattened onto white
 python tools/stitch_sheets.py <out> <a> <b>       # one cycle split across two files -> one sheet
+python tools/compose_cycle.py <out> <sheet>:<row> ...   # pick the usable rows out of several sheets -> one cycle
+python tools/strip_ground_veil.py <keyed> <out>   # peel the puddle/spray an elemental sheet paints under its feet
 python tools/respace_frames.py <in> <out> --frames N   # separate frames that touch, by connectivity
 python tools/trim_mp3.py <in.mp3> --report        # loudness over time, so a loop point is READ not guessed
 python tools/trim_mp3.py <in> <out> --end 117.5 --fade-in 0.8 --fade-out 1.5   # cut + fade, no re-encode

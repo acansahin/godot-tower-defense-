@@ -36,13 +36,31 @@ rate any more; each is an endpoint plus a slope derived from the length.
 Every fifth of the run — waves **10, 20, 30 and 40** — an **element avatar boss** arrives
 **alone**, with no ordinary creeps in the wave at all. One for each of the four elements, in a
 random order every run, named in the next-wave preview so you have the prep gap to build its
-counter. Beat it and that element unlocks for **fusion** for the rest of the run; let it walk
-off the end of the road and you lose it. Two set-piece bosses hold the midpoint (**25**) and
-the final wave (**50**), and those keep their escort.
+counter. Beat it and **two** doors open for the rest of the run: that element unlocks for
+**fusion** on every tower, and that element's OWN towers come off the level cap and can climb
+to Lv5. Let it walk off the end of the road and you lose both. Two set-piece bosses hold the
+midpoint (**25**) and the final wave (**50**), and those keep their escort.
+
+**Gold alone only takes a tower to Lv2.** Everything past that is paid for with bosses, and
+Lv2 is where a tower's two roads fork:
+
+- **Depth** — Lv3, Lv4, Lv5, once that tower's own avatar is dead. 695 gold all in.
+- **Breadth** — fuse into a dual, then a triple, then Pure, once ANY other element's avatar
+  is dead. 2330 gold all in.
+
+The two do not compose. Going to Lv3 closes the fusion row for good; fusing closes the
+upgrade row for good, because **a fusion's level is fixed by its depth** — a dual is Lv3, a
+triple Lv4, Pure Lv5, and none of them ever levels again. The panel names whichever road you
+are about to close before you close it, and neither is a trap: the two cost about the same
+per point of damage.
+
+Because the run seed picks the avatar ORDER, which of your elements are stuck at Lv2 and
+which are free to climb is different every run — and an element whose avatar has not arrived
+yet has exactly one way forward, which is to fuse with one whose avatar has.
 
 Fusion is how cross-element power enters a run, and it happens on the board rather than on a
-card. Tap any tower and its panel offers to absorb an unlocked element for gold. The set of
-elements a tower carries is its whole identity:
+card. Tap any Lv2 tower and its panel offers to absorb an unlocked element for gold. The set
+of elements a tower carries is its whole identity:
 
 | Elements | What it becomes |
 |---|---|
@@ -82,38 +100,42 @@ tower reference this is growing toward.
    title screen; press **Play** there to start a run.
 
 No plugins or downloads are required. Two kinds of art now sit side by side: the
-**painted** board and the element towers, five tiers each (`assets/art/`), and the
-**code-drawn** everything else — enemies, every fusion tower, projectiles, every
-effect and all of the UI — still built from primitive shapes in `_draw()`. Every sound
-EFFECT is still synthesized at startup; the only audio file that ships is the background
-music track. See §6.
+**painted** board, all seventeen tower sets — four elements and eleven fusions, five tiers
+each — and the enemies (`assets/art/`); and the **code-drawn** rest — the projectiles, every
+effect but the Fire brazier, and all of the UI — still built from primitive shapes in
+`_draw()`. That includes each tower's own bolt: all seventeen throw a different SHAPE, told
+apart by silhouette rather than by colour, since a fused tower is tinted with the fusion's
+colour and several of those are close. Every sound EFFECT is still synthesized at startup;
+the only audio file that ships is the background music track. See §6.
 
 ### Controls
 - The game opens on a **title screen**: **Play**, **How to Play** (a controls
   summary), a **Sound** toggle, and **Quit** (hidden on Web).
 - **Drag a tower from the palette** (top-right, lists every tower with its colour
-  and cost) onto **a build pad** to build it. A green ghost disc marks a legal spot,
+  and cost) onto **any legal ground** to build it. A green ghost disc marks a legal spot,
   red an illegal/unaffordable one, and the ghost also previews **the range that tower would
   cover** — so you can judge placement before spending the gold.
 - **Hover a placed tower** to light up its range ring. Ranges stay faint otherwise, so a
   full board doesn't turn into a tangle of overlapping circles.
-- **Towers go on marked pads, and the pads come from the terrain.** Faint rings sit on every
-  spot a tower may stand — off the road, on OPEN GROUND (grass, never trees, cliffs or
-  water), inside the play area — and they light up while you drag. The ghost snaps to the
-  pad it would land on, so what you see is what the drop does. Where the open ground is
-  comes from the painting itself, not from hand-placed zones: `tools/build_mask.py` reads
-  the board art and writes a mask the placement rule samples, so the forest really is closed
-  ground rather than merely looking closed. The pads replaced free placement, which was
-  correct and looked accidental — every tower at whatever angle the cursor happened to be,
-  no two rows agreeing. The lattice is hexagonal because that fits more pads into small
-  round meadows than a square one (47 against 38 on the winding board). The ghost never
-  disappears over bad ground; it turns red, because a ghost that vanishes tells you nothing
+- **Place a tower anywhere the terrain allows, and the terrain decides.** Legal ground is
+  off the road, on OPEN GROUND (grass, never trees, cliffs or water), inside the play area,
+  and clear of the towers already standing. While you drag, the ground the rule REFUSES is
+  shaded, so the answer is visible before you ask it. Where the open ground is comes from
+  the painting itself, not from hand-placed zones: `tools/build_mask.py` reads the board art
+  and writes a mask the placement rule samples, so the forest really is closed ground rather
+  than merely looking closed. A lattice of marked pads used to stand between the rule and
+  the player; it made legal spots unmissable and decided where towers went, and it is gone.
+  The ghost never disappears over bad ground; it turns red, because a ghost that vanishes
+  tells you nothing
   about why.
-- **Click / tap a tower to upgrade it** (up to level 5) — each level raises **damage only**,
+- **Click / tap a tower to upgrade it** (up to level 5, and only to level 2 until its
+  element's avatar boss falls) — each level raises **damage only**,
   and a painted tower swaps to that tier's art *at the same size*: an upgrade never takes
   more board than the tower already stood on. A green ▲ chevron floats beside any tower whose
   next level you can already afford, so you can spot upgrade candidates at a glance.
-- **Tap a tower to open its panel** — upgrade, absorb an unlocked element, or sell.
+- **Tap a tower to open its panel** — upgrade, absorb an unlocked element, or sell. A tower
+  held at Lv2 by a boss it has not fought yet says so on a dim row rather than simply having
+  no upgrade to offer, so the rule is legible from the first tower you place.
   Selling refunds most of everything you spent on it, fusion costs included. The panel
   replaced a 26px sell "×" tucked into the corner of the tower's cell, which was the
   smallest tap target in the game and the one thing that could not be made bigger.
@@ -183,7 +205,7 @@ godottowerdefense/
     ├── menu.gd              # Title screen: play / how-to-play / sound / quit
     ├── main.gd             # Wires the level together (placement, upgrade, fuse, sell)
     ├── map.gd              # Draws the painted board (+ the traced-road overlay, off)
-    ├── grid.gd             # Draws the build pads; shades closed ground on a padless board
+    ├── grid.gd             # Shades the ground placement refuses, while a tower is dragged
     ├── sprites.gd          # Loads the painted tower art + its ground anchor; null
     │                       # for anything not painted yet, so the code art falls back
     ├── enemy.gd            # Path walking, health, flyer visuals, slow/poison
@@ -194,7 +216,7 @@ godottowerdefense/
     ├── projectile.gd       # Homing projectile: damage, splash, slow, poison
     ├── projectiles.gd      # Object pool on the $Projectiles node (reused bolts)
     ├── effects.gd          # Object pool on the $Effects node (floating text + bursts)
-    ├── frost_ring.gd       # Expanding chill ring drawn by Ice's Lv2+ area slow
+    ├── area_ring.gd        # Expanding ring at an effect's REAL radius: every splash hit, and the area slow
     ├── wave_manager.gd     # Spawns the 20-wave table (archetypes, bosses, economy)
     ├── tower_palette.gd    # Top-right drag-source, lists Game.TOWER_ORDER
     ├── placement_preview.gd # Green/red ghost footprint shown while dragging
@@ -227,7 +249,7 @@ stays in sync with the **M** key.
 ```
 Main (Node2D)               [main.gd]
 ├── Map (Node2D)            [map.gd]   -> the painted board, stretched to WORLD_SIZE
-├── Grid (Node2D)           [grid.gd]  -> draws the build pads (lit while a drag is in progress)
+├── Grid (Node2D)           [grid.gd]  -> shades refused ground (only while a drag is in progress)
 │                                         (still named Grid; there is no grid)
 ├── Enemies (Node2D)                   -> enemies spawned here at runtime
 ├── Towers (Node2D)                    -> built towers live here
@@ -336,16 +358,18 @@ editing three files and hunting for un-named literals; it is now one file.
   tree), and at least `TOWER_GAP` from any tower already standing. A board that publishes an
   explicit `active_build_zones` allowlist uses that INSTEAD of the mask, never both — no
   shipped board sets one today.
-- **`Game.pads()`** is the subset of that rule the player is offered: a hexagonal lattice at
-  `PAD_PITCH`, marked once per board on first use. `main.gd` `_placement_point()` snaps the
-  ghost and the drop to the nearest pad and returns `Vector2.INF` — never the cursor — when
-  there is none in range, so nothing can quietly fall back to free placement. The lattice
-  ORIGIN is searched rather than written down (`PAD_ORIGIN_STEPS`² candidates, best wins),
-  because on scattered meadows the origin is worth 27 pads against 47. A board with an
-  `active_build_zones` allowlist gets no pads; its rings would already be its guides.
-  `PAD_PITCH` is paired with `Game.TOWER_SPRITE_HEIGHT`, and together they decide how many
-  towers the game is: at 112px the board marks **12 pads** and towers are drawn 96 tall, 60%
-  larger than the size it shipped with. Twelve towers had to be paid for twice —
+- **Placement is free**: `main.gd` `_placement_point()` returns the cursor, and the ghost and
+  the drop both validate through `can_build_at()`, so the preview cannot disagree with the
+  result. A hexagonal lattice of marked pads used to sit between them and has been removed
+  along with `PAD_PITCH`, `PAD_SNAP`, `PAD_ORIGIN_STEPS`, `Game.pads()`, `has_pads()` and
+  `nearest_pad()`.
+- **`Game.TOWER_GAP` is what spaces towers now, and it is paired with
+  `Game.TOWER_SPRITE_HEIGHT`.** 112px against a 96px sprite. It was 68px — two 30px
+  footprints plus air — which is right for the tap disc and wrong for art drawn 108-147px
+  wide; the pads hid that for as long as they existed, because nothing could be dropped at
+  68px whatever the rule said. Together the two decide how many towers the game is: the
+  winding board takes **33** at this spacing, against the 12 the pad lattice allowed. Twelve
+  towers had been paid for twice —
   `Balance.WC3_RANGE_SCALE` 0.45 so they still watch the road, and
   `Balance.GLOBAL_DAMAGE_MULT` 4.2 so they still kill what they watch — with `--fill-board`
   clearing the last wave as the gate. The placement rule sizes itself off the DRAWN sprite
@@ -454,14 +478,17 @@ editing three files and hunting for un-named literals; it is now one file.
 | Tower stats (all towers) | `game.gd` `TOWER_DEFS` | per-tower cost / dmg / range / interval / effects |
 | Base towers | `TOWER_DEFS` | six elements at the map's numbers. They sit at near-equal DPS and differ in reach and cadence: Fire 500/0.33s, Water 750/0.17s, Nature 750/0.99s, Earth 750/1.00s, Light 2000/0.99s, Darkness 2000/2.75s (range in **WC3 units**, scaled by `Balance.WC3_RANGE_SCALE`). Water/Nature/Earth also keep our slow/poison/splash payloads, which the map puts on dual towers we have not built |
 | Dual towers | `TOWER_DEFS` + `DUAL_RECIPES` | all fifteen of the map's duals at 275g, on its damage. Absent from `TOWER_ORDER`: a dual enters the palette when `Run.element_level` reaches `DUAL_ELEMENT_LEVEL` in **both** its elements |
-| Aura towers | `TOWER_DEFS` `aura_stat`/`aura_radius`/`aura_mult` | Moon and Sun boost nearby damage, Well nearby attack speed, deepening with the provider's level. Read by the NEIGHBOURS in `tower.gd` `_recompute()`, so selling the provider returns the buff exactly |
+| Splash reach | `TOWER_DEFS`/`FUSIONS` `splash_radius` | Earth 90px, Lava 110, Steam 80. DRAWN on every splash hit as a ring at the true radius (`area_ring.gd`) — before that, the impact drew the same 34px pop whether the tower splashed or not, so the one stat deciding where a splash tower should STAND was the one stat never shown |
+| Chaos damage | `FUSIONS` `ignores_matchup` | Infernal, Rainbow, Pure. The only payload with no enemy-side tell: slow / poison / stun each hang a status ring on the creep, but "no armour resists this" is a rule about the formula, and the damage number prints a flat 1.0 matchup as plain white. So its impact throws the bolt's own counter-rotating shards |
+| Aura towers | `TOWER_DEFS` `aura_stat`/`aura_radius`/`aura_mult` | Moon and Sun boost nearby damage, Well nearby attack speed, deepening with the provider's level. Read by the NEIGHBOURS in `tower.gd` `_recompute()`, so selling the provider returns the buff exactly. The reach is DRAWN — a standing ring at `aura_radius` plus one travelling out to it (`tower.gd` `_draw_aura_ring`), inside the range circle rather than on it, because an aura tower otherwise looked exactly like a weak damage tower |
 | On-kill payloads | `TOWER_DEFS` `gold_on_kill`/`life_on_kill_chance`/`execute_chance` | Money pays gold, Life has a 2% chance to return a life, Death has a 4% chance to kill outright (never a boss). Applied in `projectile.gd` `_apply()`, which is the only place a kill can be attributed to the tower that earned it |
 | Upgrade: max level / growth | `balance.gd` `MAX_LEVEL`, `TOWER_DEFS.damage_tiers` | 5 tiers; damage only, listed explicitly per element (×5 a tier, ×10 into Pure — with the map's own Pure-row typos preserved). Range and interval never change |
+| Progression gate | `balance.gd` `FREE_LEVEL_CAP`, `FUSED_LEVELS` | 2, and `{2: 3, 3: 4, 4: 5}`. A base tower stops at Lv2 until its own element's avatar boss is dead; a fusion's level is FIXED by how many elements it carries and it has no upgrade row at all. Both read one ledger, `Run.avatars_beaten`. Read `--dump-ladder` before touching either — it is the only dump that shows what a player can actually reach, and it prints the ONE `damage_tiers` entry each fusion ever fires at |
 | Upgrade cost | `balance.gd` `TIER_COSTS` | Build 50, then 60 / 105 / 180 / 300 to climb to Lv5 — 695 for a maxed tower, the same ladder for every element. (The map's own ladder is 175 / 788 / 3544 / 24444; ours is far flatter because V2 replaced the base tower stats.) The build cost is held at 50 so START_GOLD still buys two towers on wave 1; only the upgrades were raised when the board shrank to 12 pads |
 | Sell refund | `balance.gd` `SELL_REFUND` / `SELL_REFUND_UNFIRED` | 80% of total gold spent, or 100% if the tower never got a shot off. `total_spent` includes fusion costs, so a Pure tower refunds against the whole road it travelled. Sell from the tower panel |
-| Fusion cost | `balance.gd` `FUSION_COSTS` | 240 / 630 / 1350 gold for the 2nd, 3rd and 4th element. Scaled from the map's own 275 / 1017 combination costs against its 50-gold base tower; the map has no four-element tower, so Pure's is roughly double the triple. Raised by half with `TIER_COSTS` when the board went from 47 build spots to 12 — capacity is `pads x (build + upgrades + fusions)` and had fallen to 23,520 against a ~41,300 income ceiling. **Sized against that budget, not against a played run**; no harness plays with real gold |
+| Fusion cost | `balance.gd` `FUSION_COSTS` | 240 / 630 / 1350 gold for the 2nd, 3rd and 4th element. Scaled from the map's own 275 / 1017 combination costs against its 50-gold base tower; the map has no four-element tower, so Pure's is roughly double the triple. Raised by half with `TIER_COSTS` when the board went from 47 build spots to 12 — capacity is `pads x (build + upgrades + fusions)` and had fallen to 23,520 against a ~41,300 income ceiling. **Sized against that budget, not against a played run** — `--play-sim` does play with real gold, but it measures whether a gradual build-up SURVIVES, not whether the capacity ledger adds up |
 | Run length | `balance.gd` `STANDARD_WAVES` | 50. **The dial everything else hangs off** — `ELEMENT_BOSS_WAVES`, `MIDPOINT_BOSS_WAVE`, `hp_growth()` and `speed_slope()` are all derived from it, so 60 or 100 re-times the whole run instead of moving its finish line |
-| Avatar bosses | `balance.gd` `ELEMENT_BOSS_*`, `game.gd` `apply_milestone()` | Waves 10/20/30/40 — a fifth of the run apart, derived from `STANDARD_WAVES`. Each walks **ALONE** (`count` 0): no ordinary creeps share the wave. One per element in a random order per run (`Run.boss_elements`, drawn from the run seed) and named in the preview. Type pinned to `normal` so the four differ by element only, never by an inherited archetype's HP multiplier. HP ×5, speed ×0.7, reward ×8, costs 3 lives. Killing one unlocks its element for fusion; leaking it does not |
+| Avatar bosses | `balance.gd` `ELEMENT_BOSS_*`, `game.gd` `apply_milestone()` | Waves 10/20/30/40 — a fifth of the run apart, derived from `STANDARD_WAVES`. Each walks **ALONE** (`count` 0): no ordinary creeps share the wave. One per element in a random order per run (`Run.boss_elements`, drawn from the run seed) and named in the preview. Type pinned to `normal` so the four differ by element only, never by an inherited archetype's HP multiplier. HP ×5, speed ×0.7, reward ×8, costs 3 lives. Killing one unlocks its element for fusion **and lifts its own towers off the Lv2 cap**; leaking it does neither. These four kills are the only thing in the game that moves a tower past Lv2 by either road |
 | Set-piece bosses | `game.gd` `MIDPOINT_BOSS` / `FINAL_BOSS` | Muhafız on `MIDPOINT_BOSS_WAVE` (25) is immune to every control effect; Uyanmış Muhafız on the final wave (50) cycles its own armour every 5s. Unlike the avatars these keep their creep wave — the escort is part of the wall |
 | Targeting | `tower.gd` `_find_target()` | Fixed to "First" — the enemy furthest along the path (closest to the exit); no per-tower picker |
 | Game speed | `hud.gd` `SPEEDS` | 1x / 2x / 3x via `Engine.time_scale`; pause via `get_tree().paused` |
@@ -476,14 +503,16 @@ editing three files and hunting for un-named literals; it is now one file.
 | Prep time between waves | `wave_manager.gd` `PREP_TIME` | 4s (skippable via the HUD's Send Next button, for a small gold bonus) |
 | Enemy speed / durability | `balance.gd` `CREEP_SPEED_PERCENT` / `CREEP_HP_PERCENT` | every board uses ×0.82 movement speed for clearer motion and ×1.20 HP to preserve combat pressure |
 | Tower range cap | `balance.gd` `MAX_TOWER_RANGE` | 300px. **The only unfaithful number in the port.** Light and Darkness reach 2000 WC3 units (700px), which watches 99% of the road from one spot — as it does on the original's own arena, which is why this is a design choice and not a repair. Capped, they watch 51% and take four towers to cover 95% of the road, against Fire's 18% and twelve. The defs keep the real 2000; this caps what the board honours |
-| Wave scaling (`n` = wave) | `balance.gd` | HP `75 × hp_growth()^(n-1) × 1.20`, where `hp_growth()` is derived so wave `STANDARD_WAVES` lands on `FINAL_HP_FACTOR` (200× wave 1) — at 50 waves that is ×1.113 per wave. Speed `(80 + (n-1)·speed_slope()) × 0.82`, derived so the last wave reaches `FINAL_SPEED_RAW` 260 raw = 213 px/s = a 15s crossing of the 3199px road. Count ramps `8 + n` to the map's flat 28 cap. Reward `3 + n`. Each × the archetype's multipliers |
+| Wave scaling (`n` = wave) | `balance.gd` | HP `225 × hp_growth()^(n-1) × 1.20`, where `hp_growth()` is derived so wave `STANDARD_WAVES` lands on `FINAL_HP_FACTOR` (55× wave 1) — at 50 waves that is ×1.085 per wave. Both ends have moved since: the floor 75 → 225 and the finish 200× → 120× → 40× → 55×, the last of those read off `--play-sim` rather than off a maxed board. Speed `(80 + (n-1)·speed_slope()) × 0.82`, derived so the last wave reaches `FINAL_SPEED_RAW` 260 raw = 213 px/s = a 15s crossing of the 3199px road. Count ramps `8 + n` to the map's flat 28 cap. Reward `3 + n`. Each × the archetype's multipliers |
 | Why HP/speed are endpoints, not rates | `balance.gd` | **Measured.** With the ported flat `1.16` HP rate and the uncapped `80 + 9n` speed, a 50-wave run put the last wave at 1440× wave 1 and 435 px/s. `--fill-board` (a MAXED board) died on wave 35; softening HP alone to `1.09` — a 21× lighter finish — only reached 48, and `1.13`/`1.11` both died on exactly **43**, the signature of a limiter neither touched. That limiter was speed. Anchoring both endpoints took the same board from 35 to 49 |
 | Flyers | `wave_manager.gd` | **the Air archetype only** — there is no per-enemy roll on ground waves any more; `make_flying()` gives HP ×0.65, speed ×1.25 |
 | Bosses | `game.gd` `apply_milestone()` (`"boss": true` on the produced def) | HP ×6, speed ×0.6, reward ×10, costs 10 lives |
 | Economy: interest | `balance.gd` `INTEREST_RATE`/`INTEREST_CAP` | 2.5% of banked gold per wave cleared, capped at 400. The map pays 2.5% every 15s and has no cap; the cap is ours, so that hoarding gold never beats building |
 | Economy: leak-free bonus | `wave_manager.gd` `LEAK_FREE_BONUS` | +6 gold if no enemy reached the end that wave |
 | Road paths | `game.gd` `WINDING_PATH` / `PATH` / `S_PATH` | all three traced routes are sampled into smooth walking curves: winding uses 36 controls → 141 points for waves 1–10, spiral 114 → 227 for 11–20, and S 32 → 125 from wave 21 |
-| Placement | `game.gd` `TOWER_RADIUS` / `ROAD_KEEPOUT` / `TOWER_GAP` / `FOOTPRINT_PROBE` / `PAD_PITCH` | 30px footprint, 55px clear of the active road centre-line (the painted base, not the tap disc, is what must clear the kerb), 68px centre-to-centre, base probed at 0.2 × radius, towers dropped on a 70px hex lattice of marked pads (47 of them on winding) |
+| Placement | `game.gd` `TOWER_RADIUS` / `ROAD_KEEPOUT` / `TOWER_GAP` / `FOOTPRINT_PROBE` | 30px footprint, **83.2px** clear of the active road centre-line (the painted base, not the tap disc, is what must clear the kerb), **112px** centre-to-centre (sized against the drawn sprite, not the footprint), base probed at 0.2 × radius. Placement is free — anywhere `can_build_at()` says yes; **33** such spots fit on winding |
+| Ground plane | `game.gd` `GROUND_SQUASH` | 0.45 — how flat a circle lying on the board is drawn. One number for every shadow, pad, aura ring and ground glow; measure a board's own with `tools/art_match.py` and move it to match. Circles on top of a *tower* (Fire's brazier, the pool/rune/fusion rings) follow the art's plane instead and stay out of it |
+| Art grade | `game.gd` `ART_TINT` | `WHITE`. One multiply over every painted tower and creep, at the single `draw_texture_rect` each passes through — the dial for a roster lit for a different board than it stands on |
 | Blocked ground | active board profile | winding restricts new builds to its painted clearings; spiral and S block their painted water and otherwise allow clear off-road ground |
 | Tower ranges | `game.gd` `TOWER_DEFS` × `WC3_RANGE_SCALE`, capped | 175–300px |
 | Enemy size | `wave_manager.gd` | radius 24 × the archetype multiplier; boss 38 (must stay under the 80px road width) |
@@ -545,11 +574,17 @@ back safely.
 
 **Painted** (`assets/art/`, the project's only bitmap assets — `icon.svg` aside):
 - **The board**: `board_source.png`, 1672×941. `map.gd` stretches it to `Game.WORLD_SIZE`
-  and draws nothing else. It is also the **style reference every tower sheet is generated
-  against** — attached to the prompt, not described in it. That is what makes the towers
-  look like they were painted for this map; see
-  [docs/tower-art-prompt.md](docs/tower-art-prompt.md), which is mostly the story of the
-  first six sheets that were not.
+  and draws nothing else. It is the **style reference every tower sheet was generated
+  against** — attached to the prompt, not described in it — which is what makes the towers
+  look painted for it; see [docs/tower-art-prompt.md](docs/tower-art-prompt.md), which is
+  mostly the story of the first six sheets that were not.
+  **But a Standard run is not played on it.** `main.gd`'s `STANDARD_BOARD` is
+  `maps/winding_forest_close_v1.png`, and `python tools/art_match.py` measures that board
+  73 luminance on open ground against `board_source.png`'s 106, and a ground squash of
+  1.000 (painted straight down) against tower sheets painted at 0.24-0.30. So the roster is
+  lit and angled for a board it no longer stands on, which is what
+  [docs/board-art-prompt.md](docs/board-art-prompt.md) exists to correct — it now attaches
+  the TOWER sheets and asks a replacement board to join them.
 - **All six element towers**, five tiers each: `towers/<element>_1..5.png`, cut from one
   generated sheet (`_source_<element>.png`) by `tools/cut_sprites.py` at `max_height` 220,
   which puts the tiers at ~2x their drawn size.

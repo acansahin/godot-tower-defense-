@@ -148,7 +148,8 @@ func _start_wave() -> void:
 		# column of 1000119, 1000209, ... that reads like an economy and measures nothing. The
 		# delta is real income — kill bounties, the leak-free bonus and interest — and since a
 		# maxed board leaks nothing, it is the best upper bound the harness suite has on what a
-		# run can afford. Nothing simulates a PLAYER's gradual build-up, so it is only that.
+		# run can afford — an upper bound and nothing more. For what a PLAYER earns while
+		# building up gradually, and leaking, run `--play-sim` instead.
 		print("wave %d: %s%s el=%s%s  hp=%.0f spd=%.0f count=%d  earned=%+d" % [_wave,
 				String(def["type"]), art_note,
 				_element if _element != "" else "-", "  BOSS" if def.get("boss", false) else "",
@@ -287,7 +288,10 @@ func _spawn_boss(def: Dictionary) -> void:
 			_reward * reward_mult,
 			Game.ELEMENT_COLORS.get(_element, Balance.BOSS_TINT) if avatar else Balance.BOSS_TINT)
 	boss.armor_element = _element
-	boss.kind = _art_kind  # a boss is an archetype wearing a crown, not a creature of its own
+	# A boss is an archetype wearing a crown — unless it is an element avatar and that
+	# element's own sheet has been painted, which Enemy.art_kind() decides off avatar_element
+	# below. Set that BEFORE the node enters the tree, since the art set is resolved once.
+	boss.kind = _art_kind
 	boss.radius = Balance.BOSS_RADIUS
 	boss.life_cost = Balance.ELEMENT_BOSS_LIFE_COST if avatar else Balance.BOSS_LIFE_COST
 	boss.is_boss = true
@@ -316,7 +320,7 @@ func _on_enemy_removed() -> void:
 		# element arrives at the moment the player is free to spend it — during prep, with
 		# the panel one tap away — rather than mid-fight.
 		if _avatar_defeated:
-			Run.unlock_fusion(_element)
+			Run.beat_avatar(_element)
 			_avatar_defeated = false
 		_grant_wave_rewards()
 		# Standard mode ends in a win here (GAME_STRATEGY_V2.md §11.1, BUILD NEXT #4) — no

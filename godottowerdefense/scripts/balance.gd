@@ -59,6 +59,28 @@ func ruleset_start_lives(id: String) -> int:
 # shapes rather than as the same tower at different sizes.
 
 const MAX_LEVEL := 5
+## How far a BASE (single-element) tower climbs on gold alone. Past this its own element's
+## avatar boss must have fallen — Run.is_avatar_beaten, checked in Tower.can_upgrade.
+##
+## This is also the level at which a base tower may fuse, and it is the same number on
+## purpose: Lv2 is the branch point. Going to Lv3 commits the tower to depth and closes the
+## fusion row for good; fusing commits it to breadth and closes the upgrade row for good.
+## Neither is a trap, because the two roads cost about the same and neither can be entered
+## by accident (the panel says which one is being closed before it is closed).
+const FREE_LEVEL_CAP := 2
+## The level a FUSED tower sits at, keyed by how many elements it carries. Fixed, not a
+## floor and not a starting point: a fusion has no upgrade row at all, so its level never
+## moves again. The ladder a tower actually walks is therefore
+##
+##   Lv1 -> Lv2 -> (its avatar) Lv3 -> Lv4 -> Lv5        [depth, one element]
+##   Lv1 -> Lv2 -> dual Lv3 -> triple Lv4 -> Pure Lv5    [breadth, up to four]
+##
+## which is why the two roads end on the same level. NOTE this leaves data unread on
+## purpose: a dual never reaches damage_tiers[3]/[4], a triple never reaches [4], and every
+## FUSIONS row's 2nd and 3rd `names` entries are dead. The tables keep them as source data
+## (they are the map's), and the numbers each fusion DOES read are the ones to re-balance —
+## `--dump-ladder` prints exactly that column.
+const FUSED_LEVELS := {2: 3, 3: 4, 4: 5}
 ## Gold to BUILD a tower at tier 1, then to reach each tier above it. Replaced the WC3-ported
 ## 50/175/788/3544/24444 ladder in the V2 redesign (GAME_STRATEGY_V2.md §4.2, §29.1, BUILD
 ## NEXT #3): the map's ladder ended in a 24444-gold, five-and-a-half-digit purchase that no
@@ -81,9 +103,33 @@ const MAX_LEVEL := 5
 ## x1.5 on the upgrades and on FUSION_COSTS puts capacity at ~34,980, or about 85% of that
 ## income ceiling. Not 100%: the 41,300 assumes every enemy dies, so a real run earns less,
 ## and a board that can only just be finished by a flawless player is a board nobody
-## finishes. **This number is sized against a budget, not against a played run** -- no
-## harness plays with real gold (`--fill-board` grants itself a million), so the last word
-## belongs to an actual playthrough.
+## finishes. **This number is sized against a budget, not against a played run.** `--play-sim`
+## does play with real gold, where `--fill-board` grants itself a million — but what it
+## answers is whether a gradual build-up SURVIVES, not whether the capacity ledger above adds
+## up, so the last word on this one still belongs to an actual playthrough.
+##
+## **FREE_LEVEL_CAP / FUSED_LEVELS cut the per-tower ceiling from 2915 to 2330**, because the
+## two roads no longer compose: a tower is either maxed (50 + 645 = 695) or fused all the way
+## (50 + 60 + 240 + 630 + 1350 = 2330), never both. That is a fifth off the capacity figure
+## above — and unlike everything before it in this comment, the consequence has been PLAYED
+## rather than budgeted. Five `--play-sim` runs of the 50-wave standard, after the gate:
+##
+##   lives left   20, 1, 20, 15, 18       (before the gate, one run: 20)
+##   gold left    1174, 1280, 317, 261, 1095   (before: 143)
+##   board        33 towers, lv 154-160, elements 72-79   (before: lv 165, elements 86)
+##
+## Every one of them still WON, and every one killed all four avatars, so the gate does not
+## break the run — but the spread is the finding: a floor player that used to finish untouched
+## can now finish on one life. That is the intended tension (a leaked avatar now costs an
+## element BOTH its depth and its fusions, where it used to cost only fusions) and it is also
+## why this is the number to re-read first if the gate is ever tuned.
+##
+## The few hundred to ~1300 gold left over is the capacity shortfall showing up, and it is
+## small — 1-3% of the ~41,300 income ceiling, against the ~18,000 the 12-pad board stranded.
+## **Do not close it by cutting costs.** The sim buys the cheapest thing first, so it takes
+## the 105 upgrade over the 240 fusion and locks itself out of the fusion road tower after
+## tower — which is exactly the elements 86 -> 72-79 above. A player who picks a road on
+## purpose spends MORE than this, not less, because the breadth road costs 2330.
 const TIER_COSTS: Array = [50, 60, 105, 180, 300]
 ## Damage multiplier applied on each upgrade. Unused while every TOWER_DEFS entry supplies
 ## its own explicit `damage_tiers` (see game.gd) — kept as the documented fallback shape,
@@ -114,10 +160,12 @@ const MIN_FIRE_INTERVAL := 0.05
 ## 0.35 puts Water/Nature/Earth at 262px, which is where our four towers already sat, so
 ## the familiar elements do not move. Fire lands at 175px — short, which is its identity.
 ## Light and Darkness would land at 700px; MAX_TOWER_RANGE below is what stops them.
-## DEPARTURE, raised from 0.35 when the board went from 47 build spots to 12 (Game.PAD_PITCH,
-## widened so towers could be drawn 60% larger). Twelve towers watch less road than
-## forty-seven, and a creep on road no tower can reach is never shot whatever the damage is,
-## so reach had to be restored before damage was worth touching.
+## DEPARTURE, raised from 0.35 when the board's usable spots collapsed. The cause has since
+## been removed - a lattice of marked pads held the winding board to 12 spots, and placement
+## is free again - but the raise stays, because it was never really about the pads: a creep
+## on road no tower can reach is never shot whatever the damage is, so reach had to be
+## restored before damage was worth touching, and 0.45 is simply the honest reach for this
+## board. Re-measure with `--dump-board` rather than reverting it on principle.
 ##
 ## Measured against the 47-tower coverage (86/79/87/85% of the road reachable for
 ## water/fire/nature/earth): 0.45 gives 88/82/89/87 and leaves one tower watching 31% of the
@@ -164,15 +212,18 @@ const WC3_RANGE_SCALE := 0.45
 ## have the same problem for the same reason.
 const MAX_TOWER_RANGE := 300.0
 
-## Every tower's damage, multiplied once. A DELIBERATE DEPARTURE from the port, and the
-## counterweight to the board holding 12 towers instead of 47.
+## Every tower's damage, multiplied once. A DELIBERATE DEPARTURE from the port, raised when
+## the board briefly held only 12 towers instead of 47.
 ##
-## The board was respaced so towers could be drawn at the size the painted art wants
-## (Game.PAD_PITCH, Game.TOWER_SPRITE_HEIGHT), and that took the build spots from 47 to 12.
+## **That premise is gone and this number is now suspect.** The pad lattice it was set
+## against has been removed and placement is free, so the board carries far more towers than
+## 12 again - `--dump-board` reports the current figure. 4.2 was the value that let twelve
+## towers clear the last wave; at three times that many it is very likely too generous.
+##
 ## A maxed board clearing the LAST wave is the game's minimum bar - `--fill-board` is the
 ## gate - and it is a real gate rather than a formality: 47 towers cleared wave 50, while 28
 ## died on 46 and 25 on 47 with no compensation at all, and at 12 towers 3.5 still died on
-## 48. 4.2 clears it.
+## 48. Re-run BOTH `--fill-board` and `--play-sim` before trusting this.
 ##
 ## It lives here rather than in the fifteen `damage_tiers` arrays for three reasons: those
 ## arrays are the roster's IDENTITY and their ratios are what make Clay the hardest dual and
@@ -257,7 +308,22 @@ const MIDPOINT_BOSS_WAVE := STANDARD_WAVES / 2
 # --- Wave scaling formula (was wave_manager.gd:91-101) -------------------------
 
 ## Wave 1 hit points, read straight out of the map: its level 1 is 75 hp.
-const BASE_HP_FLAT := 75.0
+## HP of a wave-1 creep before CREEP_HP_PERCENT. Raised from 75 with FINAL_HP_FACTOR cut by
+## the same ratio, which LIFTS THE START OF THE CURVE WITHOUT MOVING ITS END.
+##
+## That shape is the fix for a specific mistake. GLOBAL_DAMAGE_MULT pays for a board that
+## holds 12 towers instead of 47, but the player does not lose those towers evenly: early on
+## they could only afford two or three either way, and the shortfall is entirely a late-game
+## one. A flat damage multiplier therefore over-pays at the start by nearly its whole factor.
+## Measured at wave 1: 9 creeps of 90 HP against a Lv1 Water tower now doing 120 DPS, which
+## kills one in 0.75s on a 0.9s spawn interval -- a single tower nearly held the wave alone,
+## and START_GOLD buys two.
+##
+## So the early waves rise and the last wave does not move: wave 1 goes from 90 to 270 HP,
+## wave 12 from 264 to 613, wave 20 from 576 to 1131, and wave 50 stays at 10,800. Holding
+## the end is not cosmetic -- `--fill-board` only just clears it, and 4.2 damage lost there
+## where 5.0 wins, so any lift at that end costs another damage re-tune.
+const BASE_HP_FLAT := 225.0
 
 ## Where the LAST wave lands, as a multiple of wave 1's hit points. THIS is the tuned number
 ## now; the per-wave ratio is derived from it and STANDARD_WAVES by hp_growth() below.
@@ -281,15 +347,23 @@ const BASE_HP_FLAT := 75.0
 ## anyone at all — not where it should sit. 120 keeps roughly a fifth of that headroom for a
 ## board a player could actually afford to build.
 ##
-## THE NUMBER MOST LIKELY TO NEED PLAY-TESTING in the whole file, and the reason is a gap in
-## the harness suite rather than a doubt about the measurement: nothing simulates a player's
-## gradual build-up, so the distance between "a maxed board wins" and "a good board wins" is
-## the one quantity here that was reasoned about rather than measured.
-const FINAL_HP_FACTOR := 120.0
+## This used to be THE NUMBER MOST LIKELY TO NEED PLAY-TESTING in the file, because the gap
+## between "a maxed board wins" and "a good board wins" was the one quantity here that was
+## reasoned about rather than measured — nothing simulated a player's gradual build-up.
+## `--play-sim` does now, and this is the first number read off it.
+##
+## The history, since two moves are folded into it. First 120 -> 40, in step with
+## BASE_HP_FLAT going 75 -> 225, so the product was unchanged and wave STANDARD_WAVES landed
+## on exactly the HP it had: a flatter climb from a higher floor. Then 40 -> 55, because the
+## flatter climb had been set against `--fill-board`, which is an upper bound, and a run that
+## has to EARN its towers finished with too much room left. The per-wave ratio runs
+## 1.103 -> 1.078 -> 1.085 across those two moves.
+const FINAL_HP_FACTOR := 55.0
 
 ## The per-wave HP ratio, derived so wave STANDARD_WAVES lands on FINAL_HP_FACTOR. At 50
-## waves this is 1.113, close to the map's own 1.16 — the run is longer, so each step is
-## smaller and the destination is the same.
+## waves and the current factor this is 1.085 — well under the map's own flat 1.16, because
+## the climb starts from a much higher floor (BASE_HP_FLAT 225 against the map's 75) and only
+## has to reach 55x rather than the map's 1440x.
 func hp_growth() -> float:
 	return pow(FINAL_HP_FACTOR, 1.0 / float(maxi(STANDARD_WAVES - 1, 1)))
 ## Creeps spawn at a fraction of their baked hit points, chosen by the map's difficulty
@@ -339,7 +413,11 @@ const CREEP_SPEED_PERCENT := 0.82
 ## `8 + n` (was `9 + 1.2n`) per GAME_STRATEGY_V2.md §11.2, BUILD NEXT #3 — a flatter ramp
 ## that reaches the same 28-enemy cap four waves later (wave 20 vs wave 16), part of the
 ## same session-length trim as PREP_TIME.
-const BASE_COUNT_FLAT := 8
+## Raised from 8 for the same reason as BASE_HP_FLAT, and with the same shape: BASE_COUNT_MAX
+## still caps every wave from the mid-teens on, so this lifts the early waves and leaves the
+## late ones exactly where they were. Wave 1 goes from 9 creeps to 13, wave 5 from 13 to 17,
+## and wave 20 onward is 28 either way.
+const BASE_COUNT_FLAT := 12
 const BASE_COUNT_LINEAR := 1.0
 const BASE_COUNT_MAX := 28
 ## Gold per kill: `3 + wave` (GAME_STRATEGY_V2.md §29.1, BUILD NEXT #3), replacing the map's
@@ -429,8 +507,12 @@ const ELEMENT_BOSS_LIFE_COST := 3
 ## that, walking one tower all the way to Pure costs 480 (maxed base) + 1480 (fusions) = 1960,
 ## about a quarter of the run: reachable, and a real commitment rather than a default.
 ##
-## Still unproven by PLAY. Nothing simulates a player's gradual build-up, so the numbers above
-## are a ceiling, not a budget — these three are the values most likely to move.
+## The numbers above are a CEILING rather than a budget: they come off a maxed board. What
+## `--play-sim` adds is a run that has to EARN the ladder, and it does climb all of it — a
+## full 50-wave run ends on `el=48`, every one of the twelve towers at four elements. So the
+## costs are affordable; what is still untested is whether they are a real DECISION, because
+## the simulated player buys the cheapest thing available rather than the best one and never
+## sells. These three remain the values most likely to move.
 ## Raised by half with TIER_COSTS above, and for the same reason: with 12 build spots instead
 ## of 47 the fusion ladder is where most of a run's gold has to go, so it is most of the
 ## sink. Was [160, 420, 900].

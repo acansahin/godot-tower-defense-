@@ -11,13 +11,13 @@ extends Node2D
 ## mistake that is obvious in a screenshot and invisible in a number.
 
 const BOARD := preload("res://assets/art/board_source.png")
-const WINDING_BOARD := preload("res://assets/art/maps/winding_forest_close_v1.png")
+const WINDING_BOARD := preload("res://assets/art/maps/winding_forest_cleared_v7_graded.png")
 const S_BOARD := preload("res://assets/art/maps/s_forest_v1.png")
 const WATER_SHADER := preload("res://shaders/water_flow.gdshader")
 ## Where the water is, found in the painting by tools/water_mask.py. Re-run that after any
 ## repaint; the shader ripples exactly what this file calls white.
 const WATER_MASK := preload("res://assets/art/board_water.png")
-const WINDING_WATER_MASK := preload("res://assets/art/maps/winding_forest_close_v1_water.png")
+const WINDING_WATER_MASK := preload("res://assets/art/maps/winding_forest_cleared_v7_graded_water.png")
 const S_WATER_MASK := preload("res://assets/art/maps/s_forest_v1_water.png")
 
 ## Draws the traced Game.PATH over the painting. Turn on after re-tracing; the question it
