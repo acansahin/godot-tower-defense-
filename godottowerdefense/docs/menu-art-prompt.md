@@ -6,6 +6,12 @@ It lands at `assets/art/menu/menu_bg.png` and is drawn by a plain `TextureRect` 
 
 ## What this file is NOT
 
+**Every prompt block below opens with its own attachment list, as full paths**, so a copied
+prompt carries them and nothing has to be remembered separately. They are absolute for this
+checkout — `C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\`
+— so if the repo moves, the prefix is the only thing to change. The ORDER in each list is
+load-bearing: the prompts refer to the attachments as "image 1", "image 2", and so on.
+
 [docs/board-art-prompt.md](board-art-prompt.md) is the long one, and almost none of it applies
 here. **Four tools read a board painting and turn its colours into rules** — `build_mask.py`
 decides where a tower may stand from `(g - b) > 35`, `trace_road.py` finds the road by
@@ -54,12 +60,17 @@ the one it drifts away from.
 ## The template
 
 ```text
-[Attach FIVE images, in this order:
-   1. assets/art/enemies/_source_boss_fire_walk.png    - the Fire avatar
-   2. assets/art/enemies/_source_boss_water_walk.png   - the Water avatar
-   3. assets/art/enemies/_source_boss_nature_walk.png  - the Nature avatar
-   4. assets/art/enemies/_source_boss_earth_walk.png   - the Earth avatar
-   5. assets/art/maps/winding_forest_cleared_v7_graded.png - the world they live in]
+[Attach FIVE files, in this order:
+   1. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\enemies\_source_boss_fire_walk.png
+      ^ the Fire avatar
+   2. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\enemies\_source_boss_water_walk.png
+      ^ the Water avatar
+   3. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\enemies\_source_boss_nature_walk.png
+      ^ the Nature avatar
+   4. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\enemies\_source_boss_earth_walk.png
+      ^ the Earth avatar
+   5. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\maps\winding_forest_cleared_v7_graded.png
+      ^ the world they live in]
 
 Paint one wide title-screen illustration for a fantasy tower defense game.
 

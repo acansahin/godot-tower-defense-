@@ -2,3 +2,8 @@
 # Python bytecode from tools/
 __pycache__/
 *.pyc
+
+# Art-generation scratch: the drafts, intermediate sheets and verification files a
+# creep/tower sheet is assembled from. What is worth keeping is already committed as
+# assets/art/**/_source_*.png, which is what a cycle is regenerated from.
+output/

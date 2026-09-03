@@ -12,8 +12,9 @@ and lives survive a chapter change; a tower
 that would land on the new road or blocked scenery is moved to the nearest clear ground. Both
 boards are hand-painted 1536x864 worlds whose gameplay roads are **traced out of their
 paintings**, not authored beside them. The run draws enemies from a data table
-of **creep archetypes** (including flyers, tanks, swarms, splitters, regenerators, periodic
-**bosses** and **elite** waves). The buildable roster is four elements —
+of **creep archetypes** (including flyers, tanks, swarms, splitters, regenerators, aura
+healers, blinkers, periodic **bosses**, **elite** waves and, in the second half of a run,
+**mixed** waves that put two archetypes on the road at once). The buildable roster is four elements —
 **Water / Fire / Nature / Earth** — which grow into the map's own combination towers by
 fusion (see below); Light and Darkness are retired for now, their data and art left in the
 repo. Numbers come from the original Warcraft III map where the port takes them
@@ -217,7 +218,7 @@ godottowerdefense/
     ├── projectiles.gd      # Object pool on the $Projectiles node (reused bolts)
     ├── effects.gd          # Object pool on the $Effects node (floating text + bursts)
     ├── area_ring.gd        # Expanding ring at an effect's REAL radius: every splash hit, and the area slow
-    ├── wave_manager.gd     # Spawns the 20-wave table (archetypes, bosses, economy)
+    ├── wave_manager.gd     # Spawns the seed table + generated waves (archetypes, escorts, bosses, economy)
     ├── tower_palette.gd    # Top-right drag-source, lists Game.TOWER_ORDER
     ├── placement_preview.gd # Green/red ghost footprint shown while dragging
     ├── floating_text.gd    # Rising, fading damage / gold label (built in code)
@@ -386,11 +387,14 @@ editing three files and hunting for un-named literals; it is now one file.
   colour and cost and emits `drag_started(id)` when pressed. **`Main`** then follows the
   cursor with the **`Preview`** ghost — green or red per `can_build_at()` — and builds on
   release if the spot is legal and affordable.
-- **`WaveManager`** reads the fixed 20-entry `Game.WAVES` table using plain
+- **`WaveManager`** reads the fixed 24-entry `Game.WAVES` table using plain
   `Timer` nodes (so a restart can't leave a spawn loop running). Each entry picks
   a **creep archetype** from `Game.WAVE_TYPES` (normal / fast / swarm / tank /
-  immune / regen / air / split — HP, speed, count, CC-immunity, regen and
-  splitting are all multipliers/flags on the archetype), optionally flags a
+  immune / regen / air / split / warden / wisp / gale / roc — HP, speed, count, CC-immunity,
+  regen, splitting, the heal aura, the blink and the two air variants are all
+  multipliers/flags on the archetype) and
+  may name a second one as an **escort**, which `_build_plan()` spreads through the spawn
+  order so the wave arrives as a mix rather than as two blocks. It optionally flags a
   **boss** (HP ×6, reward ×10, costs 10 lives) and an **armor element** that
   tints the wave and feeds the element matchup. It also runs the economy layer:
   interest on banked gold each wave clear (2.5%, capped at 400), a leak-free bonus
@@ -495,11 +499,15 @@ editing three files and hunting for un-named literals; it is now one file.
 | Screen shake | `main.gd` `SHAKE_DECAY`, `enemy.gd` | 7px on a boss death, 4px on a leak, bled off at 26 px/s |
 | Impact SFX cap | `audio.gd` `MAX_PER_FRAME` | 3 per effect per frame — a full board at 3x otherwise floods the 12-voice pool |
 | Element matchup | `game.gd` `ELEMENT_BEATS` | cycle light→darkness→water→fire→nature→earth→light; ×1.75 dmg if you beat the target's armor element, ×0.7 if it beats you, ×1 if either side is neutral (applies to direct, splash and poison damage) |
-| Waves | `game.gd` `WAVES` | 20 hand-authored entries teaching one archetype at a time (archetype + optional `element`/visual override + per-wave multipliers); wave 1 keeps Normal stats but introduces the Scout art. **No boss lives in this table** — every boss wave is applied by `apply_milestone()` on top of whatever supplied the wave, so the seed table and the boss-wave list cannot drift apart. Waves 21+ come from `WaveGenerator` |
+| Waves | `game.gd` `WAVES` | 24 hand-authored entries teaching one archetype at a time (archetype + optional `element`/visual override + per-wave multipliers); wave 1 keeps Normal stats but introduces the Scout art. **No boss lives in this table** — every boss wave is applied by `apply_milestone()` on top of whatever supplied the wave, so the seed table and the boss-wave list cannot drift apart. Waves 21+ come from `WaveGenerator` |
 | Map chapters | `game.gd` `BOARD_SEQUENCE` / `WAVES_PER_BOARD` | winding forest on waves 1–10, spiral on 11–20, S road from 21; each new profile added to the sequence receives the next 10-wave chapter |
-| Creep archetypes | `game.gd` `WAVE_TYPES` | normal, fast, swarm, tank, immune, regen, air (flyer), split (splits on death) — each is a set of HP/speed/count/radius multipliers and flags on top of the base scaling |
+| Creep archetypes | `game.gd` `WAVE_TYPES` | normal, fast, swarm, tank, immune, regen, air (flyer), split (splits on death), warden (heals its neighbours), wisp (jumps down the road) — each is a set of HP/speed/count/radius multipliers and flags on top of the base scaling |
 | Immune archetype | `game.gd` `WAVE_TYPES` + `enemy.gd` `cc_immune` | ignores **slow and stun**, but **not poison** — poison is damage rather than crowd control, so Nature stays the answer to these waves instead of the whole roster going dead |
 | Regen archetype | `game.gd` `WAVE_TYPES` + `enemy.gd` `REGEN_DELAY` | heals 3.5% of max HP/s, but **paused for 2s after taking any damage** — so it only heals through gaps in your coverage instead of setting a hard DPS threshold. Its "+" marker dims while suppressed. Poison ticks count as damage, so a single Nature tower shuts the healing off entirely |
+| Warden archetype | `game.gd` `WAVE_TYPES` + `enemy.gd` `heal_aura` | heals every **other** enemy within 150px for 6% of *their* max HP/s. Unlike Regen it is **not** paused by damage — the answer is to kill the healer, not to out-damage it — and it does **not stack**: the strongest aura reaching a creep is the one that heals it, so a knot of wardens heals at one warden's rate. Draws its reach as a ground disc, and rings whoever is standing in it |
+| Wisp archetype | `game.gd` `WAVE_TYPES` + `enemy.gd` `blink_distance` | jumps 150px further along the road every 4s, through the same waypoint walk `_move` uses (so it is never off the road). The jump ignores speed and slow entirely, which makes it the one creep a Water tower cannot fully answer, and it punishes a gap in your coverage. Two chevrons over its head fill up in the second before it fires |
+| Mixed waves | `wave_generator.gd` `ESCORT_*` + `wave_manager.gd` `_build_plan()` | from wave 26 a generated wave has a 55% chance of carrying a second archetype as 32% of its count, spread evenly through the spawn order. Ten archetypes give ten kinds of wave; ten with an escort give ninety, which is what stops the back half of a run reading as the same eight fights on a loop. Never on a boss wave |
+| Late-wave mix | `wave_generator.gd` `POOL` `late` + `REPEAT_WINDOW` | each archetype's roll weight drifts from its early value to its `late` one across waves 25-45, so a wave-45 roll is mostly the archetypes that ask a question (air, immune, tank, split, warden, wisp) rather than more Normals. No archetype may repeat within 2 waves — independent rolls clump, and a clump reads as the game being stuck |
 | Prep time between waves | `wave_manager.gd` `PREP_TIME` | 4s (skippable via the HUD's Send Next button, for a small gold bonus) |
 | Enemy speed / durability | `balance.gd` `CREEP_SPEED_PERCENT` / `CREEP_HP_PERCENT` | every board uses ×0.82 movement speed for clearer motion and ×1.20 HP to preserve combat pressure |
 | Tower range cap | `balance.gd` `MAX_TOWER_RANGE` | 300px. **The only unfaithful number in the port.** Light and Darkness reach 2000 WC3 units (700px), which watches 99% of the road from one spot — as it does on the original's own arena, which is why this is a design choice and not a repair. Capped, they watch 51% and take four towers to cover 95% of the road, against Fire's 18% and twelve. The defs keep the real 2000; this caps what the board honours |
@@ -600,8 +608,12 @@ back safely.
   screen pixel, which is what made the flames sparkle. Mipmaps are on, and every node that
   draws a texture asks for `TEXTURE_FILTER_LINEAR_WITH_MIPMAPS` — the 2D default is plain
   linear and ignores a mip chain entirely.
-- **All nine creep archetypes**, `assets/art/enemies/<archetype>.png`, named for its
-  `Game.WAVE_TYPES` key. `enemy.gd` draws one instead of the blob, hung by the same ground
+- **All eleven creep archetypes**, `assets/art/enemies/<archetype>.png`, named for its
+  `Game.WAVE_TYPES` key. Each row still carries an `art` fallback naming a set to borrow —
+  `Enemy.art_kind()` prefers `<key>_1.png` the moment it exists, so adding an archetype is a
+  file drop with no code change. A sheet whose tallest ink is NOT the creature's head (the
+  warden's totem staff, the air's wingspan) needs its row's `radius` re-measured, since the
+  engine scales by everything that is drawn. `enemy.gd` draws one instead of the blob, hung by the same ground
   anchor as a tower, mirrored to face the way it walks, with the armour element moved to a
   ring on the ground beneath it so a painted creature never has to be tinted. The five
   archetypes are painted as numbered animation cycles (`normal_1.png` … `normal_6.png`) of

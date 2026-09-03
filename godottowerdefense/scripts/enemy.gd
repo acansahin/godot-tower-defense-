@@ -79,6 +79,27 @@ var life_cost: int = 1       ## Lives lost if this enemy reaches the end (bosses
 var cc_immune: bool = false
 var regen_dps: float = 0.0   ## Heals this much per second.
 var split_into: int = 0      ## Children spawned on death (0 = none).
+## Warden's aura (Game.WAVE_TYPES "warden"): heals every OTHER living enemy within
+## `heal_radius` for this fraction of THEIR max health per second. Zero on everything else.
+##
+## Deliberately not suspended by Balance.REGEN_DELAY the way regen_dps is: self-regen exists
+## to be out-damaged, and this exists to be TARGETED. A heal that switches off the instant
+## anything shoots is a heal the player never has to make a decision about.
+var heal_aura: float = 0.0
+var heal_radius: float = 0.0
+var _heal_tick: float = 0.0   ## Counts down to the next aura sweep (AURA_TICK apart).
+## The strongest aura currently reaching THIS enemy, and how long that claim stays good.
+## Latched as a max rather than summed, which is what makes the aura non-stacking: six
+## wardens walking together heal at one warden's rate. Summing them made a late warden wave
+## outheal a maxed board, which is not a puzzle, just a wall.
+var _aura_rate: float = 0.0
+var _aura_time: float = 0.0
+## Wisp (Game.WAVE_TYPES "wisp"): jumps `blink_distance` px further along the road every
+## `blink_every` seconds. The jump walks the waypoint list exactly the way _move does, so a
+## wisp is never off the road; what it skips is the tower coverage in between.
+var blink_distance: float = 0.0
+var blink_every: float = 0.0
+var _blink_timer: float = 0.0
 var armor_element: String = ""  ## Element matchup vs tower damage element ("" = neutral).
 ## Boss 2's rule (GAME_STRATEGY_V2.md §10.4, BUILD NEXT #7): `armor_element` advances around
 ## Game.TOWER_ORDER's ring every ROTATING_ARMOR_PERIOD seconds while this is set, ticked in
@@ -95,9 +116,14 @@ var avatar_element: String = ""
 ## is the only way to tell a kill from a leak — which is what decides whether an avatar
 ## boss pays out its element (see WaveManager._spawn_boss).
 var was_killed: bool = false
-## Which WAVE_TYPES archetype this is ("normal", "fast", …). Set by WaveManager; the only
-## thing that reads it is the painted sprite lookup, which is why an unset one is harmless.
+## Which WAVE_TYPES archetype this is ("normal", "fast", …). Set by WaveManager. It picks
+## the painted sprite AND names the creep in the leak report (Game.record_leak), which is why
+## a wave that borrows another creature's picture sets `art_override` below instead of lying
+## about this.
 var kind: String = ""
+## A painted set to draw from INSTEAD of `kind`'s own — the wave-level "art" key, which is how
+## wave 1's Scout wears a different picture while fighting as a Normal.
+var art_override: String = ""
 
 ## Which painted set this creature actually DRAWS from. `kind` for everything ordinary, and
 ## `boss_<element>` for an element avatar once that set has been painted.
@@ -119,9 +145,17 @@ var _art_set: String = ""
 
 func art_kind() -> String:
 	if _art_set == "":
-		_art_set = kind
+		_art_set = art_override if art_override != "" else kind
 		if avatar_element != "" and Sprites.enemy("boss_" + avatar_element) != null:
 			_art_set = "boss_" + avatar_element
+		elif Sprites.enemy(_art_set) == null:
+			# An archetype that has not been painted yet borrows the set its WAVE_TYPES row
+			# names, rather than dropping to the blob. Same rule as the avatars above, and it
+			# is what lets a new archetype ship playable and become its own creature later
+			# with no code change — see the `art` note on Game.WAVE_TYPES.
+			var borrowed := String(Game.WAVE_TYPES.get(_art_set, {}).get("art", ""))
+			if borrowed != "":
+				_art_set = borrowed
 	return _art_set
 
 var _path: Array = []
@@ -321,6 +355,26 @@ func apply_knockback(distance: float, pierce: bool = false) -> bool:
 	_knockback_cd = Balance.KNOCKBACK_COOLDOWN
 	return true
 
+## Warden aura, called by the healer once per AURA_TICK. LATCHES THE MAX rather than adding:
+## the strongest aura reaching this enemy is the one that heals it, so wardens do not stack
+## with each other (see Game.WAVE_TYPES "warden" for why that matters).
+##
+## `_aura_time` is what expires the claim — an enemy that walks out of every aura simply
+## stops being refreshed, so nothing has to track which warden was healing whom, and a warden
+## dying mid-tick needs no unregister step.
+func receive_aura_heal(rate: float) -> void:
+	if _dead or rate <= 0.0:
+		return
+	if rate > _aura_rate:
+		_aura_rate = rate
+	_aura_time = AURA_TICK * 1.6
+	_repaint_overlay()
+
+## How often a warden sweeps its neighbourhood. Not per frame: the sweep is an EnemyIndex
+## query per warden, and at 0.3s a healed creep still gains health smoothly (the heal itself
+## is applied per frame from the latched rate, not in lumps at the sweep).
+const AURA_TICK := 0.3
+
 ## Sets how far along the path this enemy starts (used for split children).
 func set_progress(index: int) -> void:
 	_target_index = index
@@ -401,6 +455,14 @@ func _process(delta: float) -> void:
 		_wing_phase += delta * 10.0
 		queue_redraw()
 	if _stun_time > 0.0 or (regen_dps > 0.0 and _regen_block <= 0.0 and health < max_health):
+		_overlay.queue_redraw()
+	# A warden's aura disc lives on THIS node (it is a ground circle, like the shadow), and a
+	# wisp's chevrons brighten as its jump approaches — both are state the player has to be
+	# able to read a second ahead, so both pay for a per-frame repaint. Neither archetype is
+	# ever more than a handful of creeps in a wave.
+	if heal_aura > 0.0:
+		queue_redraw()
+	if blink_every > 0.0:
 		_overlay.queue_redraw()
 	_tick_status(delta)
 	if _dead:
@@ -584,6 +646,29 @@ func _tick_status(delta: float) -> void:
 			_repaint_overlay()
 	if _knockback_cd > 0.0:
 		_knockback_cd -= delta
+	# Incoming warden aura. Ticked before the outgoing sweep below so a warden healed by its
+	# neighbour and healing it back settles at one rate rather than oscillating by a frame.
+	if _aura_time > 0.0:
+		_aura_time -= delta
+		if health < max_health:
+			health = minf(max_health, health + _aura_rate * max_health * delta)
+			_repaint_overlay()
+		if _aura_time <= 0.0:
+			_aura_rate = 0.0
+			_repaint_overlay()
+	if heal_aura > 0.0:
+		_heal_tick -= delta
+		if _heal_tick <= 0.0:
+			_heal_tick = AURA_TICK
+			for e in EnemyIndex.query(global_position, heal_radius):
+				var other := e as Enemy
+				if other != null and other != self and other.is_alive():
+					other.receive_aura_heal(heal_aura)
+	if blink_every > 0.0 and _stun_time <= 0.0:
+		_blink_timer += delta
+		if _blink_timer >= blink_every:
+			_blink_timer -= blink_every
+			_blink()
 	if rotating_armor:
 		_armor_rotate_timer += delta
 		if _armor_rotate_timer >= ROTATING_ARMOR_PERIOD:
@@ -597,7 +682,26 @@ func _tick_status(delta: float) -> void:
 func _move(delta: float) -> void:
 	if _stun_time > 0.0:
 		return  # frozen in place
-	var remaining := speed * _slow_factor * delta
+	_advance(speed * _slow_factor * delta)
+
+## A wisp's jump: the same road, `blink_distance` further along it. Goes through _advance so
+## it obeys every rule walking does — it turns corners, it cannot leave the path, and running
+## off the end still leaks a life rather than sliding past the exit.
+##
+## Nothing here reads `speed` or `_slow_factor`, which is the point: a slowed wisp still
+## covers the same ground per jump, so a slow tower answers only the half of its progress
+## that its feet are doing.
+func _blink() -> void:
+	if _dead:
+		return
+	flash()  # the same white pop a hit gives, which is the cheapest "it moved" the board has
+	_advance(blink_distance)
+	_repaint_overlay()
+
+## Walks `remaining` px forward along the waypoint list, turning to face each leg and leaking
+## if it runs off the end. Shared by the per-frame walk and the wisp's jump so the two cannot
+## disagree about what "along the road" means.
+func _advance(remaining: float) -> void:
 	# A smoothed road has short adjacent legs. Consume the whole frame's travel across as
 	# many of them as necessary; stopping after one leg capped fast enemies to one waypoint
 	# per frame and made motion depend on frame rate / the 1x–3x speed setting.
@@ -722,7 +826,30 @@ func _draw() -> void:
 		draw_set_transform(Vector2(0, ground_y), 0.0, Vector2(1.0, Game.GROUND_SQUASH))
 		draw_circle(Vector2.ZERO, radius * 0.9, Color(0, 0, 0, 0.18))
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	if heal_aura > 0.0:
+		_draw_heal_aura()
 	_draw_element_ring()
+
+## The Warden's reach, drawn on the ground where the shadow is and squashed with it, because
+## that is the question the player is being asked: which creeps are STANDING IN IT. A ring
+## struck around the body would have said "this one heals" and left the answer off screen.
+##
+## `heal_radius` is a world distance, so it is drawn at world scale and not off the creep's
+## own size — a swarm-sized warden and a boss-sized one cover the same ground and must look
+## like they do.
+func _draw_heal_aura() -> void:
+	var pulse: float = 0.5 + 0.5 * sin(_anim_phase * 1.6)
+	var col := Color(0.35, 0.95, 0.70)
+	draw_set_transform(Vector2(0, radius * 0.22), 0.0, Vector2(1.0, Game.GROUND_SQUASH))
+	draw_circle(Vector2.ZERO, heal_radius, Color(col.r, col.g, col.b, 0.05))
+	draw_arc(Vector2.ZERO, heal_radius, 0.0, TAU, 40,
+			Color(col.r, col.g, col.b, 0.22 + 0.18 * pulse), 2.0, true)
+	# A second ring sweeping outward from the feet: the aura reads as something being GIVEN
+	# OUT, which a static circle of the same colour as the poison ring does not.
+	var sweep: float = fposmod(_anim_phase * 0.5, 1.0)
+	draw_arc(Vector2.ZERO, heal_radius * sweep, 0.0, TAU, 32,
+			Color(col.r, col.g, col.b, 0.30 * (1.0 - sweep)), 2.0, true)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 ## Pale air strokes trailing BEHIND a flyer. The painted Air creature currently has one pose,
 ## so its transform supplies the wingbeat; these arcs make that beat unmistakable at game zoom
@@ -920,8 +1047,23 @@ func _draw_overlay(ci: CanvasItem) -> void:
 		for i in range(3):
 			var a := _anim_phase * 4.0 + i * TAU / 3.0
 			ci.draw_circle(mid + Vector2(cos(a), sin(a)) * (rr + 13.0), 3.9, Color(1.0, 0.95, 0.45))
+	# Being healed by a warden. Sits between the slow and poison rings so several statuses at
+	# once stay countable, and in the warden's own colour so the cause is obvious.
+	if _aura_time > 0.0:
+		ci.draw_arc(mid, rr + 6.5, 0.0, TAU, 22, Color(0.35, 0.95, 0.70, 0.85), 3.0, true)
 	# Archetype markers so wave types read at a glance. (The cc_immune ward is drawn at the
 	# top of this function, under everything else.)
+	if heal_aura > 0.0:
+		# A filled disc with a cross cut into it, NOT the bare "+" regen uses — the two are
+		# both green heals and the player has to tell "heals itself" from "heals the others"
+		# at a glance, so they get different shapes rather than different shades.
+		var wp := mid + Vector2(rr * 0.55, -rr * 0.55)
+		ci.draw_circle(wp, 7.5, Color(0.20, 0.55, 0.42, 0.9))
+		ci.draw_circle(wp, 7.5, Color(0.45, 1.0, 0.75, 0.35))
+		ci.draw_line(wp + Vector2(-4.0, 0), wp + Vector2(4.0, 0), Color(0.85, 1.0, 0.92), 2.4)
+		ci.draw_line(wp + Vector2(0, -4.0), wp + Vector2(0, 4.0), Color(0.85, 1.0, 0.92), 2.4)
+	if blink_every > 0.0:
+		_draw_blink_tell(ci)
 	if regen_dps > 0.0:
 		# Bright "+" and a pulsing ring only while it is actually healing; dim otherwise.
 		# This makes "my damage is stopping the heal" unmistakable at a glance.
@@ -951,6 +1093,34 @@ func _draw_overlay(ci: CanvasItem) -> void:
 		hp_col = Color(0.90, 0.45, 0.20)
 	ci.draw_rect(Rect2(top, Vector2(bar_w * ratio, bar_h)), hp_col)
 	ci.draw_rect(Rect2(top, Vector2(bar_w, bar_h)), Color(0, 0, 0, 0.5), false, 1.0)
+
+## The wisp's jump, one second before it happens: two chevrons pointing the way it is about
+## to go, filling up as the timer runs out.
+##
+## A telegraph rather than a badge. The jump is the one thing on the board that moves a creep
+## without moving its feet, so a player who does not see it coming reads it as the game
+## teleporting things at random; a player who does sees the wave arrive at the gap in their
+## coverage and has a second to answer. The chevrons point along `_facing`, which is the
+## direction the sprite is already walking, so they can only ever point down the road.
+func _draw_blink_tell(ci: CanvasItem) -> void:
+	var t: float = clampf(_blink_timer / maxf(blink_every, 0.01), 0.0, 1.0)
+	var alpha := 0.30 + 0.70 * t * t
+	# Above the head beside the health bar, NOT over the body. Struck across the sprite the
+	# chevrons landed on a painted torso full of its own detail and disappeared into it — the
+	# strip above the head is the one place on a creep that is always empty board.
+	var origin := Vector2(_visual_dx(), _head_y() - 32.0)
+	# `_facing` is +1 while walking screen-LEFT, so forward is -x on that heading.
+	var dir := -_facing
+	for i in range(2):
+		var x := origin.x + dir * (float(i) * 9.0 - 4.5)
+		var stroke := PackedVector2Array([
+			Vector2(x - dir * 5.5, origin.y - 7.0), Vector2(x, origin.y),
+			Vector2(x - dir * 5.5, origin.y + 7.0),
+		])
+		# Dark underlay first: the board runs from sunlit meadow to grey cobble to black
+		# conifer, and a single pale stroke reads on the first two and vanishes on the third.
+		ci.draw_polyline(stroke, Color(0.05, 0.02, 0.10, alpha * 0.75), 5.5, true)
+		ci.draw_polyline(stroke, Color(0.85, 0.72, 1.0, alpha), 2.6, true)
 
 ## Gold crown sitting on a boss's head, drawn onto the overlay canvas item `ci`.
 func _draw_crown(ci: CanvasItem) -> void:

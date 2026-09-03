@@ -17,6 +17,12 @@ below comes out of `python tools/art_match.py`.
 
 ## Two paths, and the cheap one comes first
 
+**Every prompt block below opens with its own attachment list, as full paths**, so a copied
+prompt carries them and nothing has to be remembered separately. They are absolute for this
+checkout — `C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\`
+— so if the repo moves, the prefix is the only thing to change. The ORDER in each list is
+load-bearing: the prompts refer to the attachments as "image 1", "image 2", and so on.
+
 **Path A — EDIT the board that exists.** Clear the trees and rocks out of marked regions
 and change nothing else. The road does not move, so `Game.WINDING_PATH` is untouched and
 there is NO re-trace. It fixes the build-space problem and only that.
@@ -259,12 +265,16 @@ Written as fractions of the image, since the generator picks the resolution:
 ## The template
 
 ```text
-[Attach FIVE images, in this order:
-   1. assets/art/towers/_source_fire.png    - the buildings that must stand on this board
-   2. assets/art/towers/_source_water.png   - ditto
-   3. assets/art/board_source.png           - the light and palette to match
-   4. assets/art/maps/winding_forest_close_v1.png - the board being replaced, LAYOUT ONLY
-   5. the same board with the wanted open ground drawn on it in yellow - see below]
+[Attach FIVE files, in this order:
+   1. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\towers\_source_fire.png
+      ^ the buildings that must stand on this board
+   2. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\towers\_source_water.png
+      ^ ditto
+   3. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\board_source.png
+      ^ the light and palette to match
+   4. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\maps\winding_forest_close_v1.png
+      ^ the board being replaced, LAYOUT ONLY
+   5. the same board as 4, with the wanted open ground drawn on it in yellow - see below]
 
 Images 1 and 2 are towers the player will place on the board you are about to paint. Images
 3, 4 and 5 are boards. Paint a REPLACEMENT board for a 2D tower defense.
@@ -441,10 +451,13 @@ look, and describe what is VISIBLE at that look.
 ### The prompt
 
 ```text
-[Attach THREE images:
-   1. assets/art/maps/winding_forest_cleared_v7_graded.png - the scene to re-render
-   2. assets/art/towers/_source_fire.png                   - the view to match
-   3. assets/art/towers/_source_water.png                  - ditto]
+[Attach THREE files, in this order:
+   1. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\maps\winding_forest_cleared_v7_graded.png
+      ^ the scene to re-render
+   2. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\towers\_source_fire.png
+      ^ the view to match
+   3. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\towers\_source_water.png
+      ^ ditto]
 
 Image 1 is a game map drawn in FLAT TOP-DOWN view, straight down from above like a
 satellite photo. Redraw the same place as a CLASSIC ISOMETRIC REAL-TIME-STRATEGY MAP - the

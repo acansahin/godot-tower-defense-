@@ -22,6 +22,12 @@ only the prompt.
 
 ## Attach the board. This is the whole method.
 
+**Every prompt block below opens with its own attachment list, as full paths**, so a copied
+prompt carries them and nothing has to be remembered separately. They are absolute for this
+checkout — `C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\`
+— so if the repo moves, the prefix is the only thing to change. The ORDER in each list is
+load-bearing: the prompts refer to the attachments as "image 1", "image 2", and so on.
+
 The six sets were generated **twice**. The first pass described the style in words — a
 named art direction, a list of materials, a camera angle in degrees. It produced six towers
 that were internally consistent and wrong: hard black outlines, saturated bodies, facades
@@ -41,7 +47,10 @@ fixed by writing the measurement into the prompt rather than by writing code (se
 ## The template
 
 ```text
-[Attach board_source.png with this prompt.]
+[Attach this file:
+   1. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\board_source.png
+   ^ for a FUSION sheet attach the WINDING board instead, plus both parent sheets —
+     see "Fusion sheets" below for the three exact paths.]
 
 The attached image is the game board this asset must live on. Study it first: its camera
 angle, its light direction, how saturated its colours are, how soft its outlines are, how
