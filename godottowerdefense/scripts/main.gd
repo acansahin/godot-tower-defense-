@@ -108,6 +108,9 @@ func _ready() -> void:
 		_fill_board()
 	if OS.get_cmdline_user_args().has("--air-pose"):
 		_air_pose()
+	for arg in OS.get_cmdline_user_args():
+		if String(arg).begins_with("--creep-pose:"):
+			_creep_pose(String(arg).split(":")[1])
 	if OS.get_cmdline_user_args().has("--boss-pose"):
 		_boss_pose()
 	if OS.get_cmdline_user_args().has("--avatar-pose"):
@@ -644,6 +647,8 @@ func _dump_waves() -> void:
 			flags += " hp=%.2f" % float(def.get("hp", 1.0))
 		if float(def.get("count", 1.0)) != 1.0:
 			flags += " count=%.2f" % float(def.get("count", 1.0))
+		if def.has("escort"):
+			flags += " +%s" % String(def["escort"])
 		print("w%02d [%s] %-8s el=%-6s%s" % [n, src, String(def["type"]),
 				String(def.get("element", "-")), flags])
 	print("--- WAVE DUMP END (impure generated waves: %d) ---" % impure)
@@ -680,6 +685,67 @@ func _air_pose() -> void:
 		# Half of them damaged, so the health bar is visible against the lifted body.
 		if i % 2 == 1:
 			e.take_damage(150.0)
+
+## TEMPORARY verification harness: parks a line of ONE archetype along the road on an empty
+## board, with a plain Normal walking beside each so an aura has something to heal.
+##
+##   Godot.exe --path <project> res://scenes/Main.tscn --quit-after 400 -- --creep-pose:warden --shot:3
+##
+## WITHOUT --headless, like every other pose harness — what it is for is the half of a new
+## archetype that no dump can check: the Warden's ground aura and the ring it puts on whoever
+## is standing in it, and the Wisp's chevrons filling up before it jumps. Neither is reachable
+## any other way: `--fill-board` kills every creep within a frame of its spawn and buries the
+## road under towers, and a real run reaches wave 21 only after twenty waves of play.
+##
+## It sets the archetype's traits through the SAME WAVE_TYPES fields WaveManager._spawn_one
+## reads, so a harness that draws a warden's aura is proof the archetype's own row draws one —
+## not proof that this function can set a variable.
+func _creep_pose(kind: String) -> void:
+	if not Game.WAVE_TYPES.has(kind):
+		print("--creep-pose: no such archetype '%s' (have: %s)" % [kind,
+				", ".join(PackedStringArray(Game.WAVE_TYPES.keys()))])
+		return
+	wave_manager.set_process(false)
+	var enemy_scene: PackedScene = load("res://scenes/Enemy.tscn")
+	var def: Dictionary = Game.WAVE_TYPES[kind]
+	var plain: Dictionary = Game.WAVE_TYPES["normal"]
+	var resolved := ""
+	for i in range(5):
+		var step := int(float(Game.active_path.size() - 2) * float(i + 0.5) / 5.0)
+		for pair in range(2):
+			# pair 0 is the archetype itself; pair 1 a plain Normal a few waypoints behind it,
+			# inside a Warden's reach and outside a Wisp's, which is what makes the aura's
+			# effect on a BYSTANDER visible rather than only the aura disc itself.
+			var row: Dictionary = def if pair == 0 else plain
+			var e := enemy_scene.instantiate() as Enemy
+			e.setup(2000.0, 20.0, 5, Color(row.get("color", Color.WHITE)))
+			e.kind = kind if pair == 0 else "normal"
+			e.radius = Balance.ENEMY_BASE_RADIUS * float(row.get("radius", 1.0))
+			e.cc_immune = row.get("cc_immune", false)
+			e.heal_aura = float(row.get("heal_aura", 0.0))
+			e.heal_radius = float(row.get("heal_radius", 0.0))
+			e.blink_distance = float(row.get("blink", 0.0))
+			e.blink_every = float(row.get("blink_every", 0.0))
+			enemies_root.add_child(e)
+			# Flyer archetypes (air, gale, roc) have to be posed AIRBORNE or the harness would
+			# photograph them walking the road — the one thing that never happens in a run.
+			# make_flying() is the same call WaveManager._spawn_one makes, so the wingbeat,
+			# lift and shadow are the row's own behaviour, not the harness's.
+			if pair == 0 and bool(row.get("air", false)):
+				e.make_flying()
+			if pair == 0:
+				# ASK THE ENEMY, do not restate the row. The row's `art` key is the FALLBACK,
+				# not the answer — printing that made this harness cheerfully report
+				# "art=regen" on the very run where a freshly dropped warden_1.png was on
+				# screen, which is the one question it exists to answer.
+				resolved = e.art_kind()
+			var at := clampi(step + pair * 3, 1, Game.active_path.size() - 2)
+			e.set_progress(at)
+			e.global_position = Game.active_path[at]
+			# Damaged, or a heal has nothing to show and the health bar never moves.
+			e.take_damage(1200.0)
+	print("--creep-pose: %s  art=%s%s" % [kind, resolved,
+			"  (BORROWED - %s has no sheet)" % kind if resolved != kind else ""])
 
 ## TEMPORARY verification harness: stages all THREE boss rules on an empty board so
 ## cc_immune's ward, rotating_armor's icon/ring and the avatar's element sigil can be

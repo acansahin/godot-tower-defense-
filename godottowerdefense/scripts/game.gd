@@ -809,7 +809,14 @@ func fusion_display_name(def: Dictionary) -> String:
 # (quadratic HP etc. in wave_manager) times the archetype's multipliers. Fields
 # (all optional, default 1.0 / false / 0):
 #   name, color, hp, spd, count, radius, cc_immune, regen (frac of max hp/s),
-#   split (children on death), air (all flyers).
+#   split (children on death), air (all flyers), heal_aura + heal_radius (Warden),
+#   blink + blink_every (Wisp), art (the painted set to borrow until this one is painted).
+#
+# `art` is a FALLBACK, not an override. Enemy.art_kind() consults it only while this
+# archetype's own `<key>_1.png` is missing, exactly the way the four element avatars fall
+# back to the crowned archetype — so dropping a painted `warden_1..N.png` into
+# assets/art/enemies/ switches the Warden onto its own sheet with NO code change, and until
+# then the wave is playable instead of being a row of untextured blobs.
 const WAVE_TYPES := {
 	"normal": {"name": "Normal", "color": Color(0.85, 0.30, 0.30)},
 	"fast":   {"name": "Fast",   "color": Color(0.95, 0.85, 0.25), "hp": 0.6, "spd": 1.7, "count": 1.3, "radius": 0.85},
@@ -823,6 +830,63 @@ const WAVE_TYPES := {
 	# pose it replaced, and its health bar floated clear of it.
 	"air":    {"name": "Air",    "color": Color(0.72, 0.78, 0.96), "air": true, "radius": 1.4},
 	"split":  {"name": "Splitter","color": Color(0.85, 0.55, 0.25), "hp": 1.0, "count": 0.6, "split": 2, "radius": 1.15},
+	# --- Late-run archetypes (taught on waves 21 and 23, rolled by WaveGenerator after) ---
+	# Both exist for one reason: waves 21-50 all came out of a pool of eight, so the second
+	# half of a Standard run met the same eight creatures six times each. Each of these asks
+	# a question none of the eight asks, so a late wave is a different FIGHT and not just a
+	# bigger one.
+	#
+	# Warden heals every OTHER enemy near it — `regen` heals itself, which a player answers
+	# with more damage; an aura is answered by choosing a target, which is a different
+	# decision entirely. It is deliberately NOT blocked by recent damage (Balance.REGEN_DELAY
+	# suspends self-regen but not this), because a heal that stops the moment you shoot is a
+	# heal nobody ever has to think about. The aura does NOT STACK either — see
+	# Enemy.receive_aura_heal: a knot of six wardens heals at one warden's rate, so the answer
+	# stays "kill the healers" and never becomes "this wave cannot be killed at all".
+	#
+	# 1.20, and the reason is the one the "air" row above records: a bounding box is not a
+	# body. The warden leans on a totem staff that stands above its own head, and enemy.gd
+	# scales a sprite by everything that is DRAWN — so at the 1.05 this shipped with, the
+	# 65.5px budget went partly into staff and left the creature shorter than the 62.4px
+	# Normal it is supposed to loom over.
+	#
+	# MEASURED OFF THE SHIPPED CYCLE, not off a guess: in warden_1.png the creature is 86.8%
+	# of the frame's ink and the staff the other 13.2%, so 1.20 draws 74.9px of which 65.0px
+	# is warden — the ~5% over a Normal that the 1.05 was reaching for. It briefly sat at 1.30,
+	# which was right for the single character pose the cycle was generated FROM: that one
+	# carried a taller staff (79% creature), and the cycle redrew it shorter. So re-measure
+	# this the day frame 1 changes; nothing here is a free choice.
+	"warden": {"name": "Warden", "color": Color(0.35, 0.90, 0.68), "art": "regen",
+		"hp": 1.25, "spd": 0.9, "count": 0.7, "radius": 1.20,
+		"heal_aura": 0.06, "heal_radius": 150.0},
+	# Wisp jumps `blink` px further down the road every `blink_every` seconds. It is the only
+	# creep whose progress does not come from its speed, so it is the only one a slow cannot
+	# fully answer — and it punishes a board with a gap in it, since a jump can carry it
+	# clean through the one stretch nothing covers.
+	"wisp":   {"name": "Wisp", "color": Color(0.72, 0.58, 1.00), "art": "fast",
+		"hp": 0.75, "spd": 0.95, "count": 1.1, "radius": 0.9,
+		"blink": 150.0, "blink_every": 4.0},
+	# --- Air variants (taught on 26 and 27, rolled by WaveGenerator after) ---
+	# The lone dragon on wave 6 asks ONE thing: can your board reach the sky at all? These two
+	# ask the follow-ups it never does. Both set `air: true`, so WaveManager runs them through
+	# make_flying() the same as the dragon — squishier, faster, pale, and hittable only by a
+	# can_hit_flying tower — and both borrow the dragon's own sheet (`art: "air"`) until they
+	# are painted, exactly the way warden/wisp borrow theirs. Pure data: every field here is
+	# one WaveManager._spawn_one already reads, so neither needs a line of code.
+	#
+	# Gale is a FLOCK — the flyer question and the swarm question in one wave. One archer tower
+	# covers the sky against a single dragon and drowns against a cloud of gnats, so the answer
+	# is splash-capable anti-air, not raw single-target DPS. make_flying() already halves the HP
+	# and speeds it up; these push it the rest of the way to fast, fragile and numerous.
+	"gale":   {"name": "Gale", "color": Color(0.80, 0.90, 1.00), "air": true, "art": "air",
+		"hp": 0.5, "spd": 1.15, "count": 2.3, "radius": 1.2},
+	# Roc is the opposite end: a lone airborne TANK. The dragon dies to any anti-air that can
+	# reach it; the roc asks whether that anti-air can also out-damage a wall of health before
+	# it leaks. spd 0.7 keeps it in the kill zone longer, which is the only mercy it grants —
+	# and 3.3 x make_flying()'s 0.65 leaves ~2.1x HP, a genuine air tank rather than a big
+	# dragon. radius 1.9 so the borrowed sheet reads as the heavier creature until it is drawn.
+	"roc":    {"name": "Roc", "color": Color(0.62, 0.70, 0.88), "air": true, "art": "air",
+		"hp": 3.3, "spd": 0.7, "count": 0.4, "radius": 1.9},
 }
 
 ## The SEED TABLE: the hand-authored opening of a run. A run does not end here — past the
@@ -867,6 +931,25 @@ const WAVES: Array = [
 	{"type": "swarm", "element": "water"},             # 18
 	{"type": "tank", "element": "fire", "hp": 0.85},   # 19
 	{"type": "swarm", "element": "fire"},              # 20 — OVERRIDDEN: AVATAR 2 walks alone
+	# 21-24 exist so the two late archetypes are TAUGHT on a wave of their own, the way every
+	# earlier mechanic is, instead of first appearing inside a generated wave that is also
+	# rolling an element and possibly an escort. 22 and 24 are ordinary waves between them:
+	# a new idea lands, then the player gets one wave to build the answer before the next.
+	{"type": "warden", "element": "nature"},           # 21 — heals its neighbours: pick a target
+	{"type": "fast", "element": "earth"},              # 22
+	{"type": "wisp", "element": "water"},              # 23 — jumps the road: mind the gaps
+	{"type": "tank", "element": "nature"},             # 24
+	# 25 is OVERRIDDEN by the midpoint boss (apply_milestone). It carries an explicit creep row
+	# anyway, as the thing wave 25 reverts to if MIDPOINT_BOSS_WAVE ever moves — a tank/water so
+	# the reverted wave still matches the boss it usually is. The generator gives no escort
+	# before wave 26, so this changes nothing about the boss the player actually meets.
+	{"type": "tank", "element": "water"},              # 25 — OVERRIDDEN: MIDPOINT BOSS
+	# 26-27 TEACH the two air variants a wave of their own, the way every other archetype is
+	# taught, before the generator is allowed to roll them (POOL `from` 27/28). Both are flyers
+	# so they stay neutral — make_flying() overwrites the body tint, so an element on a flyer is
+	# armour the player cannot see.
+	{"type": "gale"},                                  # 26 — a flock of flyers: splash the sky
+	{"type": "roc"},                                   # 27 — a lone air tank: out-damage the wall
 ]
 
 ## The two SET-PIECE bosses, keyed by wave. Unlike the avatars these keep their creep wave —

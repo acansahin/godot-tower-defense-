@@ -1,6 +1,6 @@
 # Generating a creep animation sheet
 
-The nine creep archetypes are painted PNGs, and each one is an **animation cycle**:
+Nine of the eleven creep archetypes are painted PNGs, and each one is an **animation cycle**:
 `assets/art/enemies/<archetype>_1.png` … `_N.png`. The game reads how many frames exist off
 the folder — nothing declares the number anywhere — so a creature painted with two frames and
 one painted with six walk the same road, and re-animating one is a file copy.
@@ -8,8 +8,16 @@ one painted with six walk the same road, and re-animating one is a file copy.
 This file is the recipe. The pipeline around it is in [CLAUDE.md](../../CLAUDE.md) ("Painted
 creep"); this file is only the prompt and the traps.
 
-**The target is twelve frames per archetype.** The nine are: `tutorial`, `normal`, `fast`,
-`swarm`, `tank`, `air`, `immune`, `regen`, `split`.
+**Every prompt block below opens with its own attachment list, as full paths**, so a copied
+prompt carries them and nothing has to be remembered separately. They are absolute for this
+checkout — `C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\`
+— so if the repo moves, the prefix is the only thing to change. The ORDER in each list is
+load-bearing: the prompts refer to the attachments as "image 1", "image 2", "image 3".
+
+**The target is twelve frames per archetype.** The nine painted are: `tutorial`, `normal`,
+`fast`, `swarm`, `tank`, `air`, `immune`, `regen`, `split`. The two **not yet painted** are
+`warden` and `wisp` — see "A brand-new archetype" at the bottom, which is a different job:
+they have no existing frame to attach, so the character has to be created first.
 
 Twelve because the cycle is ONE STRIDE and the game plays it at the creep's own walking rate,
 which is about one stride a second early in a run. Six frames is therefore **6.2 fps**, and
@@ -30,12 +38,13 @@ Two attachments, and they do different jobs.
   fine and do not match, and that reads on the board as a strobing flicker, not as a run.
 
   Which file that is depends on how far the archetype has got. `<archetype>` throughout this
-  document is a key of `Game.WAVE_TYPES`, and there are nine:
+  document is a key of `Game.WAVE_TYPES`, and there are eleven:
 
   | Archetype | Attach |
   |---|---|
   | `tutorial` `normal` `fast` `swarm` `tank` | `assets/art/enemies/<archetype>_1.png` |
   | `air` `immune` `regen` `split` | `assets/art/enemies/<archetype>.png` — no `_1`, these four are single-pose |
+  | `warden` `wisp` | nothing exists yet — do the two-step in "A brand-new archetype" below |
 
 ## One sheet per creature. One column, one frame per row.
 
@@ -47,8 +56,15 @@ generator is drawing four different creatures across a wide canvas as well.
 `cut_sprites.py` reads a **row per frame**:
 
 ```bash
-python tools/cut_sprites.py <sheet.png> godottowerdefense/assets/art/enemies normal 220
+python tools/cut_sprites.py <sheet.png> godottowerdefense/assets/art/enemies normal 180
 ```
+
+**The last argument is not a free number.** `cut_sprites.py` averages the sheet down, and how
+far it averages is what stops generated art sparkling when the GPU samples it (CLAUDE.md,
+"Generating mipmaps changes nothing on its own"). The shipped roster is cut to **150 px for a
+62.4 px draw — 2.40x**, so match that ratio rather than the number: an archetype drawn larger
+needs a proportionally larger cut. The warden draws 74.9 px, so 74.9 x 2.4 = **180**. Cutting
+it at 220 is not broken, it is just 2.94x — more source than the pipeline is tuned for.
 
 A single name on a multi-row sheet is taken as a name (not as a tier prefix), so this writes
 `normal_1.png` … `normal_12.png`, top row to bottom row.
@@ -70,8 +86,11 @@ there" below means about the anchor.
 ## The template
 
 ```text
-[Attach board_source.png AND the archetype's existing frame with this prompt — see the
-table above for which file that is.]
+[Attach these two files:
+   1. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\board_source.png
+   2. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\enemies\<archetype>_1.png
+      ^ the archetype's existing frame — see the table above for which file that is;
+        for a brand-new archetype it is _source_<archetype>_pose.png in the same folder.]
 
 The first attached image is the game board this creature walks on. The second is the
 creature itself, already painted. Study both: the board's camera angle, light direction,
@@ -137,8 +156,9 @@ rise and fall (see "Why each constraint is there" below). Rather than hand-mergi
 here is the whole Air prompt, ready to paste:
 
 ```text
-[Attach TWO images: assets/art/board_source.png first, then
-assets/art/enemies/air.png.]
+[Attach these two files, in this order:
+   1. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\board_source.png
+   2. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\enemies\air.png]
 
 The first attached image is the game board this creature flies over. The second is the
 creature itself, already painted. Study both: the board's camera angle, light direction,
@@ -370,10 +390,10 @@ below. None of them is visible in a viewer — the sheet looks finished and fail
 ### The template
 
 ```text
-[Attach THREE images, in this order:
-   1. assets/art/maps/winding_forest_cleared_v7_graded.png   (the board it walks on)
-   2. assets/art/enemies/tank_1.png                          (the roster's render style)
-   3. assets/art/towers/<element>_5.png                      (this element's own palette)]
+[Attach THREE files, in this order:
+   1. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\maps\winding_forest_cleared_v7_graded.png   (the board it walks on)
+   2. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\enemies\tank_1.png                          (the roster's render style)
+   3. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\towers\<element>_5.png   (this element's own palette)]
 
 The first attached image is the game board this creature walks on. The second is an existing
 creature from the same game. The third is a building of the element this new creature embodies.
@@ -496,7 +516,9 @@ real transparency first (`python tools/key_white.py <sheet> <keyed.png>`), or th
 copies the painted checkerboard back into its answer:
 
 ```text
-[Attach the first sheet — frames 1-6, with real transparency.]
+[Attach the first sheet — frames 1-6, with real transparency. It is whatever the generator
+handed back for frames 1-6; if it was saved into the repo it is under
+C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\enemies\ as _source_<archetype>_*.png.]
 
 The attached sheet is frames 1-6 of a twelve-frame walk cycle for this creature. Paint frames
 7-12: the SAME creature, the same size, the same materials and colours, in one vertical column
@@ -521,6 +543,81 @@ window and the creature changes size mid-cycle:
 
 ```bash
 python tools/stitch_sheets.py <out.png> <frames_1_6.png> <frames_7_12.png>
+```
+
+**Stitching does not rescale, so check the two halves are the same size — the tool will tell
+you they are not and it is easy to read past.** `stitch_sheets.py` pads the narrower sheet to
+the wider one's width and says so (`! widths differ; padding to N`). That warning is about the
+CANVAS, and the thing that actually matters is the CREATURE: two sheets generated separately
+come back on different canvases with the creature drawn at its own scale on each, and the
+padding preserves that difference instead of closing it.
+
+Measure it after cutting — per-frame ink height across the twelve:
+
+| | frames 1-6 | frames 7-12 |
+|---|---|---|
+| wisp, as stitched | 122-150 px | 120-130 px |
+| after rescaling half 2 by 1.145 | 122-150 px | 137-149 px |
+
+The first row is a creature that shrinks 15% halfway through every stride — the "lurch" this
+section warns about, arriving through the back door after the leg swap was got right. The fix
+is to scale the second sheet by the ratio of the two halves' median frame heights BEFORE
+stitching; the cut downsamples afterwards anyway, so the resample costs nothing visible.
+
+#### `wisp` — frames 7-12
+
+The generic text above says the arms swap with the legs. **For a creature that CARRIES
+something that must stay in one hand, they do not** — the wisp's crystal arm has to stay back
+in the same hand or the health bar and the jump chevrons, which are centred on the middle of
+the drawn area, swing across the creature halfway through every stride. Only the free arm
+swaps.
+
+Worth knowing what this cost, because the sheet arrived in the shape this section predicts and
+then some: five separate images, every one of them the FIRST six poses again, at 875x1798
+instead of the requested 700x4200, none with an alpha channel, and two of the five with the
+transparency checkerboard painted into the pixels. Frames 7-12 were never drawn. The usable
+one needed `key_white.py` and then `respace_frames.py --frames 6`, because its last two frames
+touched and the cutter silently returned five.
+
+```text
+[Attach this file:
+   1. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\enemies\_source_wisp_run_1_6.png]
+
+The attached sheet is frames 1-6 of a twelve-frame walk cycle for this creature. Paint frames
+7-12: the SAME creature, the same size, the same materials and colours, in one vertical column
+of six rows on a genuinely transparent background.
+
+Frames 7-12 are frames 1-6 with THE OTHER LEG LEADING. Frame 7 is frame 1 with the legs
+swapped: where frame 1 has the near leg striding forward and the far leg trailing, frame 7 has
+the far leg forward and the near leg trailing. Then 8 matches 2, 9 matches 3, 10 matches 4,
+11 matches 5, 12 matches 6, each with the legs swapped.
+
+THE CRYSTAL ARM DOES NOT SWAP. The glowing crystal stays in the SAME hand it is in on the
+attached sheet, held low, reaching BACK behind the creature, extended about the same distance
+from the body in all six new frames, with its ribbon of light one thick loop. Only the FREE
+arm swings with the legs. The game centres this creature's health bar and its warning markers
+on the middle of the drawn area, so a crystal that changes hands or reach makes those jump.
+
+THE HEAD STAYS THE TALLEST THING in every frame — nothing above it, no raised arm, no crystal
+lifted, no wrap-end streaming upward.
+
+These are NOT mirror images. The creature still faces SCREEN-LEFT in all six, still walks to
+the left, and the lighting still comes from the same side. Only which leg is in front changes.
+
+Same height on every row, and the same height as the attached sheet — the two files are cut on
+one shared window and hung from one anchor, so a size change between them lands as a lurch
+halfway through the stride.
+
+SAVE IT WITH A REAL ALPHA CHANNEL. A 32-bit PNG whose background is genuinely transparent —
+not a white background, and not a grey-and-white checkerboard pattern painted into the pixels.
+Both arrive looking correct in a viewer and are unusable: the tool that cuts this sheet finds
+the frames by looking for EMPTY rows between them.
+
+At least 60 px of completely empty rows between frames and the frames must not touch — the
+attached sheet's last two frames overlapped and had to be separated by hand. Nothing below the
+lowest foot, no shadow, no ground ring, no text, no frame borders.
+
+ONE COLUMN of six rows. Canvas roughly 700 x 2100 pixels.
 ```
 
 ### Twenty-four frames
@@ -809,3 +906,732 @@ at once and prints the art set each one resolved to:
 A line reading `fire art=normal` means the sheet is not being picked up — wrong name, wrong
 folder, or not imported — and on the board that failure looks exactly like an element nobody
 has painted yet.
+
+
+## A brand-new archetype
+
+`warden` and `wisp` are in the game and playing right now, each borrowing another
+archetype's sheet through its `Game.WAVE_TYPES` row's `art` key (`warden` wears `regen`,
+`wisp` wears `fast`). That is a placeholder with a deadline attached: `Enemy.art_kind()`
+prefers `<key>_1.png` the moment it exists, so **dropping the finished frames into
+`assets/art/enemies/` is the whole handover** — no code change, no registration, nothing to
+flip.
+
+The method above assumes a creature already exists to attach. These two do not, so it is
+**two generations, not one**, and skipping the first is the mistake to avoid: asking for
+twelve frames of a creature that has never been drawn gives twelve creatures.
+
+### Step 1 — the character, one frame
+
+**Attach THREE images**, and the third is the one that stops this going wrong:
+
+| Attach | Why |
+|---|---|
+| `assets/art/board_source.png` | the board's camera height, light direction, saturation ceiling, edge softness — the job it does for every sheet in this document |
+| `assets/art/enemies/normal_1.png` | the ROSTER reference. A new creature has to look like a colleague of the nine that exist, not like a visitor from another game |
+| `assets/art/enemies/regen_1.png` (warden) / `fast_1.png` (wisp) | the creature it is currently STANDING IN FOR, attached as a negative: the new one must not be mistakable for it |
+
+That third attachment exists because of a real failure. Both archetypes shipped borrowing an
+existing sheet through their row's `art` key, which is the correct placeholder — and on the
+board it means a Warden wave and a Regen wave are **the same creature, pixel for pixel**.
+Not even the row's colour separates them: `_draw_sprite` paints a painted creep with
+`Game.ART_TINT` (white), because the armour element moved to a ground ring precisely so a
+painted creature never has to be tinted. So the whole burden of "this is a different monster"
+falls on the sheet, and the brief has to say what it must NOT look like as clearly as what it
+must.
+
+Read the roster before writing either prompt. Seven of the nine are green-or-orange
+orc/goblin fighters in leather and plate; `swarm` is a four-legged bone hound and `air` is a
+small grey bat. **Nothing in it wears cloth, carries a staff, wears a mask, or is anything
+other than solid opaque flesh.** Those four gaps are where a new creature can stand out
+without leaving the army.
+
+Save what comes back as `assets/art/enemies/_source_<archetype>_pose.png` and keep it in the
+repo the way the other `_source_*` files are kept — it is the second attachment for step 2,
+and it is what lets the cycle be regenerated later as the same creature.
+
+The two prompts are literal; copy one whole.
+
+#### `warden`
+
+The reference is a tribal healer-shaman of the DOTA/Warcraft school — hunched, masked, a tall
+totem staff. It is deliberately described here by its TRAITS rather than by any character's
+name: a generator handed a named character draws that character's likeness, which is both the
+wrong art (it will not match this roster) and not ours to ship.
+
+```text
+[Attach these three files, in this order:
+   1. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\board_source.png
+   2. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\enemies\normal_1.png
+   3. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\enemies\regen_1.png]
+
+Image 1 is the game board this creature walks on: match its camera angle, light direction,
+saturation and edge softness.
+
+Image 2 is a DIFFERENT creature from the same game, attached so you can match the ROSTER —
+its rendering, level of detail, saturation, edge hardness, and how it reads at small size.
+Do not draw it and do not reuse its armour, weapon or colours.
+
+Image 3 is the creature this new one is REPLACING. The new creature must NOT be mistakable
+for it: not the same body type, not the same posture, not the same silhouette. If someone
+saw the two side by side on the road they must read as two different monsters instantly.
+
+Paint ONE standing figure, alone, on a fully TRANSPARENT background: a WARDEN — the
+witch-doctor healer of this orc army.
+
+WHAT IT IS. It walks at the back of a wave and keeps the fighters around it alive. It swings
+nothing and carries no shield. The player has to look at a crowded road of brawlers, pick it
+out, and decide to shoot it FIRST — so it must read as the one thing in the line that is not
+a fighter, at a glance, at 62 pixels tall.
+
+THE SILHOUETTE, which is the whole job — the roster is seven upright brawlers in leather and
+plate, so every line below exists to break that shape:
+- A TALL TOTEM STAFF, taller than the creature, held in one hand and planted forward as it
+  walks. Its head is a carved skull or totem with feathers, bones and small fetishes hanging
+  from it on cords. This staff is the single most identifying thing about the creature and it
+  must be unmissable in outline.
+- HUNCHED AND STOOPED, leaning on that staff. Every other creature in this army stands or
+  runs upright; this one is bent.
+- CLOTH AND HIDE, not armour: a ragged poncho or shawl over the shoulders, hanging in long
+  vertical folds. No plate, no pauldrons, no shield, no helmet.
+- A BONE MASK or a skull headdress covering the face, with feathers. The face must not be a
+  bare orc face — that is what every other creature in the roster has.
+- Bone jewellery, bound cords, small pouches and vials at the belt.
+- It is an orc/goblin of the same world — green-grey skin where skin shows — but old, thin
+  and wiry rather than muscular, and a little taller than the fighter in image 2.
+
+COLOUR. Green-teal is its signature (roughly RGB 90/230/175): in a cold clean glow at the
+head of the staff, in bound cloth, in the eye-slits of the mask. This must NOT be the same
+warm forest green as the orcs in the roster — it is the cold green of the thing that heals.
+The cloth itself may stay bone, ash and dull ochre so the teal reads as light, not as dye.
+
+DO NOT PAINT ITS AURA. No ground circle, no glowing ring on the floor, no radiating healing
+light, no sparkles around its feet. The game draws all of that itself at its own size, and a
+painted one sits inside the drawn one at the wrong scale and ruins both. Glow at the staff
+head only.
+
+CRITICAL REQUIREMENTS (the reference images cannot show these — follow them exactly):
+- The creature faces SCREEN-LEFT — it moves left across the canvas.
+- Transparent background (alpha). No ground plane, no scenery, no backdrop, no grass.
+- NO drop shadow and no cast shadow — the game draws its own.
+- NOTHING may hang below the lowest foot: no trailing poncho, no dragged staff tip, no dust,
+  no smoke. The game hangs the sprite from the middle of its lowest pixels, so anything down
+  there lifts the creature off the road.
+- Both feet visible and clearly separated — this pose becomes a twelve-frame walk cycle.
+- The staff must be planted at or above ankle height, never below the feet.
+- No text, no numbers, no labels, no UI, no frame border.
+- One figure only, centred, roughly 700 x 700 pixels.
+```
+
+#### `wisp`
+
+```text
+[Attach these three files, in this order:
+   1. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\board_source.png
+   2. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\enemies\normal_1.png
+   3. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\enemies\fast_1.png]
+
+Image 1 is the game board this creature walks on: match its camera angle, light direction,
+saturation and edge softness.
+
+Image 2 is a DIFFERENT creature from the same game, attached so you can match the ROSTER —
+its rendering, level of detail, saturation, edge hardness, and how it reads at small size.
+Do not draw it and do not reuse its armour, weapon or colours.
+
+Image 3 is the creature this new one is REPLACING — a lean green goblin runner. The new
+creature must NOT be mistakable for it: not the same skin, not the same clothing, not the
+same silhouette. Side by side on the road they must read as two different monsters instantly.
+
+Paint ONE standing figure, alone, on a fully TRANSPARENT background: a WISP — the
+phase-runner of this army, a scout that steps out of the world and back into it further down
+the road.
+
+WHAT IT IS. Every few seconds it vanishes and reappears ahead. It is small, light, and only
+half here. It should look like something that is about to not be there.
+
+THE SIZE IS THE HARD CONSTRAINT. This creature is drawn 56 pixels tall in the game — the
+SMALLEST in the roster. At that size a shape only survives if it is big and simple. So it
+gets FEWER shapes than the reference creatures, not more: no scattered detail, no fine
+filigree, no dusting of small particles anywhere. Every decision below follows from this.
+
+THE SILHOUETTE, which is the whole job — the roster is seven solid opaque brawlers, so what
+separates this creature is that it is NOT solid:
+- Small and wiry, about three quarters the bulk of the runner in image 3.
+- IT CARRIES ONE BIG VIOLET CRYSTAL SHARD, held low in its trailing hand — a single chunky
+  faceted piece, glowing from inside, about as long as its forearm, with ONE thick ribbon of
+  violet light trailing back from it. This is the thing that identifies the creature at a
+  glance and it must be unmistakable in outline. One shard, one ribbon; not a handful of
+  crystals and not a spray of sparks.
+- ITS TRAILING EDGES COME APART INTO VIOLET LIGHT, in THREE OR FOUR LARGE PIECES — the back
+  of the trailing arm, the heel of the trailing leg, the streaming ends of its wraps. Each
+  piece is a bold slab or torn ribbon of light, roughly a finger's width on the creature.
+  NOT embers, NOT sparks, NOT thin filaments, NOT a cloud of particles: anything that small
+  turns to noise at 56 pixels and eats the outline. The core of the body — chest, hips,
+  thighs, head — stays SOLID and fully painted.
+- Wrapped rather than armoured: a few WIDE strips of violet-grey cloth bound around the
+  forearms, shins and lower face, ends streaming back. Few and wide, not many and narrow;
+  tight wraps, never a billowing cloak.
+- A small number of LARGE glowing rune marks on the exposed skin — three or four, each the
+  size of an eye, not a tattooed pattern.
+- Ashen violet-grey skin, NOT the roster's warm green. This is what stops it reading as
+  another goblin.
+- No shield, no armour, no second weapon. The shard is the only thing it carries.
+
+IT MUST HAVE FEET, drawn clearly and solidly. This pose becomes a twelve-frame WALK CYCLE and
+the game reads the creature's pace off how far apart the feet get, so a figure that trails
+away into nothing below the knee is unusable. Legs, ankles and feet: solid, opaque, planted.
+
+NOTHING MAY STAND ABOVE THE TOP OF ITS HEAD. No raised shard, no lifted arm, no streaming
+hair or wrap-end going upward, no floating light above it. The head must be the highest thing
+in the picture — the game measures the creature's on-screen size from its tallest pixel and
+reserves the strip directly above the head for its own markings.
+
+DO NOT PAINT ITS TELL. No arrows, no chevrons, no motion streaks, no speed lines, no second
+ghosted copy of the body. The game draws two chevrons above its head to warn the player a
+jump is coming.
+
+COLOUR. Pale violet (roughly RGB 185/150/255) in the shard, the light pieces, the runes and
+the cool rim; the solid parts stay ashen and desaturated so the violet reads as glow rather
+than as paint. Give the shard clear VALUE contrast against whatever is behind it — a pale
+crystal against a dark body — so it survives being shrunk.
+
+CRITICAL REQUIREMENTS (the reference images cannot show these — follow them exactly):
+- The creature faces SCREEN-LEFT — it moves left across the canvas.
+- Transparent background (alpha). No ground plane, no scenery, no backdrop, no grass.
+- NO drop shadow and no cast shadow — the game draws its own.
+- NOTHING may hang below the lowest foot: no trailing light, no vapour, no dust, no embers
+  touching the ground. The game hangs the sprite from the middle of its lowest pixels, so
+  anything down there lifts the creature off the road.
+- No text, no numbers, no labels, no UI, no frame border.
+- One figure only, centred, roughly 700 x 700 pixels.
+```
+
+### Step 2 — the twelve-frame cycle
+
+Exactly the template at the top of this file, with the step-1 image as the second attachment
+in place of an existing frame — plus a short block of hold-fixed lines naming whatever this
+particular creature carries. The step-1 pose is now the character sheet, so anything the
+cycle is free to re-invent, it will.
+
+`warden` needed its staff pinned to one hand at one height; the cycle still redrew the staff
+SHORTER than the pose and moved `radius` from 1.30 to 1.20. `wisp` needs its shard pinned for
+a different reason — see below.
+
+#### `wisp` — the twelve-frame cycle
+
+```text
+[Attach these two files, in this order:
+   1. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\board_source.png
+   2. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\enemies\_source_wisp_pose.png]
+
+The first attached image is the game board this creature walks on. The second is the creature
+itself, already painted. Study both: the board's camera angle, light direction, saturation
+and edge softness; and the creature's exact anatomy, wraps, palette, crystal and proportions.
+
+Paint a game-asset sheet: TWELVE FRAMES OF A RUN CYCLE of THE CREATURE IN THE SECOND IMAGE,
+stacked as twelve rows, one frame per row, on a fully TRANSPARENT background.
+
+IT MUST BE THE SAME CREATURE IN ALL TWELVE FRAMES. Same silhouette, same wraps in the same
+places, same rune marks in the same places, same colours, same crystal in the same hand, same
+size. Only the POSE changes. Treat the second image as the character sheet, not as
+inspiration.
+
+HOLD THESE FIXED IN EVERY FRAME — they are what the game measures the creature by:
+- THE CRYSTAL STAYS IN THE SAME HAND, held low and reaching BACK behind the creature, and
+  extended about the same distance from the body in all twelve frames. Its glowing ribbon
+  stays one thick loop. The game centres the creature's health bar and its warning markers on
+  the middle of the drawn area, so a crystal that swings in and out between frames makes
+  those swing with it.
+- THE HEAD STAYS THE TALLEST THING in every frame. Nothing above it: no raised arm, no
+  crystal lifted overhead, no wrap-end streaming upward, no floating light.
+- THE LIGHT STAYS IN THREE OR FOUR LARGE PIECES on the same limbs — the trailing arm, the
+  trailing heel, the streaming wrap-ends. Bold slabs and torn ribbons. Never break them into
+  embers, sparks, filaments or a cloud of particles: this creature is drawn 56 pixels tall
+  and anything that small becomes noise and eats its outline.
+- THE FEET STAY SOLID AND OPAQUE. The game reads the creature's walking pace off how far
+  apart its feet get, so legs, ankles and feet must be fully painted in every frame.
+
+THE CYCLE — TWELVE frames, top to bottom, ONE COMPLETE STRIDE:
+1.  Contact — LEFT foot striking the ground ahead, arms at their full opposite swing.
+2.  Down — weight settling onto the left leg, knee bending, body dropping.
+3.  Low — knee at its deepest bend, body at its LOWEST point of the whole cycle.
+4.  Passing — left leg straightening under the body, right knee driving forward past it.
+5.  Up — pushing off the left toe, body rising to its HIGHEST point.
+6.  Reach — airborne, both feet off the ground, right leg extended forward to land.
+7.  Contact — the mirror of 1: RIGHT foot striking ahead.
+8.  Down — the mirror of 2.
+9.  Low — the mirror of 3.
+10. Passing — the mirror of 4.
+11. Up — the mirror of 5.
+12. Reach — the mirror of 6, left leg extended forward.
+
+Frames 7-12 are the same POSES with the legs swapped. They are NOT mirrored images — the
+creature still faces screen-left in all twelve, and the crystal stays in the same hand.
+
+The free arm swings opposite the legs throughout. The crystal arm stays back.
+
+SPACE THE FRAMES EVENLY, AND CLOSE THE LOOP. Frame 12 must lead straight back into frame 1 as
+smoothly as 1 leads into 2 — the game plays this on repeat forever, with no pause and no
+reset. Each step from one frame to the next must move the body about the SAME amount.
+
+DRAW THE HEIGHT CHANGE. The body really is lower in frames 3 and 9 than in 5 and 11 — that
+rise and fall is the bounce of the run and the game preserves it rather than flattening it.
+Do not draw twelve poses all standing at the same height.
+
+SAVE IT WITH A REAL ALPHA CHANNEL. A 32-bit PNG whose background is genuinely transparent —
+not a white background, and not a grey-and-white checkerboard pattern painted into the
+pixels. Both of those arrive looking correct in a viewer and are unusable: the tool that cuts
+this sheet finds the frames by looking for EMPTY rows between them, and a painted background
+means there are none.
+
+CRITICAL REQUIREMENTS (the reference images cannot show these — follow them exactly):
+- The creature faces SCREEN-LEFT in every frame — it moves left across the canvas.
+- Transparent background (alpha). No ground plane, no scenery, no backdrop, no grass.
+- NO drop shadow and no cast shadow — the game draws its own.
+- NOTHING may hang below the lowest foot: no trailing light, no vapour, no dust, no embers
+  touching the ground. The game hangs the sprite from the middle of its lowest pixels, so
+  anything down there lifts the creature off the road.
+- At least 60 px of completely empty rows between frames, and the frames must not touch.
+- Do not re-centre the frames: a pose that leans forward should sit forward on its row.
+- No text, no numbers, no labels, no UI, no frame borders, no grid lines.
+- ONE COLUMN: all twelve frames in a single vertical stack, not a grid.
+- Canvas tall and narrow — roughly 700 x 4200 pixels.
+```
+
+### After they land
+
+Drop `warden_1.png` … `warden_12.png` and `wisp_1.png` … `wisp_12.png` into
+`assets/art/enemies/`, then follow "After the sheet arrives" above — including the mipmap
+check, which a newly added PNG always fails.
+
+Then look at them, which for these two is not optional and has its own harness:
+
+```
+Godot.exe --path <project> res://scenes/Main.tscn --quit-after 400 -- --creep-pose:warden --shot:3
+Godot.exe --path <project> res://scenes/Main.tscn --quit-after 400 -- --creep-pose:wisp --shot:3.6
+```
+
+WITHOUT `--headless`. It parks five of the archetype along the road with a plain Normal beside
+each, which is the comparison that matters: these two archetypes exist to be TOLD APART from
+the creeps they walk with, and a sheet that fails at that fails silently. Both also carry a
+drawn overlay the art has to live under — the warden's ground disc and the ring it puts on
+whoever stands in it, the wisp's chevrons — so check the sheet does not fight either.
+
+Once a sheet is in, the `art` fallback in that row is dead code that still reads as intent;
+leave it. It is what the archetype falls back to if the files are ever removed, and
+`--creep-pose` prints which set actually RESOLVED — it asks the spawned `Enemy.art_kind()`
+rather than restating the row, because the first version restated the row and reported
+`art=regen` on the very run where a freshly dropped `warden_1.png` was on screen.
+
+### The bounding box is not the body — re-measure `radius` after any sheet lands
+
+`enemy.gd` scales a sprite by **everything that is drawn**:
+`scale = radius * SPRITE_HEIGHT_PER_RADIUS / Sprites.figure_height(frame 0)`. That is right
+for a creature whose topmost pixel is the top of its head, and every archetype in the
+original nine is one. It is wrong the moment something else is the tallest thing in the
+frame, and then it is wrong SILENTLY: the creature simply comes out small, which reads as a
+weak sheet rather than as a wrong number.
+
+It has now happened twice, and both fixes are the same one number:
+
+| Row | Tallest thing | `radius` | What it bought |
+|---|---|---|---|
+| `air` | wingspan, not height | **1.4** | at 1.0 the dragon's body came out a third smaller than the pose it replaced, and the health bar floated clear of it |
+| `warden` | a totem staff standing above its own head | **1.20** | at 1.05 the 65.5 px budget went partly into staff and left the creature 56.9 px — SHORTER than the 62.4 px Normal it is supposed to loom over. 1.20 lands the body at 65.0 px |
+
+**Measure it off the CYCLE, not off the character pose.** This row sat at 1.30 for an hour,
+because that is what the step-1 pose measured: a staff carrying 21% of the figure. The
+twelve-frame cycle generated FROM that pose redrew the same staff shorter — 13.2% — and 1.30
+then overshot by 13% in the other direction. Nothing warns you: both numbers produce a
+plausible creature, and the sheet a player sees is the cycle. So do the measurement again on
+`<archetype>_1.png` after cutting, and only then set the row.
+
+So after a sheet lands, measure frame 1: total ink height, and the height of the creature's
+own head above the ground row. If they differ, scale the row's `radius` by their ratio and
+write down why, the way both rows above do. The cost you accept in exchange is that
+`_head_y()` — and therefore the health bar — hangs off the tallest ink, so the bar floats
+above a staff tip or a wing. `air` has always done that and it reads fine.
+
+### Legibility at 62 px is about the INTERNAL shapes, not about contrast with the board
+
+The obvious worry — "this creature is the same colour as the meadow" — is worth measuring
+before acting on, because on this roster it has never once been true. Median luminance of the
+opaque pixels against the meadow's own 27.3%:
+
+| normal | fast | tank | immune | regen | split | warden |
+|---|---|---|---|---|---|---|
+| +0.8 | -5.1 | -1.2 | -1.8 | -0.8 | +3.1 | **-8.0** |
+
+The whole roster sits within about five points of the ground it walks on, and the warden —
+the one that *looked* like it was sinking into the grass — separates better than any of them.
+The eye was reading something else and calling it contrast.
+
+What it was reading is **internal**: at 62 px a creature is about eleven pixels across the
+chest, and anything smaller than about three source-pixel groups stops being a shape and
+becomes texture. The warden's staff is its whole identity and it is a thin shaft painted in
+the same value as the poncho behind it, so it dissolves; the fringe, beads, vials and
+feathers all land under that floor together and turn the outline into fizz.
+
+So when a sheet reads badly at size, check in this order:
+
+1. **Size** — `--dump`-style measurement, the `radius` table above. A creature drawn small
+   because a staff ate its budget looks like every other kind of failure.
+2. **The one identifying shape** — does it survive? Give it VALUE contrast against whatever
+   is directly behind it, not more saturation. A pale shaft on a dark poncho reads; a
+   mid-value shaft on a mid-value poncho does not, at any hue.
+3. **Fringe and clutter** — hanging cords, tassels, beads and torn hems below about 2% of the
+   figure height are invisible individually and collectively read as noise on the silhouette.
+4. **Only then** colour.
+
+Note the harness's own limit here: a nearest-neighbour downscale (which is what a quick
+offline mock does) shatters detail that the real pipeline handles, because `cut_sprites.py`
+averages the source down to ~2x its drawn size and the engine samples a mip chain on top of
+that. Trust the `--creep-pose` screenshot over any offline composite.
+
+### Revising a step-1 pose
+
+A revision is a different prompt from a generation, and the difference is that almost
+everything must be held FIXED. Attach the pose being revised plus the board, and name only
+what changes — a prompt that re-describes the character gets a new character.
+
+Two things must be held fixed for reasons outside the picture:
+
+- **The staff's height above the head.** `Game.WAVE_TYPES["warden"]`'s `radius` is measured
+  off exactly that overhang (see the table above). Change it and the number is wrong,
+  silently — which is not hypothetical: the cycle generated from the revised pose came back
+  with a shorter staff than the pose had, and the row had to be re-measured from 1.30 to
+  1.20.
+- **The framing, pose and canvas.** The whole point is that the twelve-frame cycle can still
+  be generated from this image.
+
+```text
+[Attach these two files, in this order:
+   1. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\enemies\_source_warden_pose.png
+   2. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\board_source.png]
+
+Image 1 is a finished game character of mine. Image 2 is the board it stands on, at the size
+it is actually drawn there: about 65 pixels tall.
+
+KEEP THIS EXACT CHARACTER. Same creature, same pose, same proportions, same framing, same
+canvas size, same position on the canvas, same staff, same staff HEIGHT above its head, same
+hunch, same mask, same palette family. Do not redraw it, do not re-pose it, do not re-centre
+it, do not zoom in or out. This is a targeted edit of the image, not a new illustration.
+
+The problem: at 65 pixels tall the staff — the single thing that identifies this creature as
+the healer — disappears into the body behind it, and the hanging clutter breaks up its
+outline. Fix exactly that, and nothing else:
+
+1. THE STAFF MUST READ. Give the shaft and the skull at its head clear VALUE separation from
+   whatever is directly behind them: lighten the shaft to pale bone where it crosses the dark
+   poncho, and keep the area immediately behind the staff head dark and uncluttered. The
+   staff must be legible as a distinct diagonal line at a glance.
+
+2. TURN UP THE TEAL, AS LIGHT. The glow inside the staff's skull head becomes a real light
+   source: brighter, larger, unmistakably teal (roughly RGB 90/230/175), casting that teal
+   onto the top of the shaft, the nearest feathers and the creature's own shoulder. Add ONE
+   solid band of saturated teal cloth on the body — a sash or a shoulder wrap — big and
+   simple enough to still be a shape at 65 pixels, roughly a fifth of the body's width. One
+   band, not several ribbons.
+
+3. SIMPLIFY THE FRINGE. Reduce the number of hanging cords, beads, small skulls and vials by
+   about half, keeping the largest of each and deleting the small ones. Tidy the torn hem of
+   the poncho into fewer, larger tatters. The outline of the creature should be readable as a
+   single hunched mass with a staff, not as a fuzzy edge.
+
+Everything else stays exactly as it is.
+
+UNCHANGED REQUIREMENTS:
+- Transparent background (alpha). No ground plane, no scenery, no backdrop, no grass.
+- NO drop shadow and no cast shadow.
+- NOTHING below the lowest foot — the staff tip stays above the feet, where it already is.
+- No aura, no ground circle, no radiating light on the floor. Glow at the staff head only.
+- Faces screen-left. No text, no labels, no frame border.
+```
+
+
+## The air variants — `gale` and `roc`
+
+Two new FLYERS ([game.gd](../scripts/game.gd) `WAVE_TYPES`), both playing right now by
+borrowing the dragon's own sheet through their row's `art: "air"` key. Same deadline as every
+other borrowed archetype: `Enemy.art_kind()` prefers `<key>_1.png` the instant it exists, so
+dropping the finished frames into `assets/art/enemies/` is the whole handover — no code change.
+
+They are the flyer's version of the brand-new-archetype job, so read **"A brand-new archetype"**
+above first — it is still **two generations, not one**: a POSE, then the cycle. Two things make
+these different from `warden`/`wisp`:
+
+- **The cycle is a WINGBEAT, not a stride.** Use the Air block ("Air is a wingbeat, not a
+  stride") for step 2, not the walk template — the body stays still and only the wings travel,
+  and there is no "DRAW THE HEIGHT CHANGE" line. `enemy.gd` `_animate_flight()` already lifts
+  the creature on the downstroke; art that also rises and falls pogos.
+- **The negative they must not duplicate is `air` itself.** Three flyers that read alike on one
+  board is the failure to avoid. So the pose prompt attaches `air.png` as the "do NOT look like
+  this" reference — the dragon — while `normal_1.png` still carries the roster's paint finish,
+  exactly the `regen`/`fast` split `warden`/`wisp` use.
+
+The size gap is drawn by the game, not the sheet: `gale` sits at `radius` 1.0 and `roc` at 1.9
+in their `WAVE_TYPES` rows (against the dragon's 1.4), so a shared window scales each silhouette
+to a small flock-flyer and a heavy tank. Draw the bulk into the SHAPE — a lean sharp bird for
+`gale`, a broad slab-winged one for `roc` — not into the canvas. Expect to re-measure `radius`
+once the real sheet lands (step 8 of "After the sheet arrives"): a wingspan is not a body, which
+is the whole reason the dragon's row carries 1.4.
+
+Filenames: `gale_1..12.png` / `roc_1..12.png`; keep the pose as `_source_<name>_pose.png` and the
+cycle as `_source_<name>_wingbeat.png`.
+
+### `gale` — step 1, the character (one frame)
+
+A small, swift wind-raptor — the fast flock creature. It is NOT the dragon: sleeker, sharper,
+paler, and about three-quarters its bulk.
+
+```text
+[Attach these three files, in this order:
+   1. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\board_source.png
+   2. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\enemies\normal_1.png
+   3. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\enemies\air.png]
+
+Image 1 is the game board this creature flies over: match its camera angle, light direction,
+saturation and edge softness.
+
+Image 2 is a DIFFERENT creature from the same game, attached so you can match the ROSTER — its
+rendering, level of detail, saturation, edge hardness, and how it reads at small size. Do not
+draw it and do not reuse its armour, weapon or colours.
+
+Image 3 is the game's EXISTING flyer, a bulky grey dragon-bat. The new creature must NOT be
+mistakable for it: not the same bulk, not the same wing shape, not the same colour. Side by side
+in the air they must read as two different creatures instantly.
+
+Paint ONE flying figure, alone, wings SPREAD at mid-span, on a fully TRANSPARENT background: a
+GALE — a small, fast storm-raptor that attacks in a flock.
+
+WHAT IT IS. The player meets a whole cloud of these at once, moving fast. So it must read as
+LIGHT and QUICK — the opposite of the heavy dragon — and it must still be legible at about 34
+pixels tall, which is small.
+
+THE SILHOUETTE, which is the whole job — image 3 is a heavy round-bodied dragon, so every line
+below breaks that shape:
+- A LEAN, STREAMLINED body, narrow and swept — more falcon than dragon. About three-quarters the
+  bulk of the creature in image 3.
+- SHARP, SWEPT-BACK wings that taper to points, angled like a diving bird's — not the broad
+  round leathery wings of image 3. The wings are the single most identifying thing and must be
+  unmistakable in outline.
+- A small streamlined head, beaked or sharp-snouted, held forward and low in a fast glide.
+- Faint wisps of pale wind trailing off the wingtips — kept as TWO OR THREE bold streaks, not a
+  cloud of particles, which turns to noise at this size. The body itself stays solid and opaque.
+- Legs and talons small and TUCKED tight against the body, never dangling.
+
+COLOUR. Pale ice-blue and white (roughly RGB 205/230/255) across the plumage, cooler and lighter
+than the grey dragon, with a brighter white leading edge on the wings. It must read as a pale,
+cold, wind-touched creature at a glance, on green grass.
+
+CRITICAL REQUIREMENTS (the reference images cannot show these — follow them exactly):
+- The creature faces SCREEN-LEFT — it moves left across the canvas.
+- Transparent background (alpha). No ground plane, no scenery, no backdrop, no clouds.
+- NO drop shadow and no cast shadow — the game draws its own.
+- NOTHING may hang below the lowest point of the creature: no dangling talons below the body, no
+  trailing wind, no dust. The game hangs the sprite from the middle of its lowest pixels.
+- Keep the head and body compact — the game draws the health bar in the strip just above.
+- Wings clearly spread and readable — this pose becomes a twelve-frame WINGBEAT cycle.
+- No text, no numbers, no labels, no UI, no frame border.
+- One figure only, centred, roughly 700 x 700 pixels.
+```
+
+### `gale` — step 2, the twelve-frame wingbeat
+
+```text
+[Attach these two files, in this order:
+   1. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\board_source.png
+   2. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\enemies\_source_gale_pose.png]
+
+The first attached image is the game board this creature flies over. The second is the creature
+itself, already painted. Study both: the board's camera angle, light direction, saturation and
+edge softness; and the creature's exact anatomy, wings, beak, palette and proportions.
+
+Paint a game-asset sheet: TWELVE FRAMES OF A WINGBEAT CYCLE of THE CREATURE IN THE SECOND IMAGE,
+stacked as twelve rows, one frame per row, on a fully TRANSPARENT background.
+
+IT MUST BE THE SAME CREATURE IN ALL TWELVE FRAMES. Same lean silhouette, same swept wing shape,
+same markings, same colours, same size. Only the WINGS move. Treat the second image as the
+character sheet, not as inspiration.
+
+THE CYCLE — TWELVE frames, top to bottom, ONE COMPLETE WINGBEAT down and back up:
+1.  Wings at their HIGHEST, fully raised above the body, about to sweep down.
+2.  Wings starting down, still well above the body.
+3.  Wings roughly halfway down, above the shoulders.
+4.  Wings level with the body, at full span, mid-stroke.
+5.  Wings below the body, driving down, membrane taut.
+6.  Wings at their LOWEST, fully swept down beneath the body — the power stroke.
+7.  Wings starting back up, membrane slackening.
+8.  Wings roughly halfway back up, below the shoulders.
+9.  Wings level with the body again, on the recovery.
+10. Wings above the shoulders, folding slightly on the way up.
+11. Wings nearly at the top.
+12. Wings almost fully raised, one step short of frame 1 — so 12 leads straight back into 1.
+
+THE BODY STAYS NEARLY STILL. Do NOT move the creature up and down between frames; the game does
+that itself and art that also rises and falls doubles it into a pogo. The head, body, tucked
+legs and tail keep the same posture throughout — only the wings travel. The pale wingtip wisps
+stay TWO OR THREE bold streaks, never a cloud of particles.
+
+SPACE THE FRAMES EVENLY, AND CLOSE THE LOOP. Frame 12 must lead straight back into frame 1 as
+smoothly as 1 leads into 2 — the game plays this on repeat forever. Each step must move the
+wings about the SAME amount; a wingbeat that hitches once a beat is as obvious as a stumble.
+
+SAVE IT WITH A REAL ALPHA CHANNEL. A 32-bit PNG whose background is genuinely transparent — not
+white, and not a grey-and-white checkerboard painted into the pixels. Both arrive looking correct
+in a viewer and are unusable: the tool that cuts this sheet finds the frames by EMPTY rows.
+
+CRITICAL REQUIREMENTS (the reference images cannot show these — follow them exactly):
+- The creature faces SCREEN-LEFT in every frame — it moves left across the canvas.
+- Transparent background (alpha). No ground plane, no scenery, no backdrop, no clouds.
+- NO drop shadow and no cast shadow — the game draws its own.
+- NOTHING may hang below the lowest point of the creature: no dangling talons, no trailing wind,
+  no dust. Frames 5 and 6 sweep the wings BENEATH the body — the wingtips become the lowest
+  pixels there, which is fine, but nothing else may join them.
+- At least 60 px of completely empty rows between frames, and the frames must not touch.
+- Do not re-centre the frames: the creature keeps the same position on every row.
+- No text, no numbers, no labels, no UI, no frame borders, no grid lines.
+- ONE COLUMN: all twelve frames in a single vertical stack, not a grid.
+- Canvas tall and narrow — roughly 700 x 4200 pixels.
+```
+
+### `roc` — step 1, the character (one frame)
+
+A huge, heavy bird of prey — the lone air tank. It is NOT the dragon: broader, bulkier, feathered
+rather than leathery, and about half again its mass.
+
+```text
+[Attach these three files, in this order:
+   1. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\board_source.png
+   2. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\enemies\normal_1.png
+   3. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\enemies\air.png]
+
+Image 1 is the game board this creature flies over: match its camera angle, light direction,
+saturation and edge softness.
+
+Image 2 is a DIFFERENT creature from the same game, attached so you can match the ROSTER — its
+rendering, level of detail, saturation, edge hardness, and how it reads at small size. Do not
+draw it and do not reuse its armour, weapon or colours.
+
+Image 3 is the game's EXISTING flyer, a grey dragon-bat with round leathery wings. The new
+creature must NOT be mistakable for it: not the same wings, not the same body, not the same
+colour. Side by side in the air they must read as two different creatures instantly.
+
+Paint ONE flying figure, alone, wings SPREAD at mid-span, on a fully TRANSPARENT background: a
+ROC — an enormous bird of prey, slow, heavy and armoured in muscle.
+
+WHAT IT IS. It flies alone and it is a wall of health: the player has to out-damage it before it
+crosses the board. So it must read as MASSIVE and HEAVY — the opposite of a fast flyer — and
+still be legible at about 65 pixels tall.
+
+THE SILHOUETTE, which is the whole job — image 3 is a small round dragon with leathery wings, so
+every line below breaks that shape:
+- A HUGE, THICK, muscular body — half again the mass of the creature in image 3 — powerful chest
+  and shoulders driving the wings.
+- BROAD, SLAB-LIKE FEATHERED wings, wide and heavy, spanning far past the body — an eagle's or a
+  roc's wings, feathered, NOT the pointed leathery membrane of image 3. The wings are the single
+  most identifying thing and must be unmistakable in outline.
+- A large hooked raptor's beak and a heavy brow; the head held forward and level.
+- Massive talons, TUCKED tight up under the body in ONE fixed position, never dangling.
+- Layered feathers with visible weight and overlap — solid and opaque throughout.
+
+COLOUR. Dark slate and steel plumage (roughly RGB 90/105/130) with a paler grey-blue underbelly
+and lighter feather edges catching the light from the upper left. Heavier and darker than the
+grey dragon, and clearly a feathered bird rather than a leathery one, at a glance, on grass.
+
+CRITICAL REQUIREMENTS (the reference images cannot show these — follow them exactly):
+- The creature faces SCREEN-LEFT — it moves left across the canvas.
+- Transparent background (alpha). No ground plane, no scenery, no backdrop, no clouds.
+- NO drop shadow and no cast shadow — the game draws its own.
+- NOTHING may hang below the lowest point of the creature: no dangling talons below the body, no
+  trailing feathers, no dust. The game hangs the sprite from the middle of its lowest pixels.
+- Keep the head compact and level — the game draws the health bar in the strip just above.
+- Wings clearly spread and readable — this pose becomes a twelve-frame WINGBEAT cycle.
+- No text, no numbers, no labels, no UI, no frame border.
+- One figure only, centred, roughly 700 x 700 pixels.
+```
+
+### `roc` — step 2, the twelve-frame wingbeat
+
+Same as `gale`'s step 2, with the pose swapped and one line changed — a heavy bird beats SLOWER
+and DEEPER, so keep the wings broad and the stroke powerful, but the body still stays still.
+
+```text
+[Attach these two files, in this order:
+   1. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\board_source.png
+   2. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\enemies\_source_roc_pose.png]
+
+The first attached image is the game board this creature flies over. The second is the creature
+itself, already painted. Study both: the board's camera angle, light direction, saturation and
+edge softness; and the creature's exact anatomy, wings, beak, talons, palette and proportions.
+
+Paint a game-asset sheet: TWELVE FRAMES OF A WINGBEAT CYCLE of THE CREATURE IN THE SECOND IMAGE,
+stacked as twelve rows, one frame per row, on a fully TRANSPARENT background.
+
+IT MUST BE THE SAME CREATURE IN ALL TWELVE FRAMES. Same massive silhouette, same broad feathered
+wing shape, same markings, same colours, same size, same tucked talons. Only the WINGS move.
+Treat the second image as the character sheet, not as inspiration.
+
+THE CYCLE — TWELVE frames, top to bottom, ONE COMPLETE WINGBEAT down and back up:
+1.  Wings at their HIGHEST, fully raised above the body, about to sweep down.
+2.  Wings starting down, still well above the body.
+3.  Wings roughly halfway down, above the shoulders.
+4.  Wings level with the body, at full span, mid-stroke.
+5.  Wings below the body, driving down, feathers taut.
+6.  Wings at their LOWEST, fully swept down beneath the body — the power stroke.
+7.  Wings starting back up, feathers slackening.
+8.  Wings roughly halfway back up, below the shoulders.
+9.  Wings level with the body again, on the recovery.
+10. Wings above the shoulders, folding slightly on the way up.
+11. Wings nearly at the top.
+12. Wings almost fully raised, one step short of frame 1 — so 12 leads straight back into 1.
+
+THE BODY STAYS NEARLY STILL. Do NOT move the creature up and down between frames; the game does
+that itself and art that also rises and falls doubles it into a pogo. The head, body, tucked
+talons and tail keep the same posture throughout — only the wings travel. This is a heavy bird:
+the stroke is broad, deep and powerful, but it does not bounce the body.
+
+SPACE THE FRAMES EVENLY, AND CLOSE THE LOOP. Frame 12 must lead straight back into frame 1 as
+smoothly as 1 leads into 2 — the game plays this on repeat forever. Each step must move the wings
+about the SAME amount; a wingbeat that hitches once a beat is as obvious as a stumble.
+
+SAVE IT WITH A REAL ALPHA CHANNEL. A 32-bit PNG whose background is genuinely transparent — not
+white, and not a grey-and-white checkerboard painted into the pixels. Both arrive looking correct
+in a viewer and are unusable: the tool that cuts this sheet finds the frames by EMPTY rows.
+
+CRITICAL REQUIREMENTS (the reference images cannot show these — follow them exactly):
+- The creature faces SCREEN-LEFT in every frame — it moves left across the canvas.
+- Transparent background (alpha). No ground plane, no scenery, no backdrop, no clouds.
+- NO drop shadow and no cast shadow — the game draws its own.
+- NOTHING may hang below the lowest point of the creature: no dangling talons, no trailing
+  feathers, no dust. Frames 5 and 6 sweep the wings BENEATH the body — the wingtips become the
+  lowest pixels there, which is fine, but nothing else may join them.
+- At least 60 px of completely empty rows between frames, and the frames must not touch.
+- Do not re-centre the frames: the creature keeps the same position on every row.
+- No text, no numbers, no labels, no UI, no frame borders, no grid lines.
+- ONE COLUMN: all twelve frames in a single vertical stack, not a grid.
+- Canvas tall and narrow — roughly 700 x 4200 pixels.
+```
+
+### After each cycle arrives
+
+The Air pipeline exactly ("After the sheet arrives" above): alpha-channel check, stitch if it
+came as two sheets of six, then cut and CHECK THE ROW COUNT is 12 —
+
+```bash
+python tools/cut_sprites.py <sheet> godottowerdefense/assets/art/enemies gale 150 4
+python tools/cut_sprites.py <sheet> godottowerdefense/assets/art/enemies roc  180 4
+```
+
+`roc` is drawn larger (radius 1.9 → ~90 px), so it cuts at the larger window; `gale` is small
+(radius 1.0 → ~47 px) and cuts at the roster's 150. Keep the source as `_source_<name>_wingbeat.png`,
+flip the new `.import` files' `mipmaps/generate` to `true`, re-import, then LOOK with the flyer
+harness — it now poses any air archetype airborne:
+
+```bash
+"C:\Program Files\Godot\Godot.exe.exe" --path godottowerdefense res://scenes/Main.tscn --quit-after 260 -- --creep-pose:gale --shot:3
+"C:\Program Files\Godot\Godot.exe.exe" --path godottowerdefense res://scenes/Main.tscn --quit-after 260 -- --creep-pose:roc  --shot:3
+```
+
+If either reads too small or too large against the dragon, the fix is the `radius` entry in its
+`Game.WAVE_TYPES` row, not new art — a wingspan is not a body (see the dragon's own 1.4).
