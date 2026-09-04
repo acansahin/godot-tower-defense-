@@ -517,7 +517,14 @@ func can_build_at(pos: Vector2, others: Array = []) -> bool:
 const TOWER_DEFS := {
 	"fire": {
 		"name": "Fire", "cost": 50, "color": Color(0.95, 0.45, 0.18), "element": "fire",
-		"damage_tiers": [10, 18, 32, 56, 100],
+		## Lv4/Lv5 trimmed to x0.86 / x0.80 of the ported ladder. THE ONE PLACE THE BASE ROSTER
+		## IS DELIBERATELY WEAKER THAN THE MAP, and it is a difficulty change rather than a port
+		## correction: a maxed plain tower was a complete answer to the whole run, so `--play-sim`
+		## could fill all 33 spots with cheap Lv5 base towers and win without ever fusing, buffing
+		## or rooting anything. The FUSIONS rows are untouched, so this widens the gap between a
+		## board that uses its abilities and one that does not — which is the whole point.
+		## Tiers 1-3 are untouched: the opening still plays exactly as it was tuned.
+		"damage_tiers": [10, 18, 32, 48, 80],
 		"range": 485.7, "interval": 0.40,      # range: 170px = 485.7 * 0.35
 		# Burn: 4 dps over 2s, on every hit. Lava (Fire+Earth) inherits this channel and
 		# deepens it; see FUSIONS.
@@ -525,13 +532,13 @@ const TOWER_DEFS := {
 	},
 	"water": {
 		"name": "Water", "cost": 50, "color": Color(0.30, 0.60, 0.95), "element": "water",
-		"damage_tiers": [6, 11, 19, 34, 60],
+		"damage_tiers": [6, 11, 19, 29, 48],
 		"range": 600.0, "interval": 0.25,      # range: 210px = 600.0 * 0.35
 		"slow_factor": 0.75, "slow_time": 1.5, # Chill: -25% speed, 1.5s, on every hit
 	},
 	"nature": {
 		"name": "Nature", "cost": 50, "color": Color(0.35, 0.80, 0.35), "element": "nature",
-		"damage_tiers": [12, 22, 38, 67, 120],
+		"damage_tiers": [12, 22, 38, 57, 96],
 		"range": 628.6, "interval": 0.90,      # range: 220px = 628.6 * 0.35
 		"poison_dps": 12.0, "poison_time": 3.0,
 		# Base THORN identity, and every fusion carrying Nature inherits it
@@ -544,7 +551,7 @@ const TOWER_DEFS := {
 	},
 	"earth": {
 		"name": "Earth", "cost": 50, "color": Color(0.72, 0.55, 0.34), "element": "earth",
-		"damage_tiers": [34, 61, 109, 190, 340],
+		"damage_tiers": [34, 61, 109, 162, 272],
 		"range": 571.4, "interval": 1.40, "can_hit_flying": false,  # range: 200px = 571.4 * 0.35
 		"splash_radius": 90.0, "splash_factor": 0.5,
 	},
@@ -666,8 +673,16 @@ const FUSIONS := {
 		"color": Color(1.0, 0.78, 0.30),
 		"damage_tiers": [49, 88, 157, 274, 490],
 		"range": 557.143, "interval": 1.3,         # 195px = mean(fire 170, nature 220)
-		"aura_stat": "damage", "aura_radius": 170.0, "aura_mult": 1.15,
-		"desc": "+15% damage to every tower within 170px",
+		## 190, not 170: a fusion is fixed at Lv3 and Tower._recompute multiplies the aura step
+		## by the PROVIDER'S LEVEL, so this row actually grants +45%. What it did not do was
+		## reach far enough for that to be a placement decision — the radius is what decides how
+		## many towers the 45% lands on. `aura_mult` is deliberately untouched: auras multiply
+		## across providers, so raising the step compounds where raising the reach does not.
+		"aura_stat": "damage", "aura_radius": 190.0, "aura_mult": 1.22,
+		## States the number the tower actually gives (1.15 stepped by its own level 3), not the
+		## per-level step. The old "+15%" was true of the field and false of the tower, and a
+		## player reading the panel had no reason to ever build this.
+		"desc": "+66% damage to every tower within 190px",
 	},
 	## map: Steam Tower, 150 dmg, msplash. "Blasts all nearby units with steam that
 	## gradually reduces health" — an area hit (splash) plus a damage-over-time (poison).
@@ -687,8 +702,9 @@ const FUSIONS := {
 		"color": Color(0.45, 0.85, 0.80),
 		"damage_tiers": [30, 54, 96, 168, 300],
 		"range": 614.286, "interval": 1.0,         # 215px = mean(water 210, nature 220)
-		"aura_stat": "attack_speed", "aura_radius": 170.0, "aura_mult": 1.15,
-		"desc": "+15% attack speed to every tower within 170px",
+		## Same move as Sun above, and for the same reason — see that row.
+		"aura_stat": "attack_speed", "aura_radius": 190.0, "aura_mult": 1.22,
+		"desc": "+66% attack speed to every tower within 190px",
 	},
 	## map: Roots Tower, 100 dmg @ 8.10s, magic, "casts Entangling Roots on ground enemies.
 	## Attacks land units." An 8.1s cooldown is unplayable at our pace, so the earlier port's
@@ -698,8 +714,14 @@ const FUSIONS := {
 		"name": "Roots", "names": ["Roots", "Brambles", "Entangling"],
 		"color": Color(0.45, 0.60, 0.28),
 		"damage_tiers": [18, 32, 58, 101, 180],
-		"range": 600.0, "interval": 2.2,           # 210px = mean(nature 220, earth 200)
-		"stun_chance": 0.5, "stun_time": 1.2,
+		## 1.6, not the earlier port's 2.2. The map's own 8.1s is unplayable at our pace and the
+		## 2.2 that replaced it was still too slow to be a CONTROL tower: one root every 4.4s of
+		## expected time, on a single target, against a wave of 28. At 1.6s and 0.60 a root lands
+		## every ~2.7s and holds for 1.2, which is roughly 45% uptime on whatever it is shooting.
+		## The damage_tiers are NOT touched: at 182 DPS this is still far and away the weakest
+		## tower in the roster, which is the point — it buys time, not kills.
+		"range": 600.0, "interval": 1.6,           # 210px = mean(nature 220, earth 200)
+		"stun_chance": 0.60, "stun_time": 1.2,
 		"can_hit_flying": false,
 		"desc": "Roots ground enemies in place. Barely damages",
 	},
@@ -819,11 +841,17 @@ func fusion_display_name(def: Dictionary) -> String:
 # then the wave is playable instead of being a row of untextured blobs.
 const WAVE_TYPES := {
 	"normal": {"name": "Normal", "color": Color(0.85, 0.30, 0.30)},
-	"fast":   {"name": "Fast",   "color": Color(0.95, 0.85, 0.25), "hp": 0.6, "spd": 1.7, "count": 1.3, "radius": 0.85},
+	# 1.85 (was 1.7): the kill window is 2*range/speed, and this is the row that closes it.
+	# A board answers it with a slow or a root, not with more DPS — which is what makes
+	# Water, Clay and Roots load-bearing rather than optional.
+	"fast":   {"name": "Fast",   "color": Color(0.95, 0.85, 0.25), "hp": 0.6, "spd": 1.85, "count": 1.3, "radius": 0.85},
 	"swarm":  {"name": "Swarm",  "color": Color(0.90, 0.50, 0.75), "hp": 0.35, "spd": 1.15, "count": 2.6, "radius": 0.8},
-	"tank":   {"name": "Tank",   "color": Color(0.45, 0.50, 0.55), "hp": 3.0, "spd": 0.6, "count": 0.4, "radius": 1.35},
+	"tank":   {"name": "Tank",   "color": Color(0.45, 0.50, 0.55), "hp": 3.4, "spd": 0.6, "count": 0.4, "radius": 1.35},
 	"immune": {"name": "Immune", "color": Color(0.60, 0.62, 0.70), "hp": 1.15, "count": 0.85, "cc_immune": true},
-	"regen":  {"name": "Regen",  "color": Color(0.35, 0.75, 0.40), "hp": 1.0, "count": 0.8, "regen": 0.035},
+	# 0.05 (was 0.035): regen is a DPS THRESHOLD — under it the creep never dies at all, over
+	# it the regen is noise. Raising it is what turns "more damage" from a preference into a
+	# requirement, and the cheapest +45% damage on the board is a Sun standing next door.
+	"regen":  {"name": "Regen",  "color": Color(0.35, 0.75, 0.40), "hp": 1.0, "count": 0.8, "regen": 0.05},
 	# 1.4 because a wingspan is not a height. Every other creep is a standing figure whose
 	# bounding box IS its body, so drawing that box 2.6 radii tall sizes the creature. The
 	# dragon's box is mostly wing — at 1.0 its body came out a third smaller than the single
@@ -857,8 +885,11 @@ const WAVE_TYPES := {
 	# carried a taller staff (79% creature), and the cycle redrew it shorter. So re-measure
 	# this the day frame 1 changes; nothing here is a free choice.
 	"warden": {"name": "Warden", "color": Color(0.35, 0.90, 0.68), "art": "regen",
+		# 0.09 / 175 (was 0.06 / 150), the same threshold argument as `regen` above but aimed at
+		# the whole knot rather than at one creep, and non-stacking, so the answer stays "bring
+		# enough damage" and never becomes "this wave cannot be killed".
 		"hp": 1.25, "spd": 0.9, "count": 0.7, "radius": 1.20,
-		"heal_aura": 0.06, "heal_radius": 150.0},
+		"heal_aura": 0.09, "heal_radius": 175.0},
 	# Wisp jumps `blink` px further down the road every `blink_every` seconds. It is the only
 	# creep whose progress does not come from its speed, so it is the only one a slow cannot
 	# fully answer — and it punishes a board with a gap in it, since a jump can carry it
@@ -886,7 +917,7 @@ const WAVE_TYPES := {
 	# and 3.3 x make_flying()'s 0.65 leaves ~2.1x HP, a genuine air tank rather than a big
 	# dragon. radius 1.9 so the borrowed sheet reads as the heavier creature until it is drawn.
 	"roc":    {"name": "Roc", "color": Color(0.62, 0.70, 0.88), "air": true, "art": "air",
-		"hp": 3.3, "spd": 0.7, "count": 0.4, "radius": 1.9},
+		"hp": 3.5, "spd": 0.7, "count": 0.4, "radius": 1.9},
 }
 
 ## The SEED TABLE: the hand-authored opening of a run. A run does not end here — past the
@@ -1063,7 +1094,12 @@ const ELEMENT_STRONG := 1.6
 ## Mismatched element damage, deliberately gentler than ELEMENT_STRONG is generous: a reward-
 ## first asymmetry, so building the wrong element for a wave costs less than building the
 ## right one gains.
-const ELEMENT_WEAK := 0.85
+## 0.72 (was 0.85). ELEMENT_STRONG is deliberately left at 1.6: widening the spread from the
+## strong end rewards a player who already picks correctly and makes the game EASIER, while
+## widening it from the weak end charges for a mono-element board, which is the decision this
+## table exists to create. Pure is unaffected — its rule is that element_mult_best always
+## finds the 1.6, and that number has not moved.
+const ELEMENT_WEAK := 0.70
 
 ## Damage multiplier for attacker element `atk` hitting armour element `def`.
 func element_mult(atk: String, def: String) -> float:

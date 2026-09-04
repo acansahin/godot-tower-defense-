@@ -12,6 +12,7 @@ LANG_EN,English,English
 LANG_TR,Türkçe,Türkçe
 DIFF_NORMAL,Normal,Normal
 DIFF_EASY,Easy,Kolay
+DIFF_HARD,Hard,Zor
 STATUS_OFFLINE,Welcome back: +%d Essence while away,Tekrar hoş geldin: yokken +%d Öz
 STATUS_ESSENCE,Essence: %d,Öz: %d
 STATUS_BEST,Best: wave %d,En iyi: dalga %d

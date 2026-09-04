@@ -30,8 +30,16 @@ extends Node
 ## route, so 120 (Normal) is one of the two deliberate departures from the map (the other
 ## is noted on TOWER_DEFS): enough for over two tier-1 towers.
 const RULESETS := {
-	"normal": {"hp_mult": 1.0, "count_mult": 1.0, "start_gold": 120, "start_lives": 20},
-	"easy": {"hp_mult": 0.70, "count_mult": 0.85, "start_gold": 150, "start_lives": 25},
+	"normal": {"hp_mult": 1.0, "count_mult": 1.0, "speed_mult": 1.0, "start_gold": 120, "start_lives": 20},
+	"easy": {"hp_mult": 0.70, "count_mult": 0.85, "speed_mult": 0.95, "start_gold": 150, "start_lives": 25},
+	## GAME_STRATEGY_V2.md §12.2's own table. That section also gives Hard a shortened road, a
+	## closed build block and a visible modifier; none of those is a number, so none of them is
+	## here — this row is the arithmetic half of that design and nothing else.
+	##
+	## `speed_mult` is the one that does the most work, and it is the reason the field exists at
+	## all: wave_speed() was the only curve no ruleset could reach, and a faster creep is less
+	## time in range, which is the thing a bigger board cannot simply out-buy.
+	"hard": {"hp_mult": 1.15, "count_mult": 1.08, "speed_mult": 1.06, "start_gold": 110, "start_lives": 18},
 }
 const DEFAULT_RULESET := "normal"
 
@@ -43,6 +51,9 @@ func ruleset_hp_mult(id: String) -> float:
 
 func ruleset_count_mult(id: String) -> float:
 	return float(_ruleset(id).get("count_mult", 1.0))
+
+func ruleset_speed_mult(id: String) -> float:
+	return float(_ruleset(id).get("speed_mult", 1.0))
 
 func ruleset_start_gold(id: String) -> int:
 	return int(_ruleset(id).get("start_gold", 120))
@@ -258,7 +269,11 @@ const FIRST_PREP_TIME := 10.0
 ## less than a single build — so interest rewards banking toward a threshold purchase, not
 ## indefinite hoarding; see GAME_STRATEGY_V2.md §8.2 for the full walk-through.
 const INTEREST_RATE := 0.05
-const INTEREST_CAP := 60
+## Trimmed 60 -> 40 in the same pass as REWARD_SLOPE below, and for the same reason: the
+## income side is the only lever that moves what a PLAYER can afford without moving what a
+## maxed board can survive (`--fill-board` grants itself a million gold, so it is blind to
+## every number in this section). Banking is still worth it; hoarding pays a fifth less.
+const INTEREST_CAP := 40
 const LEAK_FREE_BONUS := 6        ## Bonus if no enemy reached the end this wave.
 
 ## Flying used to also be rolled per enemy on ground waves (15% from wave 3). That is gone:
@@ -266,9 +281,12 @@ const LEAK_FREE_BONUS := 6        ## Bonus if no enemy reached the end this wave
 ## drawing mistake, not a flyer. Air is the Air wave, and nothing else — which is also the
 ## reading the map itself takes.
 
-## Gold for calling a wave in early, by the wave number being skipped into.
+## Gold for calling a wave in early, by the wave number being skipped into. Reads
+## wave_reward() rather than repeating its formula: the two were the same literal `3 + wave`
+## in two places, and REWARD_SLOPE would otherwise have moved one curve and left the other
+## behind — making early-calling quietly better every time kill income is trimmed.
 func early_call_bonus(wave: int) -> int:
-	return 3 + wave
+	return wave_reward(wave)
 
 # --- Run length: the one dial the rest of the pacing hangs off -----------------
 #
@@ -358,7 +376,7 @@ const BASE_HP_FLAT := 225.0
 ## flatter climb had been set against `--fill-board`, which is an upper bound, and a run that
 ## has to EARN its towers finished with too much room left. The per-wave ratio runs
 ## 1.103 -> 1.078 -> 1.085 across those two moves.
-const FINAL_HP_FACTOR := 55.0
+const FINAL_HP_FACTOR := 100.0
 
 ## The per-wave HP ratio, derived so wave STANDARD_WAVES lands on FINAL_HP_FACTOR. At 50
 ## waves and the current factor this is 1.085 — well under the map's own flat 1.16, because
@@ -369,7 +387,7 @@ func hp_growth() -> float:
 ## Creeps spawn at a fraction of their baked hit points, chosen by the map's difficulty
 ## selector: 50% on the easiest setting, +12.5 points per step. We have no difficulty
 ## screen, so this is the dial that stands in for one.
-const CREEP_HP_PERCENT := 1.20
+const CREEP_HP_PERCENT := 1.36
 ## Enemy speed is tied to the LENGTH OF THE ROAD, not to anything in the source map, and
 ## nothing else in the game reads that length — so if the road changes, these move with it
 ## or the pacing breaks silently. `--dump-board --map:winding` prints the length: it is
@@ -426,6 +444,23 @@ const BASE_COUNT_MAX := 28
 ## wave_reward(20) = 9); the new run economy is sized against a linear curve instead
 ## (new wave_reward(20) = 23) — see §29.2's whole-run budget, which assumes this shape.
 const REWARD_FLAT := 3
+## How fast the per-kill reward climbs. THE MAIN DIFFICULTY LEVER of this file, and it is
+## deliberately on the income side rather than on tower damage or the HP curve.
+##
+## The board went from 12 marked pads to 33 free spots when the pad lattice was removed
+## (`--dump-board`), so the player fields nearly three times the towers the economy was sized
+## for — and `--play-sim` measured exactly that: five seeds all WON wave 50, four of them
+## without losing a single life, every one of them saturating all 33 spots and finishing with
+## 700-1400 gold spare. What grew was the BOARD, and what bounds the board is income.
+##
+## Cutting tower damage would have fixed the same number from the other end and cost the
+## ceiling: `--fill-board` clears wave 50 with the run's HP endpoint at 14,850 and no margin
+## to spare. Cutting income cannot touch it at all, because that harness grants itself a
+## million gold. So this moves the floor and leaves the ceiling where it was measured.
+##
+## 0.75: wave 20 pays 18 a kill instead of 23, wave 40 pays 33 instead of 43 — about a fifth
+## off the run's whole kill income.
+const REWARD_SLOPE := 0.68
 const SPAWN_INTERVAL_START := 0.9
 const SPAWN_INTERVAL_DECAY := 0.04
 const SPAWN_INTERVAL_MIN := 0.3
@@ -448,19 +483,25 @@ func wave_hp(wave: int, ruleset: String = DEFAULT_RULESET) -> float:
 ## Both ramps count from wave - 1, so wave 1 sits exactly on the FLAT constants and wave
 ## STANDARD_WAVES exactly on the FINAL ones. A run past its last wave (Endless, once it
 ## exists) keeps climbing rather than clamping — the anchor sets the shape, not a ceiling.
-func wave_speed(wave: int) -> float:
-	return (BASE_SPEED_FLAT + float(wave - 1) * speed_slope()) * CREEP_SPEED_PERCENT
+func wave_speed(wave: int, ruleset: String = DEFAULT_RULESET) -> float:
+	var raw := BASE_SPEED_FLAT + float(wave - 1) * speed_slope()
+	return raw * CREEP_SPEED_PERCENT * ruleset_speed_mult(ruleset)
 
 ## Ruleset scaling is applied AFTER the flat+linear count and rounded, rather than folded
 ## into BASE_COUNT_FLAT/LINEAR directly, so "normal" (mult 1.0) reproduces the exact integer
 ## the un-scaled formula always gave — no behaviour change for the ruleset every existing
 ## number in this file was already tuned against.
+##
+## It also scales OUTSIDE BASE_COUNT_MAX rather than inside it, and that is not cosmetic: the
+## cap binds from wave 16 on, so a multiplier applied inside it did nothing at all for the
+## last two thirds of a run — Hard's +15% was dead from wave 16 to wave 50. Outside, the cap
+## scales with the ruleset too. "normal" is still exact (mini() then x1.0 rounds to itself).
 func wave_count(wave: int, ruleset: String = DEFAULT_RULESET) -> int:
 	var base := BASE_COUNT_FLAT + int(float(wave) * BASE_COUNT_LINEAR)
-	return mini(BASE_COUNT_MAX, int(round(float(base) * ruleset_count_mult(ruleset))))
+	return int(round(float(mini(BASE_COUNT_MAX, base)) * ruleset_count_mult(ruleset)))
 
 func wave_reward(wave: int) -> int:
-	return REWARD_FLAT + wave
+	return REWARD_FLAT + int(round(float(wave) * REWARD_SLOPE))
 
 func spawn_interval(wave: int) -> float:
 	return maxf(SPAWN_INTERVAL_MIN, SPAWN_INTERVAL_START - wave * SPAWN_INTERVAL_DECAY)
