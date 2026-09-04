@@ -26,9 +26,11 @@ const GAME_SCENE := "res://scenes/Main.tscn"
 @onready var _status_label: Label = $UI/Root/Center/Column/Panel/VBox/StatusLabel
 @onready var _workshop: Workshop = $UI/Root/Workshop
 
-## Cycle order for the Difficulty button — just the two Phase 1 ships (GAME_STRATEGY_V2.md
-## §12, §28; BUILD NEXT #8). Hard is a later phase and has no Balance.RULESETS entry yet.
-const RULESET_CYCLE := ["normal", "easy"]
+## Cycle order for the Difficulty button. Hard is the arithmetic half of GAME_STRATEGY_V2.md
+## §12.2 (its shortened road / closed block / visible modifier are later, mechanic-shaped
+## content); the numbers ship here because the balance pass that hardened Normal wanted a
+## profile above it too. Every id must have a Balance.RULESETS entry and a DIFF_<ID> string.
+const RULESET_CYCLE := ["normal", "easy", "hard"]
 
 func _ready() -> void:
 	# Nothing here draws a board any more, so this is not about the backdrop: it restores

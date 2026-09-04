@@ -21,15 +21,15 @@ class_name WaveGenerator
 ## commonest thing at wave 45 — by then the archetypes that ask a QUESTION rather than raise
 ## a number are what a late wave should mostly be made of.
 const POOL: Array = [
-	{"type": "normal", "from": 1,  "weight": 3.0, "late": 0.8},
-	{"type": "fast",   "from": 3,  "weight": 2.5, "late": 1.2},
+	{"type": "normal", "from": 1,  "weight": 3.0, "late": 0.5},
+	{"type": "fast",   "from": 3,  "weight": 2.5, "late": 2.0},
 	{"type": "swarm",  "from": 4,  "weight": 2.0, "late": 1.5},
-	{"type": "air",    "from": 6,  "weight": 1.5, "late": 2.0},
-	{"type": "immune", "from": 7,  "weight": 1.5, "late": 2.0},
+	{"type": "air",    "from": 6,  "weight": 1.5, "late": 2.2},
+	{"type": "immune", "from": 7,  "weight": 1.5, "late": 2.2},
 	{"type": "regen",  "from": 9,  "weight": 1.5, "late": 1.5},
-	{"type": "tank",   "from": 10, "weight": 2.0, "late": 2.0},
+	{"type": "tank",   "from": 10, "weight": 2.0, "late": 2.4},
 	{"type": "split",  "from": 11, "weight": 1.5, "late": 2.0},
-	{"type": "warden", "from": 22, "weight": 1.5, "late": 2.5},
+	{"type": "warden", "from": 22, "weight": 1.5, "late": 3.0},
 	{"type": "wisp",   "from": 24, "weight": 1.5, "late": 2.5},
 	{"type": "gale",   "from": 27, "weight": 1.2, "late": 2.0},
 	{"type": "roc",    "from": 28, "weight": 1.0, "late": 1.8},
@@ -39,7 +39,7 @@ const POOL: Array = [
 ## the wave after the seed table's last teaching wave; the second sits before the run's end,
 ## so the closing stretch is played at the finished mix rather than still drifting into it.
 const LATE_FROM := 25
-const LATE_FULL := 45
+const LATE_FULL := 34
 
 ## How many previous waves an archetype may not repeat from. At 0 the generator rolled the
 ## same creature three waves running often enough to read as the game being stuck — which is
@@ -62,7 +62,10 @@ const ELEMENT_CYCLE: Array = ["water", "fire", "nature", "earth"]
 ## An elite wave trades count for individual strength. Deliberately rare: it is a spike, and
 ## a spike stops reading as one if it happens often.
 const ELITE_EVERY := 7
-const ELITE_HP := 1.6
+## 2.0 (was 1.6). The elite wave is the run's spike and it landed softer than the archetype
+## multipliers around it — a x1.6 elite is a smaller step than the x3.4 a tank already brings.
+## At 2.0 the four elite waves (28/35/42/49) are the ones a board has to be BUILT for.
+const ELITE_HP := 1.75
 const ELITE_COUNT := 0.55
 
 ## A MIXED wave: a second archetype makes up ESCORT_FRAC of the line, spread through the
@@ -75,8 +78,12 @@ const ELITE_COUNT := 0.55
 ## new. Held back to ESCORT_FROM so the first half of the run keeps teaching one thing at a
 ## time, and kept off boss waves, where the boss is already the wave's second question.
 const ESCORT_FROM := 26
-const ESCORT_CHANCE := 0.55
-const ESCORT_FRAC := 0.32
+## 0.70 / 0.38 (were 0.55 / 0.32). Two archetypes at once is the variety knob that changes the
+## FIGHT rather than the roster, and after the late weights above were re-aimed at the
+## question-asking archetypes it is also how those questions arrive together — a warden knot
+## escorting a fast line asks for damage and for time in the same wave.
+const ESCORT_CHANCE := 0.70
+const ESCORT_FRAC := 0.38
 
 var _run_seed: int = 0
 ## Memo of the archetype chosen per wave. The anti-repeat rule has to know what the PREVIOUS

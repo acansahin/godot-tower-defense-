@@ -134,7 +134,7 @@ func _start_wave() -> void:
 	# stack on top of it, so a single wave can be smoothed without rebalancing the whole
 	# archetype (which is shared across several waves).
 	_base_hp = Balance.wave_hp(_wave, Game.ruleset)
-	_base_spd = Balance.wave_speed(_wave)
+	_base_spd = Balance.wave_speed(_wave, Game.ruleset)
 	_hp_over = float(def.get("hp", 1.0))
 	# _hp / _spd stay the PRIMARY archetype's numbers: the boss is built from them, and so is
 	# the harness line below. Every ordinary creep derives its own from _base_* and whichever

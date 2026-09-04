@@ -41,13 +41,29 @@ var _board_override: String = ""
 
 func _ready() -> void:
 	get_tree().paused = false
+	# Harness overrides, all read in one pass. `--seed:N` and `--ruleset:X` exist for the
+	# BALANCE loop rather than for looking at anything: `--play-sim` draws a fresh randi()
+	# every launch, so without a fixed seed a before/after comparison is measuring two
+	# different runs, and without a ruleset argument the non-default profiles cannot be
+	# measured at all. Both are set before Game.reset(), which reads the ruleset's own
+	# start_gold / start_lives.
+	var seed_override := -1
 	for arg in OS.get_cmdline_user_args():
 		if String(arg).begins_with("--map:"):
 			_board_override = String(arg).trim_prefix("--map:")
+		elif String(arg).begins_with("--seed:"):
+			seed_override = int(String(arg).trim_prefix("--seed:"))
+		elif String(arg).begins_with("--ruleset:"):
+			var id := String(arg).trim_prefix("--ruleset:")
+			if Balance.RULESETS.has(id):
+				Game.ruleset = id
+			else:
+				push_error("--ruleset: unknown ruleset %s (have %s)"
+						% [id, str(Balance.RULESETS.keys())])
 	Game.use_board(STANDARD_BOARD if _board_override == "" else _board_override)
 	# One seed drives both the waves and the card offers, so a whole run — what it throws at
 	# you and what it lets you answer with — replays from a single number.
-	var run_seed := randi()
+	var run_seed: int = randi() if seed_override < 0 else seed_override
 	Game.reset()
 	Run.reset(run_seed)
 
