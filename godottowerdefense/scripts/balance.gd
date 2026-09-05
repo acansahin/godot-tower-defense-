@@ -483,9 +483,21 @@ func wave_hp(wave: int, ruleset: String = DEFAULT_RULESET) -> float:
 ## Both ramps count from wave - 1, so wave 1 sits exactly on the FLAT constants and wave
 ## STANDARD_WAVES exactly on the FINAL ones. A run past its last wave (Endless, once it
 ## exists) keeps climbing rather than clamping — the anchor sets the shape, not a ceiling.
-func wave_speed(wave: int, ruleset: String = DEFAULT_RULESET) -> float:
+## `board_scale` holds the CROSSING TIME constant across boards of different road lengths.
+## BASE_SPEED_FLAT and FINAL_SPEED_RAW were both tuned to one road (Game.SPEED_REFERENCE_BOARD,
+## 3199px) and nothing else in the game reads a road's length, so without this a 4042px board
+## silently runs 26% long and a 2518px board 21% short — a pacing difference, not a difficulty
+## one, and the wrong thing to let a map choose by accident.
+##
+## Passed IN rather than looked up: Balance is autoload #1 and Game is #3, and that order is
+## load-bearing (see CLAUDE.md). Balance must not reach forward to Game.
+##
+## It multiplies alongside the ruleset's own speed_mult and the two stay orthogonal: one is
+## the map, the other is the difficulty. What a map is still free to differ in is COVERAGE —
+## how much road one tower watches — which is the tactical half and the half worth keeping.
+func wave_speed(wave: int, ruleset: String = DEFAULT_RULESET, board_scale: float = 1.0) -> float:
 	var raw := BASE_SPEED_FLAT + float(wave - 1) * speed_slope()
-	return raw * CREEP_SPEED_PERCENT * ruleset_speed_mult(ruleset)
+	return raw * CREEP_SPEED_PERCENT * ruleset_speed_mult(ruleset) * board_scale
 
 ## Ruleset scaling is applied AFTER the flat+linear count and rounded, rather than folded
 ## into BASE_COUNT_FLAT/LINEAR directly, so "normal" (mult 1.0) reproduces the exact integer

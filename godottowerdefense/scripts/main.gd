@@ -30,13 +30,17 @@ var _sim_spend_clock: float = 0.0
 var _sim_next_element: int = 0
 ## How often the simulated player checks whether it can afford anything, in game seconds.
 const SIM_SPEND_EVERY := 0.5
-## Standard mode's one board (GAME_STRATEGY_V2.md §28 Phase 1: "1 harita", BUILD NEXT #8).
-## `Game.use_board_for_wave()`'s 10-wave winding->spiral->s rotation (Game.BOARD_SEQUENCE)
-## is now Endless-only infrastructure, unreached from here — same treatment step 4 gave
-## WaveGenerator. A Standard run stays on this board from wave 1 through Balance.STANDARD_WAVES.
-const STANDARD_BOARD := "winding"
+## The board THIS run plays on, captured once in _ready() and never re-read afterwards.
+## A Standard run stays on one board from wave 1 through Balance.STANDARD_WAVES; which one
+## is the player's choice now (Game.selected_board, set by the menu's map panel), and
+## pinning it here rather than re-reading the autoload means nothing outside the run can
+## move the ground under a run in progress.
+##
+## `Game.use_board_for_wave()`'s 10-wave rotation (Game.BOARD_SEQUENCE) is still Endless-only
+## infrastructure, unreached from here — same treatment step 4 gave WaveGenerator.
+var _run_board: String = ""
 
-## Harness only (`--map:s`): holds one board for a focused playtest instead of the default.
+## Harness only (`--map:s`): holds one board for a focused playtest instead of the chosen one.
 var _board_override: String = ""
 
 func _ready() -> void:
@@ -50,7 +54,14 @@ func _ready() -> void:
 	var seed_override := -1
 	for arg in OS.get_cmdline_user_args():
 		if String(arg).begins_with("--map:"):
-			_board_override = String(arg).trim_prefix("--map:")
+			# Validated like --ruleset: below. Unvalidated, a typo'd id reached use_board()'s
+			# error branch and left the board UNCONFIGURED, which reads as an empty world
+			# rather than as a bad argument.
+			var mid := String(arg).trim_prefix("--map:")
+			if Game.BOARDS.has(mid):
+				_board_override = mid
+			else:
+				push_error("--map: unknown board %s (have %s)" % [mid, str(Game.BOARDS.keys())])
 		elif String(arg).begins_with("--seed:"):
 			seed_override = int(String(arg).trim_prefix("--seed:"))
 		elif String(arg).begins_with("--ruleset:"):
@@ -60,7 +71,10 @@ func _ready() -> void:
 			else:
 				push_error("--ruleset: unknown ruleset %s (have %s)"
 						% [id, str(Balance.RULESETS.keys())])
-	Game.use_board(STANDARD_BOARD if _board_override == "" else _board_override)
+	_run_board = _board_override if _board_override != "" else Game.selected_board
+	if not Game.BOARDS.has(_run_board):
+		_run_board = Game.DEFAULT_BOARD
+	Game.use_board(_run_board)
 	# One seed drives both the waves and the card offers, so a whole run — what it throws at
 	# you and what it lets you answer with — replays from a single number.
 	var run_seed: int = randi() if seed_override < 0 else seed_override
@@ -183,13 +197,13 @@ func _ready() -> void:
 				_save_screenshot(1.0)
 
 ## WaveManager emits this before deriving stats or creating the first enemy. Used to also
-## rotate the board by wave chapter; a Standard run now stays on STANDARD_BOARD for its whole
+## rotate the board by wave chapter; a Standard run now stays on `_run_board` for its whole
 ## length (see _ready()), so this is a no-op every wave (Game.use_board() already short-
 ## circuits on the board it is already showing) except to keep the `number` parameter's
 ## signal shape intact for whatever Endless mode reconnects here later.
 func _on_wave_starting(number: int) -> void:
 	var previous_board := Game.active_board_id
-	Game.use_board(STANDARD_BOARD if _board_override == "" else _board_override)
+	Game.use_board(_run_board)
 	grid.queue_redraw()
 	if previous_board == Game.active_board_id:
 		return
@@ -830,7 +844,8 @@ func _avatar_pose() -> void:
 		# the art: the walk cycle is played at the creep's own pace, so at 24 the twelve frames
 		# ran at 1.9 fps and the first painted boss was judged — by eye, correctly — to be
 		# stepping. At the first avatar wave's real speed the same art plays at 5.2.
-		var real_speed := Balance.wave_speed(int(Balance.ELEMENT_BOSS_WAVES[0])) * Balance.BOSS_SPEED_MULT
+		var real_speed := Balance.wave_speed(int(Balance.ELEMENT_BOSS_WAVES[0]),
+				Game.ruleset, Game.board_speed_scale(Game.active_board_id)) * Balance.BOSS_SPEED_MULT
 		e.setup(4000.0, real_speed, 50, Game.ELEMENT_COLORS.get(element, Balance.BOSS_TINT))
 		e.kind = "normal"   # what an avatar wave pins its archetype to (Game.apply_milestone)
 		e.radius = Balance.BOSS_RADIUS
@@ -1289,6 +1304,12 @@ func _dump_board() -> void:
 	# actually poses: how much road can one tower watch from the best place it may stand.
 	var spots: Array = _buildable_lattice()
 	print("  road length      : %.0f px over %d waypoints" % [total, path.size()])
+	# "free placement" means there is no pad lattice, NOT that the terrain allows anything:
+	# the open-ground mask is the rule that does most of the refusing, and whether a board has
+	# one is the single biggest lever on this count (it takes `s` from 42 spots to 29). Report
+	# it, because a board silently missing its mask measures as a generous board.
+	print("  board            : %s (%s)" % [Game.active_board_id,
+			"open-ground mask" if Game.active_build_mask != null else "NO MASK - terrain unenforced"])
 	print("  buildable spots  : %d (free placement, sampled every %.0fpx)"
 			% [spots.size(), Game.TOWER_GAP * 0.5])
 	print("  road samples     : %d (every %.0f px)" % [samples.size(), STEP])
@@ -1636,5 +1657,5 @@ func _on_victory() -> void:
 	# lives do not make ★★★ easier to reach than Normal's.
 	var lives_lost := Balance.ruleset_start_lives(Game.ruleset) - Game.lives
 	var stars := 3 if lives_lost <= 0 else (2 if lives_lost <= 5 else 1)
-	Meta.record_stars(Game.ruleset, stars)
+	Meta.record_stars(_run_board, Game.ruleset, stars)
 	end_screen.show_summary(earned, true, stars)

@@ -25,6 +25,8 @@ const GAME_SCENE := "res://scenes/Main.tscn"
 @onready var _workshop_button: Button = $UI/Root/Center/Column/Panel/VBox/WorkshopButton
 @onready var _status_label: Label = $UI/Root/Center/Column/Panel/VBox/StatusLabel
 @onready var _workshop: Workshop = $UI/Root/Workshop
+@onready var _map_button: Button = $UI/Root/Center/Column/Panel/VBox/MapButton
+@onready var _map_panel: MapPanel = $UI/Root/MapPanel
 
 ## Cycle order for the Difficulty button. Hard is the arithmetic half of GAME_STRATEGY_V2.md
 ## §12.2 (its shortened road / closed block / visible modifier are later, mechanic-shaped
@@ -35,9 +37,12 @@ const RULESET_CYCLE := ["normal", "easy", "hard"]
 func _ready() -> void:
 	# Nothing here draws a board any more, so this is not about the backdrop: it restores
 	# the geometry lifecycle the run relies on. `Game.use_board()` early-returns on the id it
-	# already holds (game.gd:1118) and `configure_board()` is what installs the path, so
-	# returning from a run and going straight back in must pass through a different id.
-	Game.use_main_board()
+	# already holds and `configure_board()` is what installs the path, so returning from a run
+	# and going straight back in has to reach configure_board() again. This used to be done by
+	# bouncing through a different board id, which stopped working the moment the map panel let
+	# the player CHOOSE that id -- release_board() clears the state instead.
+	Game.release_board()
+	_map_button.pressed.connect(_on_map)
 	_ruleset_button.pressed.connect(_on_ruleset)
 	_play_button.pressed.connect(_on_play)
 	_how_button.pressed.connect(_on_how)
@@ -47,17 +52,20 @@ func _ready() -> void:
 	_how_panel.closed.connect(_on_back)
 	_workshop_button.pressed.connect(_on_workshop)
 	_workshop.closed.connect(_on_workshop_closed)
+	_map_panel.closed.connect(_on_map_closed)
 	Meta.essence_changed.connect(func(_v: int) -> void: _refresh_status())
 	# Godot re-translates a Control's own `text` by itself, so the six plain buttons need
 	# nothing. These four are built in code around a value ("Essence: %d"), so they are only
 	# rebuilt when that value next changes -- which for a language switch is never.
 	Game.locale_changed.connect(func(_l: String) -> void: _refresh_localized())
+	_refresh_map_label()
 	_refresh_ruleset_label()
 	_refresh_language_label()
 	if OS.has_feature("web"):
 		_quit_button.hide()   # there is nothing to quit to in a browser tab
 	_how_panel.hide()
 	_workshop.hide()
+	_map_panel.hide()
 	_refresh_sound_label()
 	_refresh_status()
 	_play_button.grab_focus()
@@ -67,6 +75,22 @@ func _ready() -> void:
 	#   Godot.exe --path <project> res://scenes/Menu.tscn --quit-after 300 -- --show-workshop
 	if OS.get_cmdline_user_args().has("--show-workshop"):
 		_on_workshop()
+	# And the map panel, for the same reason again: which board is selected, which are locked
+	# and what each lock costs live entirely in a _draw(), so no harness that prints numbers
+	# can see any of it. `--stars:N` above fakes a star total so the LOCKED and UNLOCKED
+	# states of the same panel can both be photographed without earning them.
+	for arg in OS.get_cmdline_user_args():
+		if String(arg).begins_with("--stars:"):
+			# Fakes a star total IN MEMORY so the panel's unlocked state can be photographed
+			# without winning three runs first. It writes the fake through Meta.stars rather
+			# than through a separate override, so what the panel reads is the real field and
+			# the real gate arithmetic -- a stub that bypassed Meta would photograph a screen
+			# the game cannot actually reach. Never persisted: nothing here calls _persist().
+			Meta.stars[Meta.star_key(Game.DEFAULT_BOARD, "normal")] = 3
+			Meta.stars[Meta.star_key(Game.DEFAULT_BOARD, "easy")] = 3
+			Meta.stars[Meta.star_key(Game.DEFAULT_BOARD, "hard")] = 					clampi(int(String(arg).split(":")[1]) - 6, 0, 3)
+	if OS.get_cmdline_user_args().has("--show-maps"):
+		_on_map()
 	# The same for the rules panel, and for the same reason: it is the tallest thing this
 	# scene can put on screen, so it is where a theme's content margins overflow first.
 	for arg in OS.get_cmdline_user_args():
@@ -122,12 +146,14 @@ func _refresh_status() -> void:
 	parts.append(tr("STATUS_ESSENCE") % Meta.essence)
 	if Meta.best_wave > 0:
 		parts.append(tr("STATUS_BEST") % Meta.best_wave)
-	# Stars for the CURRENTLY SELECTED ruleset only (GAME_STRATEGY_V2.md §12.4, BUILD NEXT
-	# #8) — showing both at once would need the reader to remember which row is which; this
-	# way the star line always answers "how did I do at the difficulty I am about to play".
-	var earned_stars := Meta.stars_for(Game.ruleset)
+	# Stars for the LEVEL about to be played — the selected board AND the selected difficulty
+	# (GAME_STRATEGY_V2.md §12.4). Listing every level here would need the reader to remember
+	# which row is which; the map panel is where the whole ladder is laid out, and this line
+	# only ever answers "how did I do at the thing Play will start".
+	var earned_stars := Meta.stars_for(Game.selected_board, Game.ruleset)
 	if earned_stars > 0:
-		parts.append("%s: %s%s" % [Game.ruleset.capitalize(),
+		parts.append("%s — %s: %s%s" % [tr(String(Game.BOARDS[Game.selected_board]["name_key"])),
+				tr("DIFF_" + Game.ruleset.to_upper()),
 				"★".repeat(earned_stars), "☆".repeat(3 - earned_stars)])
 	_status_label.text = "\n".join(parts)
 
@@ -140,7 +166,23 @@ func _on_ruleset() -> void:
 	Game.ruleset = String(RULESET_CYCLE[(maxi(i, 0) + 1) % RULESET_CYCLE.size()])
 	Audio.play("build")
 	_refresh_ruleset_label()
-	_refresh_status()  # the star line below is ruleset-specific
+	_refresh_status()  # the star line is per (board, ruleset)
+
+## Opens the level select. The board is half of a "level" (§12.4) and the Difficulty button
+## beside it is the other half, which is why the two sit together above Play.
+func _on_map() -> void:
+	Audio.play("build")
+	_center.hide()
+	_map_panel.open()
+
+func _on_map_closed() -> void:
+	_center.show()
+	_refresh_map_label()
+	_refresh_status()   # the star line is per (board, ruleset)
+	_play_button.grab_focus()
+
+func _refresh_map_label() -> void:
+	_map_button.text = tr("MENU_MAP") % tr(String(Game.BOARDS[Game.selected_board]["name_key"]))
 
 func _refresh_ruleset_label() -> void:
 	_ruleset_button.text = tr("MENU_DIFFICULTY") % tr("DIFF_" + Game.ruleset.to_upper())
@@ -150,6 +192,7 @@ func _refresh_language_label() -> void:
 
 ## Every label this scene builds in code rather than leaving to Godot's own re-translation.
 func _refresh_localized() -> void:
+	_refresh_map_label()
 	_refresh_ruleset_label()
 	_refresh_language_label()
 	_refresh_sound_label()
