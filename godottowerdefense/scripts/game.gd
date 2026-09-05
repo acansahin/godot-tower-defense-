@@ -406,6 +406,11 @@ const OBSTACLES: Array = [
 ## with length to hold the crossing TIME constant across boards; what stays different is
 ## coverage, which is the tactical half and the half worth keeping (see --dump-board).
 ##
+## `thumb` is a 256x144 reduction of `art`, made by `python tools/board_thumb.py`. The map
+## panel draws the SHAPE of each road, and it lives on the title screen where no board is
+## loaded -- pointing it at the real paintings would pull ~9 MB of texture into the menu
+## to draw three postage stamps. Re-run the tool after any repaint.
+##
 ## `star_gate` is GAME_STRATEGY_V2.md §12.4's unlock ladder. Ordered by measured difficulty:
 ## winding ships first, `s` is the roomiest (42 spots, 100% of its road reachable), spiral
 ## is the tightest (fewest spots, longest road, Fire reaches only 80% of it).
@@ -415,6 +420,7 @@ const BOARDS := {
 		"art": "res://assets/art/maps/winding_forest_cleared_v7_graded.png",
 		"water": "res://assets/art/maps/winding_forest_cleared_v7_graded_water.png",
 		"build_mask": "res://assets/art/maps/winding_forest_cleared_v7_graded_build.png",
+		"thumb": "res://assets/art/maps/winding_thumb.png",
 		"waterfall_a": Vector4(0.045, 0.48, 0.055, 0.37),
 		"waterfall_b": Vector4.ZERO,
 		"name_key": "MAP_WINDING", "desc_key": "MAP_WINDING_DESC",
@@ -425,6 +431,7 @@ const BOARDS := {
 		"art": "res://assets/art/maps/s_forest_v1_graded.png",
 		"water": "res://assets/art/maps/s_forest_v1_graded_water.png",
 		"build_mask": "res://assets/art/maps/s_forest_v1_graded_build.png",
+		"thumb": "res://assets/art/maps/s_thumb.png",
 		"waterfall_a": Vector4(0.09, 0.12, 0.045, 0.09),
 		"waterfall_b": Vector4(0.07, 0.72, 0.06, 0.20),
 		"name_key": "MAP_S", "desc_key": "MAP_S_DESC",
@@ -435,6 +442,7 @@ const BOARDS := {
 		"art": "res://assets/art/board_source.png",
 		"water": "res://assets/art/board_water.png",
 		"build_mask": "res://assets/art/board_source_build.png",
+		"thumb": "res://assets/art/maps/spiral_thumb.png",
 		"waterfall_a": Vector4(0.095, 0.63, 0.05, 0.14),
 		"waterfall_b": Vector4.ZERO,
 		"name_key": "MAP_SPIRAL", "desc_key": "MAP_SPIRAL_DESC",
