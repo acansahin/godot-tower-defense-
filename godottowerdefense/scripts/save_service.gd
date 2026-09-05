@@ -20,7 +20,7 @@ extends Node
 ## went 40/45/70 -> a flat 50 with a 24444-gold top tier, and the wave hit-point curve
 ## went quadratic -> 75 * 1.16^n. A `best_wave` earned under the old curve does not mean
 ## the same thing, and Essence banked against it buys far more than it should.
-const SAVE_VERSION := 2
+const SAVE_VERSION := 3
 const PATH := "user://save.json"
 const PATH_TMP := "user://save.json.tmp"
 const PATH_BAK := "user://save.bak.json"
@@ -105,8 +105,8 @@ func _read(path: String) -> Dictionary:
 		return {}
 	return parsed
 
-## Brings an older document up to SAVE_VERSION. Nothing to do yet — version 1 is the first
-## format — but the seam exists so the first real migration is an `if`, not a redesign.
+## Brings an older document up to SAVE_VERSION. Each step is a separate `if v < N`, applied
+## in order, so a save from any older version walks forward through all of them.
 func _migrate(doc: Dictionary) -> Dictionary:
 	var v := int(doc.get("version", 0))
 	if v > SAVE_VERSION:
@@ -127,5 +127,24 @@ func _migrate(doc: Dictionary) -> Dictionary:
 		meta["best_wave"] = 0
 		meta["levels"] = {}
 		doc["meta"] = meta
+	if v < 3:
+		# Stars were keyed by ruleset alone while there was one playable board; the map panel
+		# made that ambiguous, so they are now "<board>:<ruleset>" (Meta.star_key). Phase 1
+		# could only be played on `winding`, so every existing key belongs to it. Re-keying
+		# rather than clearing: these are wins the player actually earned.
+		#
+		# The id is a LITERAL and must stay one, for two independent reasons: Save is autoload
+		# #2 and Game is #3, so this file cannot reach Game.DEFAULT_BOARD at all; and even if it
+		# could, this is a statement about which board those old wins happened on, which is
+		# history and does not follow a later change of default.
+		var m3: Dictionary = doc.get("meta", {})
+		var old_stars: Dictionary = m3.get("stars", {})
+		var moved: Dictionary = {}
+		for k in old_stars.keys():
+			var key := String(k)
+			# Idempotent: a key that already carries a board is left exactly as it is.
+			moved[key if key.contains(":") else "winding:" + key] = old_stars[k]
+		m3["stars"] = moved
+		doc["meta"] = m3
 	doc["version"] = SAVE_VERSION
 	return doc

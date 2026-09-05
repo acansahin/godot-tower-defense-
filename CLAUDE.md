@@ -248,6 +248,52 @@ used to, drawing rings around six pockets, has been removed), but the mechanism 
 `--fill-board` sweep the pads when a board has them (`main.gd` `_buildable_lattice()`), so
 the harnesses measure the spots the player is actually offered.
 
+## There are THREE boards, and one table decides everything about them
+
+`Game.BOARDS` is the whole registry: road control points, smoothing, obstacles, the
+painting, the water mask, the waterfall regions, the open-ground mask, the display keys, the
+star gate and the measured road length. **A board is a row in it and nothing else.**
+
+| id | name | road | spots | shape of the fight |
+|---|---|---|---|---|
+| `winding` | Winding Forest | 3199px | 33 | the default; middling coverage |
+| `s` | Twin Falls | **2518px** | 29 | 100% of the road reachable, 4 towers cover it — build wide |
+| `spiral` | Spiral Arena | **4042px** | **24** | least ground, and Fire reaches only **76%** of the road |
+
+Those numbers come from `--dump-board --map:<id>` and are the reason the three play
+differently: it is COVERAGE, not decoration. Re-run it after touching any of them.
+
+Three things about this are load-bearing:
+
+- **The table replaced three parallel `match` statements** — one here, two in `map.gd` (the
+  water mask and the painting) — and both of `map.gd`'s had a `_` fallback to the spiral. So
+  a board added to `game.gd` and forgotten in `map.gd` drew the WRONG PICTURE with the right
+  road on it and never raised a thing. One table cannot disagree with itself.
+- **`speed_scale` is derived, not chosen.** `Balance.BASE_SPEED_FLAT` is tuned so a wave-1
+  creep crosses `Game.SPEED_REFERENCE_BOARD` in ~49s and nothing else reads a road's length,
+  so without it the 4042px board runs 26% long and the 2518px board 21% short. It is passed
+  INTO `Balance.wave_speed()` rather than looked up there, because Balance is autoload #1 and
+  Game is #3. It holds crossing TIME constant and lets coverage carry the difficulty.
+- **The menu's board bounce is gone.** `use_board()` early-returns on the id it already
+  holds, so returning to the menu used to pass through a *different* id (`use_main_board()`
+  → spiral) to force the next run's `configure_board()`. That silently breaks the moment the
+  player can pick the id it bounced through. `Game.release_board()` clears `active_board_id`
+  instead; **never reintroduce a bounce**.
+
+**A level is a board AND a ruleset** (GAME_STRATEGY_V2.md §12.4). `Meta.stars` is keyed
+`"<board>:<ruleset>"` through `Meta.star_key()`, three boards x three rulesets x three stars
+= 27, and `star_gate` opens `s` at 4 stars and `spiral` at 12. Save version 3 migrates the
+old ruleset-only keys onto `winding`, the only board Phase 1 could be played on.
+
+`--map:<id>` pins one board for a harness run and is validated now; `--show-maps` opens the
+map panel on the title screen, since which board is selected and what each lock costs live
+entirely in a `_draw()` that no number can see.
+
+**Adding a fourth board is a row in `Game.BOARDS` plus its art** — no `match` to update, no
+`map.gd` edit, no menu edit (`Game.board_ids()` sorts the panel off `star_gate`). What it
+still needs is the art pipeline in `docs/board-art-prompt.md`, a hand-traced road, and a
+re-measure of the numbers in the table above.
+
 ## The towers and the board are not the same picture, and that is measured too
 
 `python tools/art_match.py` answers "do these belong together?" the way `--dump-board`
@@ -303,7 +349,8 @@ place, not as a substitute for the repaint.
 
 **You cannot build on trees, cliffs or water, and that rule is read off the painting.**
 `python tools/build_mask.py <board.png>` writes `<board>_build.png`, a 1-texel-per-8px mask
-saying where there is open ground; `Game` loads it for the active board (`BUILD_MASKS`) and
+saying where there is open ground; `Game` loads it for the active board (the `build_mask`
+field of its `Game.BOARDS` row) and
 `can_build_at()` samples nine points around the tower's base against it. Re-run the tool
 after a repaint and the rule follows the art — there is nothing to re-measure by hand.
 

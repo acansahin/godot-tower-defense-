@@ -4,14 +4,21 @@ A tiny, fully-playable 2D tower-defense prototype inspired by the Warcraft III
 custom map **Element TD**. Built with typed GDScript, deliberately small and
 readable rather than production-architected.
 
-When you press **Play**, the run starts immediately. The endless run uses the winding
-forest for waves 1–10, changes to
-the inward spiral for waves 11–20, then uses the broad S road for waves 21–30. The run is
-structured as 10-wave map chapters so Z and later road shapes can be appended. Towers, gold
-and lives survive a chapter change; a tower
-that would land on the new road or blocked scenery is moved to the nearest clear ground. Both
-boards are hand-painted 1536x864 worlds whose gameplay roads are **traced out of their
-paintings**, not authored beside them. The run draws enemies from a data table
+Before pressing **Play** you choose a **map** and a **difficulty**; together they make a
+LEVEL, and each level keeps its own best star count (★ finish · ★★ lose ≤5 lives ·
+★★★ lose none). Three maps ship — **Winding Forest** (the default), **Twin Falls**
+(short road, open ground, everything reachable: build wide) and **Spiral Arena** (the
+longest road and the least ground, where Fire reaches only three quarters of the route).
+Twin Falls opens at 4 stars and Spiral Arena at 12, so the maps you have not played yet are
+visible as targets rather than hidden. All three are hand-painted 1536x864 worlds whose
+gameplay roads are **traced out of their paintings**, not authored beside them, and every
+one of their properties lives in a single `Game.BOARDS` row.
+
+Enemy speed is scaled per map so a wave crosses any of the three in the same time; what
+differs between them is **coverage** — how much road one tower can watch — which is what
+makes each map ask a different question. (A separate 10-wave map ROTATION inside one run
+still exists as unreached infrastructure, `Game.use_board_for_wave()`, for a future Endless
+mode; Standard runs stay on the chosen map from wave 1 to the last.) The run draws enemies from a data table
 of **creep archetypes** (including flyers, tanks, swarms, splitters, regenerators, aura
 healers, blinkers, periodic **bosses**, **elite** waves and, in the second half of a run,
 **mixed** waves that put two archetypes on the road at once). The buildable roster is four elements —
@@ -178,7 +185,7 @@ godottowerdefense/
 ├── assets/
 │   └── art/                 # The project's only bitmap assets (icon.svg aside)
 │       ├── board_source.png # The endless-run board; Game.PATH is traced out of it
-│       ├── maps/            # Separate painted boards (winding, s, ...)
+│       ├── maps/            # The other painted boards + their build/water masks
 │       └── towers/          # <element>_1..5.png, cut from _source_<element>.png by
 │                            # tools/cut_sprites.py (at the repo root, not here)
 ├── web/
@@ -349,8 +356,10 @@ editing three files and hunting for un-named literals; it is now one file.
 - **`Game` (autoload)** owns gold & lives and broadcasts `gold_changed`,
   `lives_changed` and `game_over` — there is no `victory`, because waves are
   endless. It also stores the active road/profile and the placement rule so every script
-  reads one source of truth. `BOARD_SEQUENCE` assigns one profile to each 10-wave chapter;
-  until another profile is added, the last available board remains active.
+  reads one source of truth. **`Game.BOARDS` is the board registry** — road, painting, water
+  mask, build mask, star gate and measured road length, one row per map — and
+  `Game.selected_board` is the one the next run will install. `BOARD_SEQUENCE` /
+  `use_board_for_wave()` remain as unreached Endless-mode infrastructure.
 - **`Game.can_build_at(pos, others)`** *is* the placement rule, and the only one: inside
   the play area (`PLAY_TOP` … `PLAY_RIGHT`, so no tower is half under the HUD bar or under
   the palette, which also eats the click), at least `ROAD_KEEPOUT` from the road, clear of

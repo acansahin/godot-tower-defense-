@@ -1136,9 +1136,26 @@ Hepsi **boyamada görünür** — gizli bilgi yok:
 | Faz 3 (v1.0) | 3 | 3 | 9 | 27 |
 | İçerik paketi | +3 | 3 | +9 | +27 |
 
-**[BUILT]** Üç boyalı tahta ve izlenmiş yolları zaten var (`winding`, `spiral`, `s` —
-`Game.BOARD_SEQUENCE`). Bugün *tek bir sonsuz run'ın bölümleri*; **seçilebilir seviyelere**
-dönüşüyorlar.
+**[BUILT]** Üç tahta artık **seçilebilir seviye**: menüdeki harita paneli (`MapPanel`),
+`Game.BOARDS` kayıt tablosu, yıldız kapıları (`star_gate`: Twin Falls 4★, Spiral Arena 12★)
+ve `(harita, ruleset)` ile anahtarlanmış yıldızlar (`Meta.star_key`, kayıt sürümü 3).
+Faz 2'nin "harita 2" satırı bu adımla kapandı ve harita 3 de birlikte geldi.
+
+Ölçülen fark — `--dump-board --map:<id>`, "farklı taktik" iddiasının kanıtı:
+
+| | yol | inşa noktası | fire erişimi | fight'ın şekli |
+|---|---|---|---|---|
+| Winding Forest | 3199px | 33 | %89 | varsayılan, orta kapsama |
+| Twin Falls | **2518px** | 29 | **%100** | 4 kule yolu kapatıyor — geniş kur |
+| Spiral Arena | **4042px** | **24** | **%76** | en az zemin, Fire yetişemiyor |
+
+Yol uzunluğu **tempoyu** değil zorluğu ayırmasın diye normalize edildi
+(`Game.board_speed_scale`, `Balance.wave_speed`'in üçüncü parametresi): her haritada bir
+dalga aynı sürede geçiyor, farklı kalan şey **kapsama**.
+
+**§12.3'ün modifier'ları (Sağanak / Heyelan / Zengin Damar) henüz YOK.** Geometri tek
+başına yeterli fark üretiyor mu sorusunun cevabı yukarıdaki tabloda; modifier'lar bir
+sonraki içerik adımı.
 
 Yıldız kriterleri — hepsi *oyunla* ilgili, harcanan zamanla değil:
 **★** bitir · **★★** ≤5 can kaybet · **★★★** hiç can kaybetme.

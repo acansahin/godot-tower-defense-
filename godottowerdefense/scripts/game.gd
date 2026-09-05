@@ -394,6 +394,79 @@ const OBSTACLES: Array = [
 	[Vector2(315, 715), 176.0],   # the lake and the pool the waterfall drops into
 ]
 
+## Every board the game can install, keyed by the id `use_board()` takes. ONE table rather
+## than the three parallel `match` statements this replaced (here, plus map.gd's water and
+## painting) — two of those fell through to the spiral on an unknown id, so a board missing
+## from one of them drew the WRONG PICTURE with no error at all.
+##
+## `road_len` is measured, not guessed: `--dump-board --map:<id>` prints it. `speed_scale`
+## is derived from it and is the reason the field exists — Balance.BASE_SPEED_FLAT was
+## tuned so a wave-1 creep crosses the WINDING road in ~49s, and nothing else in the game
+## reads the road's length, so a 4042px board would silently run 26% long. Speed scales
+## with length to hold the crossing TIME constant across boards; what stays different is
+## coverage, which is the tactical half and the half worth keeping (see --dump-board).
+##
+## `star_gate` is GAME_STRATEGY_V2.md §12.4's unlock ladder. Ordered by measured difficulty:
+## winding ships first, `s` is the roomiest (42 spots, 100% of its road reachable), spiral
+## is the tightest (fewest spots, longest road, Fire reaches only 80% of it).
+const BOARDS := {
+	"winding": {
+		"path": WINDING_PATH, "subdiv": 4, "obstacles": [], "build_zones": [],
+		"art": "res://assets/art/maps/winding_forest_cleared_v7_graded.png",
+		"water": "res://assets/art/maps/winding_forest_cleared_v7_graded_water.png",
+		"build_mask": "res://assets/art/maps/winding_forest_cleared_v7_graded_build.png",
+		"waterfall_a": Vector4(0.045, 0.48, 0.055, 0.37),
+		"waterfall_b": Vector4.ZERO,
+		"name_key": "MAP_WINDING", "desc_key": "MAP_WINDING_DESC",
+		"star_gate": 0, "road_len": 3199.0,
+	},
+	"s": {
+		"path": S_PATH, "subdiv": 4, "obstacles": S_OBSTACLES, "build_zones": [],
+		"art": "res://assets/art/maps/s_forest_v1_graded.png",
+		"water": "res://assets/art/maps/s_forest_v1_graded_water.png",
+		"build_mask": "res://assets/art/maps/s_forest_v1_graded_build.png",
+		"waterfall_a": Vector4(0.09, 0.12, 0.045, 0.09),
+		"waterfall_b": Vector4(0.07, 0.72, 0.06, 0.20),
+		"name_key": "MAP_S", "desc_key": "MAP_S_DESC",
+		"star_gate": 4, "road_len": 2518.0,
+	},
+	"spiral": {
+		"path": PATH, "subdiv": 2, "obstacles": OBSTACLES, "build_zones": [],
+		"art": "res://assets/art/board_source.png",
+		"water": "res://assets/art/board_water.png",
+		"build_mask": "res://assets/art/board_source_build.png",
+		"waterfall_a": Vector4(0.095, 0.63, 0.05, 0.14),
+		"waterfall_b": Vector4.ZERO,
+		"name_key": "MAP_SPIRAL", "desc_key": "MAP_SPIRAL_DESC",
+		"star_gate": 12, "road_len": 4042.0,
+	},
+}
+
+## The board `speed_scale` is measured against. Balance.BASE_SPEED_FLAT and FINAL_SPEED_RAW
+## are both tuned to this road, so it is 1.0 by definition and every other board is a ratio
+## of it. Changing which board this names re-paces every OTHER board, not this one.
+const SPEED_REFERENCE_BOARD := "winding"
+
+## The board a fresh install starts on, and the only one with star_gate 0. Also what an
+## unknown id falls back to.
+const DEFAULT_BOARD := "winding"
+
+## Board ids in the order the map panel lists them: by star_gate, so the ladder reads down
+## the panel. Built from BOARDS rather than written out, so a new board cannot be added to
+## the game and left out of the menu.
+static func board_ids() -> Array:
+	var ids: Array = BOARDS.keys()
+	ids.sort_custom(func(a, b): return int(BOARDS[a]["star_gate"]) < int(BOARDS[b]["star_gate"]))
+	return ids
+
+## How much faster creeps walk on `board_id` so that crossing it takes the same time as
+## crossing SPEED_REFERENCE_BOARD. Multiplied into Balance.wave_speed() alongside the
+## ruleset's own multiplier; the two are orthogonal (one is the map, one is the difficulty).
+static func board_speed_scale(board_id: String) -> float:
+	var ref := float(BOARDS[SPEED_REFERENCE_BOARD]["road_len"])
+	var own := float(BOARDS.get(board_id, BOARDS[SPEED_REFERENCE_BOARD]).get("road_len", ref))
+	return own / ref if ref > 0.0 else 1.0
+
 ## Fraction of TOWER_RADIUS the footprint test reaches out to. A tower is drawn much taller
 ## than it is wide and its base is smaller than the 30px click disc, so testing the full
 ## radius would refuse a spot whose visible ground is perfectly clear. This asks "is the
@@ -1137,6 +1210,12 @@ func element_mult_best(elements: Array, def: String) -> float:
 ## reset() below for start gold/lives and by wave_manager.gd for the HP/count scaling — it is
 ## NOT reset by Game.reset() itself, so a mid-run retry keeps whatever the player chose.
 var ruleset: String = Balance.DEFAULT_RULESET
+
+## The board the next run plays on: a key into BOARDS, picked on the menu's map panel.
+## Deliberately the twin of `ruleset` above — an autoload var, not saved, and NOT cleared by
+## reset(), so a mid-run retry stays on the map the player chose. What IS saved is the stars
+## earned per (board, ruleset); see Meta.
+var selected_board: String = DEFAULT_BOARD
 var gold: int = 0
 var lives: int = 0
 var is_over: bool = false
@@ -1200,20 +1279,13 @@ var active_board_id: String = ""
 ## image whose get_pixel() does not work — hence the decompress in _load_build_mask().
 var active_build_mask: Image = null
 
-## Board paintings that carry an open-ground mask beside them. A board absent from this table
-## simply has no mask and keeps free placement, so adding one is dropping a `_build.png` next
-## to the art and adding a line here.
-const BUILD_MASKS := {
-	"winding": "res://assets/art/maps/winding_forest_cleared_v7_graded_build.png",
-}
-
 ## Cumulative distance from active_path[0] to each waypoint. Towers
 ## rank enemies by how far along the road they are (the First / Last targeting modes)
 ## off this table, so no enemy has to carry its own odometer.
 var _path_cum: PackedFloat32Array = PackedFloat32Array()
 
 func _ready() -> void:
-	use_main_board()
+	use_board(selected_board)
 	_load_locale()
 
 # --- Language -----------------------------------------------------------------------
@@ -1265,15 +1337,22 @@ func cycle_locale() -> void:
 func locale_display_name() -> String:
 	return tr("LANG_" + locale.to_upper())
 
-## Restores the endless-run board. Called by Menu/Main so a scene reload always lands on the
-## real run's profile rather than whatever a previous scene had installed.
-func use_main_board() -> void:
-	use_board("spiral")
+## Drops the installed board so the NEXT use_board() always rebuilds the geometry, whatever
+## id it is handed. The menu calls this on the way in.
+##
+## It replaces a `use_board("spiral")` bounce that existed for the same reason: use_board()
+## early-returns on the id it already holds, so returning to the menu had to pass through a
+## DIFFERENT id or the next run's use_board() would be a no-op and leave active_path stale.
+## That trick silently breaks as soon as the player can choose the board it bounced through,
+## which is exactly what the map panel added — so the bounce is gone and the state is simply
+## cleared. Nothing draws between here and the next use_board(); Main installs one in _ready().
+func release_board() -> void:
+	active_board_id = ""
 
 ## Selects the endless board for `wave`. The last available profile remains active after its
 ## chapter, so an unfinished map slot never sends a deep run back to an earlier layout.
 ##
-## UNREACHED as of BUILD NEXT #8: Standard mode pins to main.gd's STANDARD_BOARD for its
+## UNREACHED as of BUILD NEXT #8: Standard mode pins to main.gd's `_run_board` for its
 ## whole length instead of rotating (GAME_STRATEGY_V2.md §28 Phase 1 is one map), so nothing
 ## calls this today. Left in place — same as WaveGenerator since step 4 — for the Endless
 ## mode that reconnects it.
@@ -1286,15 +1365,12 @@ func use_board_for_wave(wave: int) -> void:
 func use_board(board_id: String) -> void:
 	if active_board_id == board_id:
 		return
-	match board_id:
-		"winding":
-			configure_board(_smooth_path(WINDING_PATH, 4), [], [], board_id)
-		"spiral":
-			configure_board(_smooth_path(PATH, 2), OBSTACLES, [], board_id)
-		"s":
-			configure_board(_smooth_path(S_PATH, 4), S_OBSTACLES, [], board_id)
-		_:
-			push_error("Game.use_board: unknown board '%s'" % board_id)
+	if not BOARDS.has(board_id):
+		push_error("Game.use_board: unknown board '%s' (have %s)" % [board_id, str(BOARDS.keys())])
+		return
+	var def: Dictionary = BOARDS[board_id]
+	configure_board(_smooth_path(def["path"], int(def["subdiv"])),
+			def["obstacles"], def["build_zones"], board_id)
 
 ## Installs one board's gameplay geometry. The painting itself belongs to that scene's Map
 ## node; this is only the geometry every gameplay system must agree on.
@@ -1318,7 +1394,7 @@ func configure_board(path: Array, obstacles: Array = [], build_zones: Array = []
 ## Loads `board_id`'s open-ground mask, or null if it has none. Called once per board swap,
 ## never per placement check.
 func _load_build_mask(board_id: String) -> Image:
-	var path := String(BUILD_MASKS.get(board_id, ""))
+	var path := String(BOARDS.get(board_id, {}).get("build_mask", ""))
 	if path == "" or not ResourceLoader.exists(path):
 		return null
 	var tex := load(path) as Texture2D

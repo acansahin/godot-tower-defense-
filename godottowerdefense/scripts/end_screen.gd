@@ -30,7 +30,11 @@ func show_summary(earned: int, won: bool, stars: int = 0) -> void:
 	if won:
 		title.text = tr("END_VICTORY")
 		title.modulate = Color(0.55, 0.92, 0.60)
-		star_line = "\n" + "★".repeat(stars) + "☆".repeat(3 - stars)
+		# Named, not just starred: with three maps and three difficulties a bare "★★☆" does
+		# not say WHICH of the nine levels it belongs to, and the map panel lists them by name.
+		var level := "%s · %s" % [tr(String(Game.BOARDS[Game.active_board_id]["name_key"])),
+				tr("DIFF_" + Game.ruleset.to_upper())]
+		star_line = "\n%s   %s%s" % [level, "★".repeat(stars), "☆".repeat(3 - stars)]
 	else:
 		title.text = tr("END_WAVE") % reached
 		title.modulate = Color(1.00, 0.82, 0.35)

@@ -10,15 +10,17 @@ extends Node2D
 ## It is the check that the traced path and the painted road are the same road — the sort of
 ## mistake that is obvious in a screenshot and invisible in a number.
 
-const BOARD := preload("res://assets/art/board_source.png")
-const WINDING_BOARD := preload("res://assets/art/maps/winding_forest_cleared_v7_graded.png")
-const S_BOARD := preload("res://assets/art/maps/s_forest_v1.png")
 const WATER_SHADER := preload("res://shaders/water_flow.gdshader")
-## Where the water is, found in the painting by tools/water_mask.py. Re-run that after any
-## repaint; the shader ripples exactly what this file calls white.
-const WATER_MASK := preload("res://assets/art/board_water.png")
-const WINDING_WATER_MASK := preload("res://assets/art/maps/winding_forest_cleared_v7_graded_water.png")
-const S_WATER_MASK := preload("res://assets/art/maps/s_forest_v1_water.png")
+
+## The painting and its water mask both come from Game.BOARDS now, loaded on demand rather
+## than preloaded. This file used to hold three `preload`s and two `match` statements over
+## the board id, and both matches fell through to the spiral on an unknown id — so a board
+## added to game.gd but forgotten here drew the WRONG PICTURE, with the right road on it,
+## and never raised a thing. One table cannot disagree with itself.
+##
+## Loaded (not preloaded) because only one board is on screen at a time and each painting is
+## ~3 MB; ResourceLoader caches, so a board revisited in the same session is free.
+var _art_cache: Dictionary = {}
 
 ## Draws the traced Game.PATH over the painting. Turn on after re-tracing; the question it
 ## answers is whether the line sits down the middle of the cobbles all the way to the keep.
@@ -36,43 +38,41 @@ func _ready() -> void:
 	# into the scene so the mask and the board it was derived from stay together.
 	_water_material = ShaderMaterial.new()
 	_water_material.shader = WATER_SHADER
-	_water_material.set_shader_parameter("water_mask", WATER_MASK)
 	Game.board_changed.connect(_on_board_changed)
 	_on_board_changed(Game.active_board_id)
 
 func _on_board_changed(board_id: String) -> void:
 	# Each painting owns a separately derived mask; sharing one would ripple grass where a
 	# different board happened to have water. Fall regions only choose vertical flow inside
-	# that mask — black pixels remain perfectly still.
-	match board_id:
-		"winding":
-			_water_material.set_shader_parameter("water_mask", WINDING_WATER_MASK)
-			_water_material.set_shader_parameter("waterfall_region_a",
-					Vector4(0.045, 0.48, 0.055, 0.37))
-			_water_material.set_shader_parameter("waterfall_region_b", Vector4.ZERO)
-		"s":
-			_water_material.set_shader_parameter("water_mask", S_WATER_MASK)
-			_water_material.set_shader_parameter("waterfall_region_a",
-					Vector4(0.09, 0.12, 0.045, 0.09))
-			_water_material.set_shader_parameter("waterfall_region_b",
-					Vector4(0.07, 0.72, 0.06, 0.20))
-		_:
-			_water_material.set_shader_parameter("water_mask", WATER_MASK)
-			_water_material.set_shader_parameter("waterfall_region_a",
-					Vector4(0.095, 0.63, 0.05, 0.14))
-			_water_material.set_shader_parameter("waterfall_region_b", Vector4.ZERO)
+	# that mask — black pixels remain perfectly still. All three live in Game.BOARDS.
+	if not Game.BOARDS.has(board_id):
+		return   # released between scenes; the next use_board() calls straight back here
+	var def: Dictionary = Game.BOARDS[board_id]
+	_water_material.set_shader_parameter("water_mask", _board_texture(board_id, "water"))
+	_water_material.set_shader_parameter("waterfall_region_a", def["waterfall_a"])
+	_water_material.set_shader_parameter("waterfall_region_b", def["waterfall_b"])
 	material = _water_material
 	queue_redraw()
 
+## The painting or the water mask for `board_id`, by Game.BOARDS field name.
+func _board_texture(board_id: String, key: String) -> Texture2D:
+	# An EMPTY id is the released state Game.release_board() leaves between scenes, not a
+	# mistake, so it returns quietly. Any other id that is missing from the table IS a
+	# mistake, and the loud version of it is the whole reason this table exists.
+	if board_id == "":
+		return null
+	var path := String(Game.BOARDS.get(board_id, {}).get(key, ""))
+	if path == "":
+		push_error("Map: board '%s' has no '%s' entry in Game.BOARDS" % [board_id, key])
+		return null
+	if not _art_cache.has(path):
+		_art_cache[path] = load(path) as Texture2D
+	return _art_cache[path] as Texture2D
+
 func _draw() -> void:
-	var board: Texture2D
-	match Game.active_board_id:
-		"winding":
-			board = WINDING_BOARD
-		"s":
-			board = S_BOARD
-		_:
-			board = BOARD
+	var board := _board_texture(Game.active_board_id, "art")
+	if board == null:
+		return
 	draw_texture_rect(board, Rect2(Vector2.ZERO, Game.WORLD_SIZE), false)
 	if show_road:
 		_draw_traced_road()

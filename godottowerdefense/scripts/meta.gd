@@ -20,10 +20,13 @@ var best_wave: int = 0
 var total_runs: int = 0
 ## Workshop entry id -> level owned.
 var levels: Dictionary = {}
-## Ruleset id ("normal"/"easy") -> best star count (0-3) ever earned on it
-## (GAME_STRATEGY_V2.md §12.4, §13.2, BUILD NEXT #8). Phase 1 has one map, so this is the
-## whole of "stars" for now; a future second/third map would key this by (board, ruleset)
-## instead of ruleset alone.
+## "<board>:<ruleset>" -> best star count (0-3) ever earned on that LEVEL
+## (GAME_STRATEGY_V2.md §12.4, §13.2, BUILD NEXT #8). A level is a board and a difficulty
+## together, which is what makes §12.4's ladder add up: 3 boards × 3 rulesets × 3 stars = 27.
+##
+## Keyed by ruleset ALONE until the map panel shipped, when three boards made that ambiguous.
+## Save version 3 migrates the old keys onto "winding", which is the only board Phase 1 could
+## actually be played on.
 var stars: Dictionary = {}
 ## Unix seconds when the game was last seen. Drives the offline reward.
 var last_seen: int = 0
@@ -104,18 +107,32 @@ func finish_run(wave_reached: int) -> int:
 	touch()  # persists everything above
 	return earned
 
-## Best star count ever earned on `ruleset` (0 if never won there).
-func stars_for(ruleset: String) -> int:
-	return int(stars.get(ruleset, 0))
+## The `stars` key for one LEVEL. One place, because a key built two different ways in two
+## different files is a bug that looks like lost progress.
+static func star_key(board: String, ruleset: String) -> String:
+	return "%s:%s" % [board, ruleset]
+
+## Best star count ever earned on this board at this difficulty (0 if never won there).
+func stars_for(board: String, ruleset: String) -> int:
+	return int(stars.get(star_key(board, ruleset), 0))
+
+## Every star earned across every level. This is what the map panel's unlock gates read
+## (Game.BOARDS[id].star_gate), so it counts BEST-per-level rather than total wins — replaying
+## a level you already three-starred adds nothing, which is the point.
+func total_stars() -> int:
+	var sum := 0
+	for v in stars.values():
+		sum += int(v)
+	return sum
 
 ## Records a win's star count (GAME_STRATEGY_V2.md §12.4: ★ finish, ★★ ≤5 lives lost,
 ## ★★★ no lives lost) — keeps the best, same rule as best_wave. Only called on an actual
 ## victory (main.gd's _on_victory); a loss never reaches this, so there is no 0-star entry
 ## to record — "never won it" and "won it for 1 star" both start from an absent key.
-func record_stars(ruleset: String, count: int) -> void:
-	if count <= stars_for(ruleset):
+func record_stars(board: String, ruleset: String, count: int) -> void:
+	if count <= stars_for(board, ruleset):
 		return
-	stars[ruleset] = count
+	stars[star_key(board, ruleset)] = count
 	_persist()
 
 # --- Workshop ------------------------------------------------------------------

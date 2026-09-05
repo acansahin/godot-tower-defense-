@@ -1,10 +1,11 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://scripts/menu.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/Workshop.tscn" id="3"]
 [ext_resource type="Theme" path="res://assets/theme/ui_theme.tres" id="4"]
 [ext_resource type="Texture2D" path="res://assets/art/menu/menu_bg.png" id="5"]
 [ext_resource type="PackedScene" path="res://scenes/HowToPlay.tscn" id="6"]
+[ext_resource type="PackedScene" path="res://scenes/MapPanel.tscn" id="7"]
 
 [sub_resource type="Gradient" id="scrim_gradient"]
 offsets = PackedFloat32Array(0, 0.30, 0.56)
@@ -90,6 +91,11 @@ theme_override_font_sizes/font_size = 17
 text = ""
 horizontal_alignment = 1
 
+[node name="MapButton" type="Button" parent="UI/Root/Center/Column/Panel/VBox"]
+custom_minimum_size = Vector2(220, 40)
+layout_mode = 2
+text = "Map: Winding Forest"
+
 [node name="RulesetButton" type="Button" parent="UI/Root/Center/Column/Panel/VBox"]
 custom_minimum_size = Vector2(220, 40)
 layout_mode = 2
@@ -130,4 +136,7 @@ text = "MENU_QUIT"
 visible = false
 
 [node name="Workshop" parent="UI/Root" instance=ExtResource("3")]
+visible = false
+
+[node name="MapPanel" parent="UI/Root" instance=ExtResource("7")]
 visible = false

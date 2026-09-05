@@ -100,3 +100,16 @@ WAVE_AVATAR_UNKNOWN,Next: Element Avatar,Sıradaki: Element Avatarı
 HINT_AVATAR_DOWN,"%s avatar down: %s towers can reach Lv%d, and any tower can fuse %s","%s avatarı düştü: %s kuleleri %d. seviyeye kadar çıkabilir, ve her kule %s ile birleşebilir"
 HUD_SEND_NEXT,Send Next ▶,Sonrakini Gönder ▶
 WORKSHOP_WALLET,%d Essence,%d Öz
+MENU_MAP,Map: %s,Harita: %s
+MAP_TITLE,SELECT A MAP,HARİTA SEÇ
+MAP_SUBTITLE,"Each map asks a different question of your towers","Her harita kulelerine farklı bir soru sorar"
+MAP_STAR_TOTAL,%d ★ total,toplam %d ★
+MAP_SELECT,Select,Seç
+MAP_CHOSEN,Playing,Seçili
+MAP_LOCKED,%d ★ to open,%d ★ gerek
+MAP_WINDING,Winding Forest,Winding Forest
+MAP_WINDING_DESC,"The default road. Room to build, and long enough to punish a gap.","Varsayılan yol. İnşa alanı bol, ama bir boşluğu cezalandıracak kadar uzun."
+MAP_S,Twin Falls,Twin Falls
+MAP_S_DESC,"Short road, open ground, every corner reachable. Build wide.","Kısa yol, açık zemin, her köşe erişilebilir. Geniş kur."
+MAP_SPIRAL,Spiral Arena,Spiral Arena
+MAP_SPIRAL_DESC,"The longest road and the least ground. Fire reaches only three quarters of it.","En uzun yol, en az zemin. Fire yolun sadece dörtte üçüne yetişir."
