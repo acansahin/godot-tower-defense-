@@ -251,8 +251,8 @@ the harnesses measure the spots the player is actually offered.
 ## There are THREE boards, and one table decides everything about them
 
 `Game.BOARDS` is the whole registry: road control points, smoothing, obstacles, the
-painting, the water mask, the waterfall regions, the open-ground mask, the display keys, the
-star gate and the measured road length. **A board is a row in it and nothing else.**
+painting, the water mask, the waterfall regions, the open-ground mask, the map-panel
+thumbnail, the display keys, the star gate and the measured road length. **A board is a row in it and nothing else.**
 
 | id | name | road | spots | shape of the fight |
 |---|---|---|---|---|
@@ -289,7 +289,8 @@ old ruleset-only keys onto `winding`, the only board Phase 1 could be played on.
 map panel on the title screen, since which board is selected and what each lock costs live
 entirely in a `_draw()` that no number can see.
 
-**Adding a fourth board is a row in `Game.BOARDS` plus its art** — no `match` to update, no
+**Adding a fourth board is a row in `Game.BOARDS` plus its art** — four PNGs (the painting,
+its `_build` and `_water` masks, and a `board_thumb.py` thumbnail), no `match` to update, no
 `map.gd` edit, no menu edit (`Game.board_ids()` sorts the panel off `star_gate`). What it
 still needs is the art pipeline in `docs/board-art-prompt.md`, a hand-traced road, and a
 re-measure of the numbers in the table above.
@@ -682,6 +683,7 @@ python tools/water_mask.py <board.png> <mask.png> # where the water is, for map.
 python tools/art_match.py [board.png]             # do the towers and the board look like one picture? see below
 python tools/art_match.py <new> --against <old>   # did an EDIT of a board move the road? (keeps WINDING_PATH or not)
 python tools/grade_board.py <board.png>           # pull a board's GRASS onto the register the towers were painted for
+python tools/board_thumb.py <board.png>           # the map panel's road-shape thumbnail (256x144)
 python tools/art_match.py <new> --against <old>   # did an EDIT of a board move the road? (keeps WINDING_PATH or not)
 python tools/cut_sprites.py <sheet> <dir> <name> <max_h>   # split a generated sheet into sprites
 python tools/key_white.py <in> <out>              # restore alpha to a sheet flattened onto white

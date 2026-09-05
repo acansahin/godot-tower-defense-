@@ -18,7 +18,13 @@ signal closed
 
 const ROW_HEIGHT := 96.0
 const ROW_GAP := 10.0
-const PANEL_W := 800.0
+const PANEL_W := 960.0
+## The road-shape thumbnail on the left of each row. Drawn at half the file's own 256x144
+## (tools/board_thumb.py) so the mip chain has something real to sample.
+const THUMB_W := 128.0
+const THUMB_H := 72.0
+## Between the thumbnail and the text, and between the text and the Select button.
+const TEXT_GAP := 14.0
 ## Above the first row: the title, the subtitle and the star wallet.
 const HEADER_H := 96.0
 ## Below the last row: the Back button, plus the gap above it and the margin under it.
@@ -31,6 +37,16 @@ const PICK_H := 54.0
 
 var _hover: int = -1     ## Index of the row whose button is hovered (-1 = none).
 var _close_hover: bool = false
+var _thumb_cache: Dictionary = {}
+
+## The road-shape thumbnail for `board_id`, or null if its row has no `thumb`.
+func _thumb(board_id: String) -> Texture2D:
+	var path := String(Game.BOARDS.get(board_id, {}).get("thumb", ""))
+	if path == "":
+		return null
+	if not _thumb_cache.has(path):
+		_thumb_cache[path] = load(path) as Texture2D
+	return _thumb_cache[path] as Texture2D
 
 func open() -> void:
 	_hover = -1
@@ -136,20 +152,31 @@ func _draw_row(i: int, id: String, font: Font) -> void:
 	draw_rect(r, Color(0.17, 0.20, 0.17, 0.95) if chosen else Color(0.15, 0.15, 0.19, 0.95))
 	draw_rect(r, Color(0.55, 0.85, 0.55, 0.55) if chosen else Color(1, 1, 1, 0.12), false, 2.0)
 
-	# Text width derived, not written down: at a literal 460 the descriptions clipped mid-word
-	# ("...punish a g"), and a literal would go stale again the moment PICK_W moves. The name
-	# takes the same width for the same reason.
-	var text_w := r.size.x - 32.0 - PICK_W - 12.0
+	# The road's SHAPE is what tells the three maps apart -- a spiral, an S and a long
+	# wander -- and it is the one thing a name and a sentence cannot show. A locked board is
+	# dimmed rather than hidden: seeing the shape you have not earned is the reason to earn it.
+	var thumb := _thumb(id)
+	var tx := r.position.x + 12.0
+	if thumb != null:
+		var tr2 := Rect2(tx, r.position.y + (r.size.y - THUMB_H) * 0.5, THUMB_W, THUMB_H)
+		draw_texture_rect(thumb, tr2, false,
+				Color.WHITE if open else Color(0.45, 0.45, 0.50))
+		draw_rect(tr2, Color(1, 1, 1, 0.22), false, 1.0)
+
+	# Text box derived, not written down: at a literal 460 the descriptions clipped mid-word
+	# ("...punish a g"), and a literal would go stale again the moment any of the columns move.
+	var text_x := tx + (THUMB_W + TEXT_GAP if thumb != null else 4.0)
+	var text_w := (r.position.x + r.size.x - PICK_W - 12.0 - TEXT_GAP) - text_x
 	var name_col := Color(1, 0.95, 0.85) if open else Color(0.55, 0.55, 0.62)
-	draw_string(font, Vector2(r.position.x + 16.0, r.position.y + 30.0), tr(String(def["name_key"])),
+	draw_string(font, Vector2(text_x, r.position.y + 30.0), tr(String(def["name_key"])),
 			HORIZONTAL_ALIGNMENT_LEFT, text_w, 22, name_col)
-	draw_string(font, Vector2(r.position.x + 16.0, r.position.y + 54.0), tr(String(def["desc_key"])),
+	draw_string(font, Vector2(text_x, r.position.y + 54.0), tr(String(def["desc_key"])),
 			HORIZONTAL_ALIGNMENT_LEFT, text_w, 15,
 			Color(0.78, 0.78, 0.86) if open else Color(0.48, 0.48, 0.55))
 
 	# One star line per difficulty, so the row answers "what is left to do here" rather than
 	# only "have I beaten it". A level never won shows three hollow stars, not a blank.
-	var sx := r.position.x + 16.0
+	var sx := text_x
 	var sy := r.position.y + 80.0
 	for rid in Balance.RULESETS.keys():
 		var got := Meta.stars_for(id, String(rid))
