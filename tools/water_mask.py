@@ -53,8 +53,29 @@ def is_water(r: int, g: int, b: int) -> bool:
 
 
 def main() -> int:
-    board = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else BOARD
-    out_path = os.path.abspath(sys.argv[2]) if len(sys.argv) > 2 else OUT
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    flags = {a.split("=")[0]: a.split("=", 1)[-1] for a in sys.argv[1:] if a.startswith("--")}
+    board = os.path.abspath(args[0]) if args else BOARD
+    out_path = os.path.abspath(args[1]) if len(args) > 1 else OUT
+
+    # `--water R,G,B [--watertol N]`: the same switch build_mask.py and art_match.py take,
+    # and an ICE board cannot do without it. The default test is "blue clearly ahead of red",
+    # which glacier ice satisfies everywhere -- measured on the first glacier board, 59% of
+    # the whole image passed it, so this tool would have rippled the entire map. The meltwater
+    # is separable by distance: its core is rgb(0,120,160) against ice at rgb(200,220,240).
+    water_test = is_water
+    if "--water" in flags:
+        ref = tuple(int(v) for v in flags["--water"].split(","))
+        if len(ref) != 3:
+            print("--water wants three numbers, e.g. --water=20,130,165")
+            return 2
+        tol = float(flags.get("--watertol", 90.0))
+        t2 = tol * tol
+
+        def water_test(r, g, b, _ref=ref, _t2=t2):
+            dr, dg, db = r - _ref[0], g - _ref[1], b - _ref[2]
+            return dr * dr + dg * dg + db * db <= _t2
+        print("  water test near rgb%s tol %.0f" % (str(ref), tol))
     img = Png(board)
     bw, bh = img.width // BLOCK, img.height // BLOCK
     grid = [0.0] * (bw * bh)
@@ -63,7 +84,7 @@ def main() -> int:
             hits = 0
             for y in range(by * BLOCK, (by + 1) * BLOCK):
                 for x in range(bx * BLOCK, (bx + 1) * BLOCK):
-                    if is_water(*img.rgb(x, y)):
+                    if water_test(*img.rgb(x, y)):
                         hits += 1
             frac = hits / float(BLOCK * BLOCK)
             grid[by * bw + bx] = 1.0 if frac >= FILL else 0.0

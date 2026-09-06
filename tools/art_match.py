@@ -48,6 +48,8 @@ Usage::
     python tools/art_match.py                  # the board a Standard run plays on
     python tools/art_match.py <board.png>      # a CANDIDATE, before wiring it into Game
     python tools/art_match.py <new.png> --against <old.png>   # did an EDIT move the road?
+    python tools/art_match.py <b.png> --ground=232,238,247 --tol=55 --road=85,88,95
+                                               # a NON-GREEN board: BOTH tests must be given
 
 The second form is the point of the tool: connecting a new board takes hours (hand-tracing
 the road, the two masks, the use_board branch) and re-running a prompt takes minutes, so
@@ -69,13 +71,28 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from build_mask import BLOCK, is_open, is_water  # noqa: E402  the same tests, on purpose
+from build_mask import BLOCK, is_open, is_water, near  # noqa: E402  the same tests, on purpose
 from png_reader import Png  # noqa: E402
+
+## Which per-pixel test counts as OPEN GROUND. It is a module global so `--ground` can swap
+## it once in main() and both readers below follow, exactly as build_mask.py does it.
+##
+## Without this the tool is green-blind and reports NONSENSE rather than failing: the first
+## snow board measured "buildable band 0% open" not because it was closed but because snow
+## is not warm yellow-green, and its value and hue lines were read off whatever few pixels
+## did pass. A board this tool cannot measure is a board that cannot be judged at all, which
+## is worse than one that measures badly.
+_open_test = is_open
+## And the water test, for the same reason again: on a glacier board 59% of the image
+## reads as water under the default, which would empty the buildable band.
+_water_test = is_water
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ART = os.path.join(HERE, "godottowerdefense", "assets", "art")
 ## The board `main.gd`'s STANDARD_BOARD resolves to. Every other board is a harness's.
-DEFAULT_BOARD = os.path.join(ART, "maps", "winding_forest_close_v1.png")
+# (Was winding_forest_close_v1.png, which the game stopped loading when the graded
+# repaint landed — so a no-argument run measured a board nobody plays.)
+DEFAULT_BOARD = os.path.join(ART, "maps", "winding_forest_cleared_v7_graded.png")
 TOWERS = os.path.join(ART, "towers")
 
 ## What a board has to hit for the current roster to sit on it. Both figures are measured
@@ -117,6 +134,14 @@ def is_cobble(r: int, g: int, b: int) -> bool:
     which is fine for tracing a centre-line and useless for measuring a width.
     """
     return (r + g + b) > 210 and (g - b) < 45 and r >= g - 10 and b > 40
+
+## And which per-pixel test counts as ROAD. Same reason, and it bites HARDER: `is_cobble`
+## above reads "pale, bright, and not the yellow-green meadow", which is a road detector only
+## on a board whose ground is dark green. Measured on the first snow board, 69% of the WHOLE
+## IMAGE passed it -- a snowfield is pale and not green, so the tool decided the entire map
+## was road, seeded its distance walk everywhere, and reported "0% open beside the road".
+## That is the failure mode that looks like a verdict.
+_road_test = is_cobble
 
 
 def lum(r: int, g: int, b: int) -> float:
@@ -170,9 +195,9 @@ def board_palette(img: Png) -> tuple[Bucket, Bucket, Bucket]:
                     rgb = img.rgb(x, y)
                     block.append(rgb)
                     every.add(*rgb)
-                    if is_water(*rgb):
+                    if _water_test(*rgb):
                         wet += 1
-                    elif is_open(*rgb):
+                    elif _open_test(*rgb):
                         hits += 1
             # build_mask.py's own thresholds, kept here so the two files cannot drift: a
             # block is open if enough of it is, and never if it holds real water.
@@ -191,7 +216,7 @@ def road_runs(img: Png, axis: int, min_len: int = 30, max_len: int = 400) -> lis
         run = 0
         for j in range(inner):
             x, y = (j, i) if axis == 0 else (i, j)
-            if is_cobble(*img.rgb(x, y)):
+            if _road_test(*img.rgb(x, y)):
                 run += 1
                 continue
             if min_len <= run <= max_len:
@@ -258,11 +283,11 @@ def band_open_fraction(img: Png) -> tuple[float, str]:
             for y in range(by * BLOCK, (by + 1) * BLOCK):
                 for x in range(bx * BLOCK, (bx + 1) * BLOCK):
                     r, g, b = img.rgb(x, y)
-                    if is_cobble(r, g, b):
+                    if _road_test(r, g, b):
                         cobble += 1
-                    if is_water(r, g, b):
+                    if _water_test(r, g, b):
                         wet += 1
-                    elif is_open(r, g, b):
+                    elif _open_test(r, g, b):
                         hits += 1
             i = by * bw + bx
             road[i] = 1 if cobble / area >= 0.60 else 0
@@ -346,7 +371,7 @@ def road_agreement(new: Png, old: Png) -> str:
                 hits = 0
                 for y in range(by * BLOCK, (by + 1) * BLOCK):
                     for x in range(bx * BLOCK, (bx + 1) * BLOCK):
-                        if is_cobble(*img.rgb(x, y)):
+                        if _road_test(*img.rgb(x, y)):
                             hits += 1
                 if hits / area >= 0.60:
                     out.add((bx, by))
@@ -414,12 +439,40 @@ def verdict(label: str, ok: bool, complaint: str) -> str:
 
 
 def main() -> int:
+    global _open_test, _road_test, _water_test
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     board_path = args[0] if args else DEFAULT_BOARD
     if not os.path.exists(board_path):
         print("no such board: {}".format(board_path))
         return 1
     img = Png(board_path)
+
+    # `--ground R,G,B [--tol N]`: measure a board whose ground is not green grass. The same
+    # switch build_mask.py takes, and it has to be given to BOTH or the two disagree about
+    # where the open ground is. Without it every reading below is green-blind — a snow board
+    # reported "0% open beside the road", which was the tool failing, not the board.
+    flags = {a.split("=")[0]: a.split("=", 1)[-1] for a in sys.argv[1:] if a.startswith("--")}
+    if "--ground" in flags:
+        ref = tuple(int(v) for v in flags["--ground"].split(","))
+        if len(ref) != 3:
+            print("--ground wants three numbers, e.g. --ground=232,238,247")
+            return 1
+        _open_test = near(ref, float(flags.get("--tol", 100.0)))
+        print("ground test: near rgb{} tol {}".format(ref, flags.get("--tol", "100")))
+    if "--road" in flags:
+        rref = tuple(int(v) for v in flags["--road"].split(","))
+        if len(rref) != 3:
+            print("--road wants three numbers, e.g. --road=85,88,95")
+            return 1
+        _road_test = near(rref, float(flags.get("--roadtol", 45.0)))
+        print("road test:   near rgb{} tol {}".format(rref, flags.get("--roadtol", "45")))
+    if "--water" in flags:
+        wref = tuple(int(v) for v in flags["--water"].split(","))
+        if len(wref) != 3:
+            print("--water wants three numbers, e.g. --water=20,130,165")
+            return 1
+        _water_test = near(wref, float(flags.get("--watertol", 90.0)))
+        print("water test:  near rgb{} tol {}".format(wref, flags.get("--watertol", "90")))
 
     # `--against <board>` answers the one question an EDITED board raises: did the road
     # survive? Nothing else in this tool compares two images, and nothing else needs to.

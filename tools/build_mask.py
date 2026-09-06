@@ -31,10 +31,27 @@ open ground however bright it is.
 Usage::
 
     python tools/build_mask.py <board.png> [mask.png]
+    python tools/build_mask.py <board.png> --ground=235,240,248 --tol=70
+    python tools/build_mask.py <board.png> --ground=... --water=20,130,165 --watertol=90
 
-With no output path it writes `<board>_build.png` beside the board. Point `Game.BUILD_MASKS`
-at it by board id — that table is the only thing that has to know the mask exists, and a
-board missing from it simply keeps free placement.
+With no output path it writes `<board>_build.png` beside the board. Point the `build_mask`
+field of the board's `Game.BOARDS` row at it — that table is the only thing that has to know
+the mask exists, and a board missing the field simply keeps free placement.
+
+**`--ground` is for a board that is not a green meadow.** The default test above is
+"is this warm yellow-green", which snow, ash and basalt all answer no to, so an Alaska or
+Pompeii board otherwise measures as having nowhere to build at all — and measures it
+silently, writing a black mask and reporting 0%. With `--ground` the board says what its
+ground looks like and the test becomes distance from that colour; `--tol` (default 100) is
+how far a pixel may sit from it. Both want measuring per board — see `near()` for why the
+reference is declared rather than detected, and why the tolerance is not one number.
+
+**`--water` is the same switch for the other colour class**, and it is the one an ICE board
+needs most. `is_water` reads "bluer than it is red", which identifies water only on a board
+whose ground is green. Measured on the first glacier board, 59% of the WHOLE IMAGE passed
+it — glacier ice is pale blue — which would have rippled the entire surface and, since water
+is excluded from open ground, left almost nowhere to build. The meltwater is separable: its
+core reads rgb(0, 120, 160) against ice at rgb(200, 220, 240), about 240 apart.
 """
 
 from __future__ import annotations
@@ -60,6 +77,43 @@ def is_water(r: int, g: int, b: int) -> bool:
 
 def is_open(r: int, g: int, b: int) -> bool:
     return (g - b) > GREEN_OVER_BLUE and (r + g + b) > BRIGHTNESS
+
+
+def near(ref: tuple[int, int, int], tol: float):
+    """`is_open` for a board whose ground is not green grass.
+
+    The test above asks "is this warm yellow-green", which is a question only a temperate
+    meadow answers yes to. Measured against the real thing, every snow tone and every ash
+    tone fails it: sunlit snow (235, 240, 248) has g-b = -8 and an ash plain (105, 98, 92)
+    has g-b = 6, both far under GREEN_OVER_BLUE. An Alaska or Pompeii board therefore
+    measures as having NOWHERE to build, and it does so silently -- the tool writes a black
+    mask and reports 0% rather than failing.
+
+    So a board that is not green declares what its ground looks like and this asks how far a
+    pixel is from that, in plain RGB distance. Everything around it is untouched: per pixel,
+    then FILL per block, then the water exclusion, then the majority despeckle.
+
+    WHY DECLARED RATHER THAN DETECTED. The first attempt found the reference automatically,
+    as the modal colour among low-contrast blocks. On the S board it nominated (11, 22, 9) --
+    the CONIFER FOREST, which is uniform enough at 8px to win the vote. A detector that can
+    quietly pick the wrong ground is worse than the green test it replaces, because the green
+    test fails loudly (zero open ground) while that one fails plausibly.
+
+    TOLERANCE IS PER BOARD and wants measuring, not guessing. Scored against the three
+    shipped masks a tolerance of 100 reproduces them to 85-89% of blocks while losing under
+    4% of the ground they allow -- but it is slightly more permissive than the green test, so
+    it is NOT a drop-in for the boards already balanced against those masks. It also has to
+    be tighter where the ground and the obstacle are close: on ash (105, 98, 92) a basalt
+    outcrop (45, 40, 38) sits exactly 100 away, so 100 would let towers stand on the rock.
+    """
+    t2 = float(tol) * float(tol)
+    rr, gg, bb = ref
+
+    def test(r: int, g: int, b: int) -> bool:
+        dr, dg, db = r - rr, g - gg, b - bb
+        return dr * dr + dg * dg + db * db <= t2
+
+    return test
 
 
 def majority(grid: list[int], w: int, h: int) -> list[int]:
@@ -89,12 +143,35 @@ def main() -> int:
     if len(sys.argv) < 2:
         print(__doc__)
         return 2
-    board = os.path.abspath(sys.argv[1])
-    if len(sys.argv) > 2:
-        out_path = os.path.abspath(sys.argv[2])
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    flags = {a.split("=")[0]: a.split("=", 1)[-1] for a in sys.argv[1:] if a.startswith("--")}
+
+    board = os.path.abspath(args[0])
+    if len(args) > 1:
+        out_path = os.path.abspath(args[1])
     else:
         root, _ = os.path.splitext(board)
         out_path = root + "_build.png"
+
+    # A board whose ground is not green grass declares its ground colour instead; see near().
+    open_test = is_open
+    water_test = is_water
+    label = "green-over-blue"
+    if "--ground" in flags:
+        ref = tuple(int(v) for v in flags["--ground"].split(","))
+        if len(ref) != 3:
+            print("--ground wants three numbers, e.g. --ground=235,240,248")
+            return 2
+        tol = float(flags.get("--tol", 100.0))
+        open_test = near(ref, tol)
+        label = "near rgb%s tol %.0f" % (str(ref), tol)
+    if "--water" in flags:
+        wref = tuple(int(v) for v in flags["--water"].split(","))
+        if len(wref) != 3:
+            print("--water wants three numbers, e.g. --water=20,130,165")
+            return 2
+        water_test = near(wref, float(flags.get("--watertol", 90.0)))
+        label += ", water near rgb%s" % (str(wref),)
 
     img = Png(board)
     bw, bh = img.width // BLOCK, img.height // BLOCK
@@ -105,9 +182,9 @@ def main() -> int:
             for y in range(by * BLOCK, (by + 1) * BLOCK):
                 for x in range(bx * BLOCK, (bx + 1) * BLOCK):
                     px = img.rgb(x, y)
-                    if is_water(*px):
+                    if water_test(*px):
                         water += 1
-                    elif is_open(*px):
+                    elif open_test(*px):
                         opens += 1
             n = float(BLOCK * BLOCK)
             if water / n >= WATER_FILL:
@@ -127,6 +204,7 @@ def main() -> int:
 
     final_open = sum(grid)
     print(f"  board {img.width}x{img.height} -> mask {bw}x{bh} (block {BLOCK}px)")
+    print(f"  ground test {label}")
     print(f"  open ground {100.0 * raw_open / len(grid):.1f}% raw"
           f" -> {100.0 * final_open / len(grid):.1f}% after {MAJORITY} majority passes")
     print(f"  wrote {out_path}")

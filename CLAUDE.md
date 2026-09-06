@@ -289,17 +289,34 @@ old ruleset-only keys onto `winding`, the only board Phase 1 could be played on.
 map panel on the title screen, since which board is selected and what each lock costs live
 entirely in a `_draw()` that no number can see.
 
-**Adding a fourth board is a row in `Game.BOARDS` plus its art** — four PNGs (the painting,
-its `_build` and `_water` masks, and a `board_thumb.py` thumbnail), no `match` to update, no
-`map.gd` edit, no menu edit (`Game.board_ids()` sorts the panel off `star_gate`). What it
-still needs is the art pipeline in `docs/board-art-prompt.md`, a hand-traced road, and a
-re-measure of the numbers in the table above.
+**Adding a board is a row in `Game.BOARDS` plus its art** — four PNGs (the painting, its
+`_build` and `_water` masks, and a `board_thumb.py` thumbnail), no `match` to update, no
+`map.gd` edit, no menu edit (`Game.board_ids()` sorts the panel off `star_gate`).
+
+**The road no longer has to be traced by hand.** `WINDING_PATH` and `S_PATH` were both typed
+out by eye, and that was the step that kept the roster at three; `tools/trace_ribbon.py`
+marches it out of the painting instead (largest connected run of the declared road colour,
+graph diameter for the two ends, then pushed onto the ridge of a distance transform so it
+does not cut its own corners). `GLACIER_PATH` is the first road produced that way, and
+`--preview` draws the result back over the art, which is the check that matters.
+
+**But every colour reader has to be told what the board is made of.** Four tools threshold
+this painting and all four were written for a green meadow with a pale road; on the glacier,
+`--ground`, `--road` and `--water` all had to be declared or each failed in a way that looks
+like a verdict rather than an error. See "That test only knows GRASS" below.
 
 ## The towers and the board are not the same picture, and that is measured too
 
 `python tools/art_match.py` answers "do these belong together?" the way `--dump-board`
 answers "can you build here?" — with numbers instead of a screenshot. It reports four things
-and the played board currently fails all four.
+and the played board fails **two** of them: the open band and the camera.
+
+**It used to say "fails all four", and that was a stale default reading a retired board.**
+The tool's no-argument `DEFAULT_BOARD` still named `winding_forest_close_v1.png` after the
+graded repaint replaced it, so every no-arg run measured a board the game no longer loads.
+Measured on what is actually played, `winding_forest_cleared_v7_graded.png` reads open-ground
+luminance **108.5** and blue **34.3** — both on target. The value and hue gaps described below
+were real on the ungraded board and `grade_board.py` closed them.
 
 The first is about PLACEMENT rather than looks, and it is the one no other tool reports:
 **how much of the band 70-300px from the road is open ground** — the only ground a tower can
@@ -309,11 +326,11 @@ which a board can win with one empty corner the road never goes near. The windin
 measures **22.6%** against a target of 80%, and that is what 12 pads looks like as a
 fraction. The other three:
 
-| | winding (played) | board_source (what the roster was painted against) | the roster |
-|---|---|---|---|
-| Open-ground luminance | 73.3 | 106.4 | masonry 50-125 |
-| Open-ground blue | 25.1 | 35.6 | masonry median 46.5 |
-| Ground squash | **1.000** | — | **0.24-0.30** |
+| | winding_close_v1 (retired) | winding graded (played) | board_source | the roster |
+|---|---|---|---|---|
+| Open-ground luminance | 73.3 | **108.5** | 106.4 | masonry 50-125 |
+| Open-ground blue | 25.1 | **34.3** | 35.6 | masonry median 46.5 |
+| Ground squash | 1.000 | **1.000** | — | **0.24-0.30** |
 
 Three separate faults, and only the third is unfixable in code:
 
@@ -376,6 +393,18 @@ measured.** At `FOOTPRINT_PROBE` 0.35 and the full-radius `ROAD_KEEPOUT` the sam
 allowed only **29** spots; 0.20 and `ROAD_BASE_FRACTION` 0.5 give 51 for the same art,
 because what has to clear a tree or a kerb is the painted BASE and not the 30px tap disc.
 The cost of that is visible rather than statistical: it admits a couple of towers onto lit
+- **That test only knows GRASS, and a non-green board fails it silently.** Measured: sunlit
+  snow (235, 240, 248) has `g-b = -8` and an ash plain (105, 98, 92) has `g-b = 6`, both far
+  under the threshold — so an ice or volcanic board measures **zero buildable ground**, and
+  the tool writes a black mask and reports 0% rather than erroring. Such a board declares
+  its own ground instead: `build_mask.py --ground=R,G,B --tol=N` swaps the per-pixel test
+  for distance from that colour and leaves everything else alone. **The default path is
+  byte-identical**, so the three shipped boards are untouched. Desert needs none of this —
+  sand measures `g-b = 48` and passes the green test by accident.
+  The reference is DECLARED, not detected, and `near()` records why: an auto-detector
+  nominated the conifer forest as the S board's ground, because dense forest is uniform
+  enough at 8px to win. A detector that picks the wrong ground plausibly is worse than a
+  test that fails loudly.
 rock by the waterfall, where an isolated open block survives the despeckle. Extra
 `build_mask.py` majority passes do **not** remove them — measured at 2, 3 and 4 passes, the
 same block survives all three.
@@ -677,14 +706,14 @@ dependency**, which is why `tools/png_reader.py` is a 100-line stdlib PNG decode
 rather than Pillow:
 
 ```
-python tools/trace_road.py                        # re-derive Game.PATH + OBSTACLES from the board art
+python tools/trace_road.py                        # re-derive Game.PATH + OBSTACLES (SPIRAL boards only)
+python tools/trace_ribbon.py <b.png> --road=R,G,B --name=X   # trace ANY road into control points; --preview to check
 python tools/build_mask.py <board.png>            # where a tower may stand: open ground, not trees/cliffs/water
 python tools/water_mask.py <board.png> <mask.png> # where the water is, for map.gd's ripple shader
 python tools/art_match.py [board.png]             # do the towers and the board look like one picture? see below
 python tools/art_match.py <new> --against <old>   # did an EDIT of a board move the road? (keeps WINDING_PATH or not)
 python tools/grade_board.py <board.png>           # pull a board's GRASS onto the register the towers were painted for
 python tools/board_thumb.py <board.png>           # the map panel's road-shape thumbnail (256x144)
-python tools/art_match.py <new> --against <old>   # did an EDIT of a board move the road? (keeps WINDING_PATH or not)
 python tools/cut_sprites.py <sheet> <dir> <name> <max_h>   # split a generated sheet into sprites
 python tools/key_white.py <in> <out>              # restore alpha to a sheet flattened onto white
 python tools/stitch_sheets.py <out> <a> <b>       # one cycle split across two files -> one sheet
@@ -718,7 +747,10 @@ reasoning about these numbers instead of reading them:
 - **WC3 damage is `base + dice`, not `base`.** Every Element TD tower rolls `1d1`, so the
   real damage is the object editor's `ua1b` **plus one**. Reading `ua1b` alone makes the
   exact ×5 tier ladder look ragged and off-by-four.
+python tools/build_mask.py <b.png> --ground=R,G,B --tol=N   # the same for a board that is NOT green (snow, ash)
+python tools/art_match.py <b.png> --ground=R,G,B --road=R,G,B   # measuring a NON-GREEN board needs BOTH
 - **An absent object-data field means "inherit", not "zero".** Tiers 3-5 omit `ua1d`
+python tools/water_mask.py <b.png> <m.png> --water=R,G,B     # ... on a board whose GROUND is blue (ice)
   entirely; treating that as no dice loses the +1.
 - **`udg_HP_exponent_base = 1.23` in `war3map.j` is a decoy** — declared, never read. The
   real wave curve is `75 × 1.16^(n-1)`, baked into a separate unit type per level.
