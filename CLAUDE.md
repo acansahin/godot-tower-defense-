@@ -156,7 +156,12 @@ run climbs to Pure instead of finishing on four base towers. It is no longer nee
 keep a delayed `--shot:N` alive: nothing pauses the tree any more, since the three popups
 that did are gone), `--go-back` (rewinds the
 last-seen stamp 4h so the next launch collects an offline reward), `--wipe-save` (clears
-`user://save.json`).
+`user://save.json`), `--sandbox` / `--sandbox:30` (starts a SANDBOX run without the menu,
+which no harness can click through — see below; it prints the map, wave, gold, lives and the
+avatar ledger it set up, so a run can be checked without a screenshot).
+
+`menu.gd` gained `--show-sandbox` beside `--show-maps`, for the same reason as all the
+others: the panel is a `_draw()` and no number can see it.
 
 **`--wipe-save` first when comparing against a stored baseline.** Workshop levels feed
 `Run.permanent`, which feeds every tower stat, so a `--dump-stats` taken against a save
@@ -248,7 +253,7 @@ used to, drawing rings around six pockets, has been removed), but the mechanism 
 `--fill-board` sweep the pads when a board has them (`main.gd` `_buildable_lattice()`), so
 the harnesses measure the spots the player is actually offered.
 
-## There are THREE boards, and one table decides everything about them
+## There are FOUR boards, and one table decides everything about them
 
 `Game.BOARDS` is the whole registry: road control points, smoothing, obstacles, the
 painting, the water mask, the waterfall regions, the open-ground mask, the map-panel
@@ -259,6 +264,7 @@ thumbnail, the display keys, the star gate and the measured road length. **A boa
 | `winding` | Winding Forest | 3199px | 33 | the default; middling coverage |
 | `s` | Twin Falls | **2518px** | 29 | 100% of the road reachable, 4 towers cover it — build wide |
 | `spiral` | Spiral Arena | **4042px** | **24** | least ground, and Fire reaches only **76%** of the road |
+| `glacier` | Glacier Pass | 1685px | 28 | crevasses cut the ice into pockets; 4 towers cover it |
 
 Those numbers come from `--dump-board --map:<id>` and are the reason the three play
 differently: it is COVERAGE, not decoration. Re-run it after touching any of them.
@@ -280,26 +286,52 @@ Three things about this are load-bearing:
   player can pick the id it bounced through. `Game.release_board()` clears `active_board_id`
   instead; **never reintroduce a bounce**.
 
+**Where a road may enter and leave is a rule, not a taste.** The glacier's first version was
+rejected on play and both faults are measurable. Its road met the left edge at y=61 while the
+HUD covers the world's top 48px and a creep is drawn `radius * 2.6` tall ABOVE its feet — so
+a boss (radius 38 → 99px) spawned entirely behind the bar and only its feet showed. **A spawn
+wants `y > 150`**. Its road also ENDED at a painted gatehouse two thirds across instead of
+leaving the map. The replacement exits through the BOTTOM edge, and bottom rather than right
+because the tower palette covers everything past `PLAY_RIGHT` (1296) — a leak under the panel
+is a leak nobody sees. Both constraints are written into `docs/board-art-prompt.md`.
+
 **A level is a board AND a ruleset** (GAME_STRATEGY_V2.md §12.4). `Meta.stars` is keyed
-`"<board>:<ruleset>"` through `Meta.star_key()`, three boards x three rulesets x three stars
-= 27, and `star_gate` opens `s` at 4 stars and `spiral` at 12. Save version 3 migrates the
+`"<board>:<ruleset>"` through `Meta.star_key()`, four boards x three rulesets x three stars
+= 36, and `star_gate` opens `s` at 4 stars, `glacier` at 8 and `spiral` at 12. Save version 3 migrates the
 old ruleset-only keys onto `winding`, the only board Phase 1 could be played on.
 
 `--map:<id>` pins one board for a harness run and is validated now; `--show-maps` opens the
 map panel on the title screen, since which board is selected and what each lock costs live
 entirely in a `_draw()` that no number can see.
 
-**Adding a fourth board is a row in `Game.BOARDS` plus its art** — four PNGs (the painting,
-its `_build` and `_water` masks, and a `board_thumb.py` thumbnail), no `match` to update, no
-`map.gd` edit, no menu edit (`Game.board_ids()` sorts the panel off `star_gate`). What it
-still needs is the art pipeline in `docs/board-art-prompt.md`, a hand-traced road, and a
-re-measure of the numbers in the table above.
+**Adding a board is a row in `Game.BOARDS` plus its art** — four PNGs (the painting, its
+`_build` and `_water` masks, and a `board_thumb.py` thumbnail), no `match` to update, no
+`map.gd` edit, no menu edit (`Game.board_ids()` sorts the panel off `star_gate`).
+
+**The road no longer has to be traced by hand.** `WINDING_PATH` and `S_PATH` were both typed
+out by eye, and that was the step that kept the roster at three; `tools/trace_ribbon.py`
+marches it out of the painting instead (largest connected run of the declared road colour,
+graph diameter for the two ends, then pushed onto the ridge of a distance transform so it
+does not cut its own corners). `GLACIER_PATH` is the first road produced that way, and
+`--preview` draws the result back over the art, which is the check that matters.
+
+**But every colour reader has to be told what the board is made of.** Four tools threshold
+this painting and all four were written for a green meadow with a pale road; on the glacier,
+`--ground`, `--road` and `--water` all had to be declared or each failed in a way that looks
+like a verdict rather than an error. See "That test only knows GRASS" below.
 
 ## The towers and the board are not the same picture, and that is measured too
 
 `python tools/art_match.py` answers "do these belong together?" the way `--dump-board`
 answers "can you build here?" — with numbers instead of a screenshot. It reports four things
-and the played board currently fails all four.
+and the played board fails **two** of them: the open band and the camera.
+
+**It used to say "fails all four", and that was a stale default reading a retired board.**
+The tool's no-argument `DEFAULT_BOARD` still named `winding_forest_close_v1.png` after the
+graded repaint replaced it, so every no-arg run measured a board the game no longer loads.
+Measured on what is actually played, `winding_forest_cleared_v7_graded.png` reads open-ground
+luminance **108.5** and blue **34.3** — both on target. The value and hue gaps described below
+were real on the ungraded board and `grade_board.py` closed them.
 
 The first is about PLACEMENT rather than looks, and it is the one no other tool reports:
 **how much of the band 70-300px from the road is open ground** — the only ground a tower can
@@ -309,11 +341,11 @@ which a board can win with one empty corner the road never goes near. The windin
 measures **22.6%** against a target of 80%, and that is what 12 pads looks like as a
 fraction. The other three:
 
-| | winding (played) | board_source (what the roster was painted against) | the roster |
-|---|---|---|---|
-| Open-ground luminance | 73.3 | 106.4 | masonry 50-125 |
-| Open-ground blue | 25.1 | 35.6 | masonry median 46.5 |
-| Ground squash | **1.000** | — | **0.24-0.30** |
+| | winding_close_v1 (retired) | winding graded (played) | board_source | the roster |
+|---|---|---|---|---|
+| Open-ground luminance | 73.3 | **108.5** | 106.4 | masonry 50-125 |
+| Open-ground blue | 25.1 | **34.3** | 35.6 | masonry median 46.5 |
+| Ground squash | 1.000 | **1.000** | — | **0.24-0.30** |
 
 Three separate faults, and only the third is unfixable in code:
 
@@ -361,6 +393,18 @@ Two things about it are load-bearing:
   a meadow a meadow is that it has almost no blue in it. Grass measures (110-128, 110-129,
   22-28) and a tree (16, 30, 14), so green-over-blue separates them cleanly where a plain
   green test cannot. `build_mask.py`'s docstring has the rest.
+- **That test only knows GRASS, and a non-green board fails it silently.** Measured: sunlit
+  snow (235, 240, 248) has `g-b = -8` and an ash plain (105, 98, 92) has `g-b = 6`, both far
+  under the threshold — so an ice or volcanic board measures **zero buildable ground**, and
+  the tool writes a black mask and reports 0% rather than erroring. Such a board declares
+  its own ground instead: `build_mask.py --ground=R,G,B --tol=N` swaps the per-pixel test
+  for distance from that colour and leaves everything else alone. **The default path is
+  byte-identical**, so the three shipped boards are untouched. Desert needs none of this —
+  sand measures `g-b = 48` and passes the green test by accident.
+  The reference is DECLARED, not detected, and `near()` records why: an auto-detector
+  nominated the conifer forest as the S board's ground, because dense forest is uniform
+  enough at 8px to win. A detector that picks the wrong ground plausibly is worse than a
+  test that fails loudly.
 - **An explicit `active_build_zones` allowlist WINS OUTRIGHT over the mask**, it does not
   intersect with it. This was found through the now-removed interactive tutorial, which drew
   rings around six pockets and meant exactly those; intersecting the two silently moved the
@@ -428,6 +472,30 @@ columns of buildable ground under the panel. Keep the road out of that strip too
 Two constants are tied to the road length and nothing else reads it, so they move together
 or the pacing breaks silently: `Balance.BASE_SPEED_*` (at the wrong value a wave-1 enemy
 took 186 seconds to walk the road) and the count ramp `BASE_COUNT_*`.
+
+## Sandbox: a run for testing the game rather than playing it
+
+`Game.sandbox` turns the progression off. All four avatars are beaten before wave 1, so every
+tower reaches Lv5 and every fusion is buyable immediately; the run starts on whatever wave,
+gold and lives the sandbox panel was set to, and every map is selectable whatever the star
+gates say. Reached from the menu's Sandbox button (`scripts/sandbox_panel.gd`), or from
+`--sandbox:<wave>` for a harness.
+
+**It exists because of the gate described in the next section.** A base tower stops at Lv2
+until its own element's avatar is dead and no fusion can be bought until another one is, so
+looking at a Lv5 tower, at any of the eleven fusions, or at the wave-40 creeps otherwise
+means playing forty waves first, every time.
+
+**The rule that makes it safe: a sandbox run writes NOTHING to Meta** — no stars, no best
+wave, no Essence. Both ending paths in `main.gd` check `Game.sandbox` before calling
+`Meta.finish_run()` / `Meta.record_stars()`. Without that, an afternoon of testing would hand
+out the very stars that gate the maps and set a record nobody earned, with no way to tell the
+two apart afterwards. `Game.sandbox` is set by the panel's own Start button and cleared every
+time the menu loads, so it cannot leak into a real run.
+
+It earns its keep immediately: jumping straight to wave 30 showed the wave preview running
+across the Send Next button, because a Label overflows its rect by default and an escort
+makes late previews long ("Earth Swarm x45 + Splitter x28"). `HUD.tscn`'s NextLabel clips now.
 
 ## Progress is gated by avatar bosses, not by gold
 
@@ -677,14 +745,17 @@ dependency**, which is why `tools/png_reader.py` is a 100-line stdlib PNG decode
 rather than Pillow:
 
 ```
-python tools/trace_road.py                        # re-derive Game.PATH + OBSTACLES from the board art
+python tools/trace_road.py                        # re-derive Game.PATH + OBSTACLES (SPIRAL boards only)
+python tools/trace_ribbon.py <b.png> --road=R,G,B --name=X   # trace ANY road into control points; --preview to check
 python tools/build_mask.py <board.png>            # where a tower may stand: open ground, not trees/cliffs/water
+python tools/build_mask.py <b.png> --ground=R,G,B --tol=N   # the same for a board that is NOT green (snow, ash)
+python tools/art_match.py <b.png> --ground=R,G,B --road=R,G,B   # measuring a NON-GREEN board needs BOTH
 python tools/water_mask.py <board.png> <mask.png> # where the water is, for map.gd's ripple shader
+python tools/water_mask.py <b.png> <m.png> --water=R,G,B     # ... on a board whose GROUND is blue (ice)
 python tools/art_match.py [board.png]             # do the towers and the board look like one picture? see below
 python tools/art_match.py <new> --against <old>   # did an EDIT of a board move the road? (keeps WINDING_PATH or not)
 python tools/grade_board.py <board.png>           # pull a board's GRASS onto the register the towers were painted for
 python tools/board_thumb.py <board.png>           # the map panel's road-shape thumbnail (256x144)
-python tools/art_match.py <new> --against <old>   # did an EDIT of a board move the road? (keeps WINDING_PATH or not)
 python tools/cut_sprites.py <sheet> <dir> <name> <max_h>   # split a generated sheet into sprites
 python tools/key_white.py <in> <out>              # restore alpha to a sheet flattened onto white
 python tools/stitch_sheets.py <out> <a> <b>       # one cycle split across two files -> one sheet

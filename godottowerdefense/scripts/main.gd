@@ -53,7 +53,14 @@ func _ready() -> void:
 	# start_gold / start_lives.
 	var seed_override := -1
 	for arg in OS.get_cmdline_user_args():
-		if String(arg).begins_with("--map:"):
+		if String(arg).begins_with("--sandbox"):
+			# Starts a SANDBOX run without the menu, which no harness can click through.
+			# `--sandbox` alone starts one at wave 1; `--sandbox:30` starts at wave 30.
+			Game.sandbox = true
+			var parts := String(arg).split(":")
+			if parts.size() > 1:
+				Game.sandbox_wave = maxi(int(parts[1]), 1)
+		elif String(arg).begins_with("--map:"):
 			# Validated like --ruleset: below. Unvalidated, a typo'd id reached use_board()'s
 			# error branch and left the board UNCONFIGURED, which reads as an empty world
 			# rather than as a bad argument.
@@ -80,6 +87,16 @@ func _ready() -> void:
 	var run_seed: int = randi() if seed_override < 0 else seed_override
 	Game.reset()
 	Run.reset(run_seed)
+	# SANDBOX: unlock the whole game before the first wave. The avatar gate is the reason
+	# this exists -- without its four bosses down, every base tower stops at Lv2 and no
+	# fusion can be bought at all, so testing Lv5 or any of the eleven fusions would mean
+	# playing to wave 40 first. Run.beat_avatar() is the same ledger a real kill writes.
+	if Game.sandbox:
+		for el in Game.TOWER_ORDER:
+			Run.beat_avatar(String(el))
+		print("--- SANDBOX: map %s, wave %d, gold %d, lives %d, avatars %s ---"
+				% [_run_board, Game.sandbox_wave, Game.gold, Game.lives,
+					str(Run.avatars_beaten)])
 
 	hud.set_gold(Game.gold)
 	hud.set_lives(Game.lives)
@@ -118,7 +135,7 @@ func _ready() -> void:
 			Game.SCREEN_SIZE.y / Game.WORLD_SIZE.y)
 
 	wave_manager.enemies_root = enemies_root
-	wave_manager.start(run_seed)
+	wave_manager.start(run_seed, Game.sandbox_wave if Game.sandbox else 1)
 	if OS.get_cmdline_user_args().has("--show-road"):
 		map.show_road = true
 		map.queue_redraw()
@@ -1640,8 +1657,9 @@ func _sell_tower(tower: Tower) -> void:
 func _on_game_over() -> void:
 	Audio.play("gameover")
 	# Bank the run BEFORE the summary draws: finish_run updates the best-wave record and
-	# the wallet, both of which the summary reports.
-	var earned := Meta.finish_run(Game.wave_reached)
+	# the wallet, both of which the summary reports. A SANDBOX run banks nothing -- see
+	# Game.sandbox for why that rule is the one that makes the mode safe.
+	var earned := 0 if Game.sandbox else Meta.finish_run(Game.wave_reached)
 	end_screen.show_summary(earned, false)
 
 ## Standard mode's win path (GAME_STRATEGY_V2.md §11.1, BUILD NEXT #4) — same bookkeeping as
@@ -1650,6 +1668,11 @@ func _on_game_over() -> void:
 ## there was a way to win.
 func _on_victory() -> void:
 	Audio.play("victory")
+	if Game.sandbox:
+		# No Essence, no best wave, and no star: a sandbox win would otherwise hand out the
+		# very stars that gate the maps, and nothing afterwards could tell it from a real one.
+		end_screen.show_summary(0, true, 0)
+		return
 	var earned := Meta.finish_run(Game.wave_reached)
 	# Stars (GAME_STRATEGY_V2.md §12.4, BUILD NEXT #8): ★ for finishing at all — true here,
 	# since this only runs on Game.victory — ★★ for ≤5 lives lost, ★★★ for a flawless clear.

@@ -1,0 +1,103 @@
+[Attach THREE files, in this order:
+   1. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\towers\_source_fire.png
+      ^ buildings that will stand on this board - match their camera and their light
+   2. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\towers\_source_water.png
+      ^ ditto
+   3. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\board_source.png
+      ^ an existing map in the same game - take its LIGHT and PALETTE only, NOT its layout]
+
+Paint a game map for a 2D tower defense. Images 1 and 2 are buildings the player will place
+on it; image 3 is an existing map in the same game.
+
+THE TOWERS COME FIRST. Images 1 and 2 were painted before this map and cannot be repainted,
+so the ground must join THEM. Study them: how high the camera sits, the direction and
+softness of the light on their stonework, and how bright and how saturated that stonework
+is. Your painting has to look like the ground those exact buildings are standing on.
+
+Image 3 is there for LIGHT and PALETTE ONLY - bright open daylight, warm sunlit grass, muted
+painterly colour. Do NOT copy its layout: its road is a spiral and yours is not.
+
+Aspect ratio 16:9, landscape. No transparency, no border, no frame, no vignette, no text,
+no watermark, no UI, no characters, no towers, no buildings.
+
+THE PLACE:
+A wide, open, sunlit meadow valley. Mostly grass. Conifer forest, rock outcrops and low
+cliffs frame it around the EDGES of the picture only. This is a broad field with a road
+across it, NOT a road cut through a wood - if the picture reads as "forest", it is wrong.
+
+THE ROAD:
+- One continuous stone road crossing the whole picture, entering at the LEFT edge about a
+  third of the way down and ending at a small stone gatehouse about three quarters of the
+  way across and low in the frame.
+- Three or four LONG, LAZY curves - wide sweeping bends, generously far apart from one
+  another, like a country lane. NOT a spiral, NOT switchbacks, NOT hairpins, NOT a zigzag,
+  and it never doubles back to run close alongside itself.
+- Constant width for its whole length, about 5% of the image width edge to edge. No
+  widening, no plaza, no crossroads, no fork, no side path, no gate across it.
+- It never crosses itself, never passes under anything, and no tree crown, cliff or bridge
+  hides any stretch of it. Every part of it is visible from above.
+- PALE GREY-TAN COBBLESTONE: light, slightly cool, clearly greyer and cooler than the
+  grass. NOT mossy, NOT earth-brown, NOT dirt, NOT sandy, NOT overgrown.
+
+THE OPEN GROUND - the single most important requirement in this brief:
+- The grass on BOTH SIDES of the road, for its entire length, is completely EMPTY for a wide
+  band - at least 15% of the image width beyond each kerb. The whole inside of every bend is
+  open too, all the way across.
+- NOTHING STANDS IN IT. Not one tree, rock, boulder, stump, fallen log, bush, shrub, hedge,
+  fence, ruin, signpost, reed or patch of tall grass. If an object would cast its own shadow,
+  it does not belong there. A single picturesque boulder in the middle of an otherwise open
+  pocket ruins that pocket.
+- Beyond that band the meadow keeps opening into wider lawns and gentle rises. More open
+  ground anywhere is always better than less. Aim for most of the picture being open grass.
+
+WHAT THE GRASS LOOKS LIKE - read this twice, a program measures it:
+- Flat, open, mown lawn. WARM YELLOW-GREEN and SUNLIT, carrying almost no blue at all.
+- Lit EVENLY from corner to corner. NO cloud shadows, NO long tree shadows reaching in from
+  the treeline, NO dark corners, NO darkened edges, NO vignette, NO god rays, NO dramatic
+  pools of light. A shadow across the meadow deletes the meadow.
+- Its texture is CALM. A few faint mown bands and a light scatter of tiny flowers lying flat
+  in the grass are welcome. Dense flower clumps, wildflower beds, blue-purple blooms, leaf
+  litter, twigs and speckled undergrowth are NOT - they read as clutter at a distance.
+
+THE FOREST AND CLIFFS - at the edges, not in the field:
+- Dark, blue-green conifers, reading much darker and cooler than the grass. Dark stone for
+  the cliffs and outcrops. They mass at the outer rim of the picture: a treeline on the far
+  side, groves in the corners, cliff walls along the borders.
+- The right 16% of the image and the top 6% are covered by interface in the game. Fill those
+  strips with dense forest, cliffs or distant hills and put nothing there the player needs to
+  see. Keep the road and the gatehouse out of both.
+
+WATER:
+- One clearly blue pond or short stream, at an EDGE of the picture, away from the road.
+- Keep it distinctly BLUER than anything else in the painting - the game finds water by its
+  blue and animates it, so grey or green water will not flow.
+- It must NOT touch the road or the open band beside it, must not cross the road, and gets no
+  bridge or ford. Do not scatter extra puddles through the meadow: water is as unbuildable
+  as a tree.
+
+THE CAMERA - the requirement most maps fail, so read this twice:
+- The ground is seen from a THREE-QUARTER view, looking down at it at an angle, the same way
+  the buildings in images 1 and 2 are seen. NOT from straight overhead.
+- Concretely, and this is the test: where the road runs LEFT-TO-RIGHT across the picture it
+  must be drawn about HALF as wide as where it runs TOP-TO-BOTTOM.
+- Everything standing on the ground obeys the same view. Trees show their sides and their
+  trunks, not only their tops. Rocks and cliffs show a face.
+
+THE PROJECTION MUST BE OBLIQUE, NOT PERSPECTIVE - this one comes from the engine:
+- Compress the view uniformly. The top of the picture is NOT further away than the bottom.
+- Do NOT converge parallel lines. Do NOT make distant things smaller: a tree at the top of
+  the image is the same size as the same tree at the bottom.
+- The road is the SAME WIDTH at the top of the picture as at the bottom.
+- NO horizon line, NO sky, NO clouds, NO distant mountain range. Ground from edge to edge.
+
+MATCH ON:
+- Light: bright open daylight, the same direction and softness as the light on the buildings
+  in images 1 and 2 - from the upper left, soft-edged, no hard cast shadows.
+- Value: the open sunlit grass must be as BRIGHT as the grass in image 3. This is the most
+  common failure - a moody, dim field looks better on its own and makes every building placed
+  on it look pasted on. Err light.
+- Palette and saturation: muted and painterly, warm.
+- Rendering: soft painted edges, no hard black outline, the same detail density.
+
+
+Use case: stylized-concept. Create one new finished map, not a sheet. Reference images in supplied order. The small endpoint gatehouse is the only exception to no buildings; do not place any of the reference towers. Constant physical road width is projected obliquely as specified: horizontal stretches half the apparent width of vertical stretches. Prioritize broad empty evenly bright lawn and long separated lazy curves.

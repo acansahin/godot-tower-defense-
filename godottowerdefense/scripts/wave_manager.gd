@@ -82,9 +82,13 @@ func _ready() -> void:
 
 ## Begins the run. `run_seed` selects which endless waves this run will roll; the same seed
 ## replays the same run, which is what makes a balance complaint reproducible.
-func start(run_seed: int = 0) -> void:
+func start(run_seed: int = 0, from_wave: int = 1) -> void:
 	_generator = WaveGenerator.new(run_seed)
-	wave_preview.emit(_preview_text(1), _preview_color(1))
+	# `from_wave` is the sandbox's: _wave is the number of the LAST wave started, so setting
+	# it to n-1 makes the first wave of the run wave n. The waves before it never run, which
+	# is the point -- their avatar bosses are granted directly instead (see main.gd).
+	_wave = maxi(from_wave, 1) - 1
+	wave_preview.emit(_preview_text(_wave + 1), _preview_color(_wave + 1))
 	_queue_next_wave()
 
 ## The definition for wave `n`: the hand-authored seed table while it lasts, the generator

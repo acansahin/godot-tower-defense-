@@ -27,6 +27,8 @@ const GAME_SCENE := "res://scenes/Main.tscn"
 @onready var _workshop: Workshop = $UI/Root/Workshop
 @onready var _map_button: Button = $UI/Root/Center/Column/Panel/VBox/MapButton
 @onready var _map_panel: MapPanel = $UI/Root/MapPanel
+@onready var _sandbox_button: Button = $UI/Root/Center/Column/Panel/VBox/SandboxButton
+@onready var _sandbox_panel: SandboxPanel = $UI/Root/SandboxPanel
 
 ## Cycle order for the Difficulty button. Hard is the arithmetic half of GAME_STRATEGY_V2.md
 ## §12.2 (its shortened road / closed block / visible modifier are later, mechanic-shaped
@@ -42,6 +44,9 @@ func _ready() -> void:
 	# bouncing through a different board id, which stopped working the moment the map panel let
 	# the player CHOOSE that id -- release_board() clears the state instead.
 	Game.release_board()
+	# A sandbox flag must never survive the menu: it is set by the sandbox panel's own Start
+	# button and by nothing else, so returning here always drops back to a real run.
+	Game.sandbox = false
 	_map_button.pressed.connect(_on_map)
 	_ruleset_button.pressed.connect(_on_ruleset)
 	_play_button.pressed.connect(_on_play)
@@ -53,6 +58,9 @@ func _ready() -> void:
 	_workshop_button.pressed.connect(_on_workshop)
 	_workshop.closed.connect(_on_workshop_closed)
 	_map_panel.closed.connect(_on_map_closed)
+	_sandbox_button.pressed.connect(_on_sandbox)
+	_sandbox_panel.closed.connect(_on_sandbox_closed)
+	_sandbox_panel.start_requested.connect(_on_play)
 	Meta.essence_changed.connect(func(_v: int) -> void: _refresh_status())
 	# Godot re-translates a Control's own `text` by itself, so the six plain buttons need
 	# nothing. These four are built in code around a value ("Essence: %d"), so they are only
@@ -66,6 +74,7 @@ func _ready() -> void:
 	_how_panel.hide()
 	_workshop.hide()
 	_map_panel.hide()
+	_sandbox_panel.hide()
 	_refresh_sound_label()
 	_refresh_status()
 	_play_button.grab_focus()
@@ -91,6 +100,8 @@ func _ready() -> void:
 			Meta.stars[Meta.star_key(Game.DEFAULT_BOARD, "hard")] = 					clampi(int(String(arg).split(":")[1]) - 6, 0, 3)
 	if OS.get_cmdline_user_args().has("--show-maps"):
 		_on_map()
+	if OS.get_cmdline_user_args().has("--show-sandbox"):
+		_on_sandbox()
 	# The same for the rules panel, and for the same reason: it is the tallest thing this
 	# scene can put on screen, so it is where a theme's content margins overflow first.
 	for arg in OS.get_cmdline_user_args():
@@ -174,6 +185,19 @@ func _on_map() -> void:
 	Audio.play("build")
 	_center.hide()
 	_map_panel.open()
+
+## The testing mode. It carries its own map, wave, gold and lives, so it does not go through
+## the map panel or the difficulty button at all -- see sandbox_panel.gd.
+func _on_sandbox() -> void:
+	Audio.play("build")
+	_center.hide()
+	_sandbox_panel.open()
+
+func _on_sandbox_closed() -> void:
+	Game.sandbox = false   # backing out of the panel is not starting a sandbox run
+	_center.show()
+	_refresh_map_label()
+	_play_button.grab_focus()
 
 func _on_map_closed() -> void:
 	_center.show()

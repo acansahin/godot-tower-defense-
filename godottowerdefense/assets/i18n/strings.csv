@@ -113,3 +113,13 @@ MAP_S,Twin Falls,Twin Falls
 MAP_S_DESC,"Short road, open ground, every corner reachable. Build wide.","Kısa yol, açık zemin, her köşe erişilebilir. Geniş kur."
 MAP_SPIRAL,Spiral Arena,Spiral Arena
 MAP_SPIRAL_DESC,"The longest road and the least ground. Fire reaches only three quarters of it.","En uzun yol, en az zemin. Fire yolun sadece dörtte üçüne yetişir."
+MAP_GLACIER,Glacier Pass,Glacier Pass
+MAP_GLACIER_DESC,"A causeway over moving ice. Crevasses cut the ground into pockets.","Hareketli buzun üstünde bir geçit. Yarıklar zemini ceplere bölüyor."
+MENU_SANDBOX,Sandbox,Test Modu
+SANDBOX_TITLE,SANDBOX,TEST MODU
+SANDBOX_SUBTITLE,"Everything unlocked. Nothing is saved: no stars, no record, no Essence.","Her şey açık. Hiçbir şey kaydedilmez: yıldız yok, rekor yok, Öz yok."
+SANDBOX_MAP,Map,Harita
+SANDBOX_WAVE,Start at wave,Başlangıç dalgası
+SANDBOX_GOLD,Gold,Altın
+SANDBOX_LIVES,Lives,Can
+SANDBOX_START,Start sandbox run,Test koşusunu başlat

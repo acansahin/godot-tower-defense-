@@ -254,6 +254,18 @@ Written as fractions of the image, since the generator picks the resolution:
   that: **~73px of shoulder buys one row of towers**. A second row is a `PAD_PITCH` hex row
   further out (~97px), so two rows want ~170px. 150px is one comfortable row and the start
   of a second — treat it as the floor, and more is always better.
+- **WHERE THE ROAD ENTERS AND LEAVES is a rule.** Both halves were got wrong on the first
+  glacier and both were found by playing it, not by measuring the picture:
+  - **The entry must sit at least a fifth of the way down.** The HUD bar covers the world's
+    top 48px and a creep is drawn `radius * 2.6` tall ABOVE its feet, so a boss (radius 38,
+    99px) standing on a road at y=61 is entirely behind the bar and only its feet show. Ask
+    for the road to meet the edge about a QUARTER of the way down and it clears with room.
+  - **The exit belongs at the BOTTOM edge, not the right one, and it is not a building.**
+    The tower palette covers everything past `PLAY_RIGHT` (1296 of 1536), so a road that
+    leaves on the right hides its last stretch behind the panel — a leak nobody sees. The
+    bottom edge is clear apart from the pause and speed buttons in its left corner. And the
+    road should simply run off the frame: a painted gatehouse reads as a door the creeps are
+    walking into, and the game draws no goal marker of its own to argue with.
 - **The rightmost 16% and the top 6% are covered by UI.** The tower palette hides 240px of
   world down the right edge and eats clicks there; the HUD bar covers the top 48px. Keep the
   road, and anything the player must see, out of both strips. Fill them with scenery.
@@ -600,3 +612,536 @@ when the prompt is loosened:
   to be matched while the fourth is there to be departed from, which is an unusual thing to
   ask and the first thing a generator smooths over. The tell is a dim board: if the new
   grass is no brighter than the old, the reference was taken from the wrong image.
+
+---
+
+# Generating a NEW map (not a replacement)
+
+Everything above is about REPLACING the winding board, where the road is already built and
+the brief's hardest job is stopping the generator redesigning it. A new map is a different
+and much easier problem: **there is no route to preserve, so the failure mode that section
+spends most of its length guarding against does not exist.** Any road the generator returns
+is acceptable as long as it satisfies the constraints below, and it is then read off the
+painting by hand in the usual way.
+
+## What the roster is missing, measured
+
+All three shipped boards fail `art_match.py`'s band test, and they cluster within nine build
+spots of each other:
+
+| | open band (want 80%) | build spots | coverage, best 1 tower |
+|---|---|---|---|
+| Winding Forest | 62% | 33 | 25-41% |
+| Twin Falls | 74% | 29 | 31-48% |
+| Spiral Arena | 78% | 24 | 23-39% |
+
+So the gap is not another middling board — it is an **OPEN, high-capacity** one. That is also
+the cheapest kind to paint, because the wide empty apron the other three fail to provide is
+the default state of a meadow rather than something that has to be carved out of a forest.
+
+The first new map is therefore **Long Meadow**: one long road with lazy curves through wide
+open grass, aiming at 60+ build spots. It is the breadth pole of the roster — many cheap
+towers each watching its own stretch, with depth as a trap.
+
+**To generate a DIFFERENT map concept, swap only the THE ROAD section.** Everything else in
+the prompt is the engine's requirements and does not change between maps.
+
+## The prompt
+
+```text
+[Attach THREE files, in this order:
+   1. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\towers\_source_fire.png
+      ^ buildings that will stand on this board - match their camera and their light
+   2. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\towers\_source_water.png
+      ^ ditto
+   3. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\board_source.png
+      ^ an existing map in the same game - take its LIGHT and PALETTE only, NOT its layout]
+
+Paint a game map for a 2D tower defense. Images 1 and 2 are buildings the player will place
+on it; image 3 is an existing map in the same game.
+
+THE TOWERS COME FIRST. Images 1 and 2 were painted before this map and cannot be repainted,
+so the ground must join THEM. Study them: how high the camera sits, the direction and
+softness of the light on their stonework, and how bright and how saturated that stonework
+is. Your painting has to look like the ground those exact buildings are standing on.
+
+Image 3 is there for LIGHT and PALETTE ONLY - bright open daylight, warm sunlit grass, muted
+painterly colour. Do NOT copy its layout: its road is a spiral and yours is not.
+
+Aspect ratio 16:9, landscape. No transparency, no border, no frame, no vignette, no text,
+no watermark, no UI, no characters, no towers, no buildings.
+
+THE PLACE:
+A wide, open, sunlit meadow valley. Mostly grass. Conifer forest, rock outcrops and low
+cliffs frame it around the EDGES of the picture only. This is a broad field with a road
+across it, NOT a road cut through a wood - if the picture reads as "forest", it is wrong.
+
+THE ROAD:
+- One continuous stone road crossing the whole picture, entering at the LEFT edge about a
+  third of the way down and ending at a small stone gatehouse about three quarters of the
+  way across and low in the frame.
+- Three or four LONG, LAZY curves - wide sweeping bends, generously far apart from one
+  another, like a country lane. NOT a spiral, NOT switchbacks, NOT hairpins, NOT a zigzag,
+  and it never doubles back to run close alongside itself.
+- Constant width for its whole length, about 5% of the image width edge to edge. No
+  widening, no plaza, no crossroads, no fork, no side path, no gate across it.
+- It never crosses itself, never passes under anything, and no tree crown, cliff or bridge
+  hides any stretch of it. Every part of it is visible from above.
+- PALE GREY-TAN COBBLESTONE: light, slightly cool, clearly greyer and cooler than the
+  grass. NOT mossy, NOT earth-brown, NOT dirt, NOT sandy, NOT overgrown.
+
+THE OPEN GROUND - the single most important requirement in this brief:
+- The grass on BOTH SIDES of the road, for its entire length, is completely EMPTY for a wide
+  band - at least 15% of the image width beyond each kerb. The whole inside of every bend is
+  open too, all the way across.
+- NOTHING STANDS IN IT. Not one tree, rock, boulder, stump, fallen log, bush, shrub, hedge,
+  fence, ruin, signpost, reed or patch of tall grass. If an object would cast its own shadow,
+  it does not belong there. A single picturesque boulder in the middle of an otherwise open
+  pocket ruins that pocket.
+- Beyond that band the meadow keeps opening into wider lawns and gentle rises. More open
+  ground anywhere is always better than less. Aim for most of the picture being open grass.
+
+WHAT THE GRASS LOOKS LIKE - read this twice, a program measures it:
+- Flat, open, mown lawn. WARM YELLOW-GREEN and SUNLIT, carrying almost no blue at all.
+- Lit EVENLY from corner to corner. NO cloud shadows, NO long tree shadows reaching in from
+  the treeline, NO dark corners, NO darkened edges, NO vignette, NO god rays, NO dramatic
+  pools of light. A shadow across the meadow deletes the meadow.
+- Its texture is CALM. A few faint mown bands and a light scatter of tiny flowers lying flat
+  in the grass are welcome. Dense flower clumps, wildflower beds, blue-purple blooms, leaf
+  litter, twigs and speckled undergrowth are NOT - they read as clutter at a distance.
+
+THE FOREST AND CLIFFS - at the edges, not in the field:
+- Dark, blue-green conifers, reading much darker and cooler than the grass. Dark stone for
+  the cliffs and outcrops. They mass at the outer rim of the picture: a treeline on the far
+  side, groves in the corners, cliff walls along the borders.
+- The right 16% of the image and the top 6% are covered by interface in the game. Fill those
+  strips with dense forest, cliffs or distant hills and put nothing there the player needs to
+  see. Keep the road and the gatehouse out of both.
+
+WATER:
+- One clearly blue pond or short stream, at an EDGE of the picture, away from the road.
+- Keep it distinctly BLUER than anything else in the painting - the game finds water by its
+  blue and animates it, so grey or green water will not flow.
+- It must NOT touch the road or the open band beside it, must not cross the road, and gets no
+  bridge or ford. Do not scatter extra puddles through the meadow: water is as unbuildable
+  as a tree.
+
+THE CAMERA - the requirement most maps fail, so read this twice:
+- The ground is seen from a THREE-QUARTER view, looking down at it at an angle, the same way
+  the buildings in images 1 and 2 are seen. NOT from straight overhead.
+- Concretely, and this is the test: where the road runs LEFT-TO-RIGHT across the picture it
+  must be drawn about HALF as wide as where it runs TOP-TO-BOTTOM.
+- Everything standing on the ground obeys the same view. Trees show their sides and their
+  trunks, not only their tops. Rocks and cliffs show a face.
+
+THE PROJECTION MUST BE OBLIQUE, NOT PERSPECTIVE - this one comes from the engine:
+- Compress the view uniformly. The top of the picture is NOT further away than the bottom.
+- Do NOT converge parallel lines. Do NOT make distant things smaller: a tree at the top of
+  the image is the same size as the same tree at the bottom.
+- The road is the SAME WIDTH at the top of the picture as at the bottom.
+- NO horizon line, NO sky, NO clouds, NO distant mountain range. Ground from edge to edge.
+
+MATCH ON:
+- Light: bright open daylight, the same direction and softness as the light on the buildings
+  in images 1 and 2 - from the upper left, soft-edged, no hard cast shadows.
+- Value: the open sunlit grass must be as BRIGHT as the grass in image 3. This is the most
+  common failure - a moody, dim field looks better on its own and makes every building placed
+  on it look pasted on. Err light.
+- Palette and saturation: muted and painterly, warm.
+- Rendering: soft painted edges, no hard black outline, the same detail density.
+```
+
+## Reading the result
+
+Same order as the replacement flow above, and step 0 is still the whole point: **measure
+before wiring anything in**, because connecting a board is hours of work and re-running the
+prompt is minutes.
+
+```
+python tools/art_match.py <the-new-board.png>
+```
+
+| Check | Target | Why it is worth rejecting on |
+|---|---|---|
+| open ground in the 70-300px band | **≥ 80%** | this map exists for this number; below ~70% it is another middling board |
+| ground squash | 0.50 ± 0.15 | 1.000 is straight overhead, and no colour work fixes it |
+| open ground luminance | ≥ 97 | below this the towers read as stickers on the board |
+| road width top vs bottom | equal, by eye | unequal means true perspective, which the engine cannot draw at all |
+
+Then the usual: crop to 16:9, drop into `assets/art/maps/`, `--import`, flip
+`mipmaps/generate` to `true`, run `build_mask.py` and `water_mask.py`, read the road off the
+painting into a new `Game.<NAME>_PATH`, add the `Game.BOARDS` row (including a
+`board_thumb.py` thumbnail and a `road_len` measured by `--dump-board`), check the trace with
+`map.gd`'s `show_road`, then `--dump-board` and `--play-sim`.
+
+## Other biomes: ice, ash, desert
+
+The prompt above paints a green meadow. Three of its blocks are what make it green, and
+swapping just those three gives a different world on the same rules:
+
+**THE PLACE** · **WHAT THE GRASS LOOKS LIKE** · **THE FOREST AND CLIFFS** · **WATER**
+
+Everything else — the camera, the oblique projection, the road's geometry, the open band,
+the UI strips, MATCH ON — is the engine's requirements and must be carried across unchanged.
+
+### Two things that break on a non-green board
+
+**1. The build mask stops working, silently.** `build_mask.py`'s default test is
+`(g - b) > 35`, which is "warm yellow-green". Measured: sunlit snow (235, 240, 248) gives
+`g-b = -8`; an ash plain (105, 98, 92) gives `6`. Both are far under the threshold, so the
+tool writes a black mask, reports 0% open ground, and the board arrives with nowhere to
+build. Use the declared-ground mode instead:
+
+```
+python tools/build_mask.py <board.png> --ground=R,G,B --tol=N
+```
+
+Eyedrop `R,G,B` off the finished painting's open ground; the starting points below are
+estimates, not measurements. Desert is the exception that needs none of this — sand measures
+`g-b = 48` and passes the default test by accident.
+
+**2. The road can vanish into the ground.** The road is read off the painting BY HAND (and
+`trace_road.py`, for a spiral, hunts pale grey-tan cobble specifically). A pale stone road on
+snow, or a grey road on grey ash, is not a style choice — it is a road nobody can trace. Each
+brief below therefore fixes the road's value AGAINST its ground, and that contrast is not
+negotiable.
+
+### Alaska — ice
+
+```text
+THE PLACE:
+A wide, open, snow-covered valley floor under bright winter sun. Mostly flat, untouched
+snowfield. Dark evergreen spruce, frozen rock outcrops and low ice-crusted cliffs frame it
+around the EDGES of the picture only. A broad snowfield with a road across it, NOT a road
+cut through a forest.
+
+WHAT THE GROUND LOOKS LIKE - read this twice, a program measures it:
+- Flat, open, unbroken SNOW. Bright, clean, sunlit white with cool blue-grey shading in the
+  gentlest dips. It is one continuous surface with no objects standing in it.
+- Lit EVENLY corner to corner. NO long blue tree shadows reaching in from the treeline, NO
+  cloud shadows, NO dark corners, NO vignette, NO dramatic pools of light.
+- Its texture is CALM: soft drifts and faint wind ripples only. No rocks poking through, no
+  scattered stones, no tussocks of dead grass, no footprints, no debris.
+
+THE ROAD:
+- DARK, WET, NEARLY BLACK STONE, swept clear of snow - a dark ribbon crossing a white field.
+  It must read as the DARKEST thing in the open part of the picture. It is NOT pale, NOT
+  grey-white, NOT snow-covered, NOT icy, and it never blends into the snow.
+- Low banks of ploughed snow along its edges are welcome, and must not spread into the wide
+  open band beyond them.
+
+THE TREES AND CLIFFS - at the edges, not in the field:
+- Dark blue-green spruce heavy with snow, and dark frozen rock. They read much DARKER than
+  the snowfield. They mass at the outer rim: a treeline on the far side, groves in the
+  corners, ice-crusted cliff walls along the borders.
+
+WATER:
+- One clearly BLUE patch of open meltwater or blue glacial ice at an EDGE of the picture,
+  away from the road. It must be distinctly BLUER than the snow - the game finds water by
+  its blue, and white ice will not read as water at all.
+```
+
+Start from `--ground=232,238,247 --tol=55`. The tolerance matters more here than anywhere:
+too wide and it swallows the pale ice cliffs, too tight and shadowed snow stops being
+buildable.
+
+### Attempt 1 came back as the meadow painted white, and why
+
+`sunlit_snowfield_v1.png` and `sunlit_meadow_v1.png` are the SAME PAINTING in two palettes:
+the same road route, the same tree placement, the same basalt columns, the same gatehouse
+position, the same water in the same corner. Laid side by side they are one map with a
+filter on it.
+
+That is the brief's fault, not the generator's. The ice version above swaps four blocks and
+keeps everything structural: the same road paragraph, the same "conifer forest frames the
+edges", the same composition. Given identical structure and a new palette, a recolour is the
+only thing left to vary.
+
+**Two lessons, and the second is the useful one:**
+
+1. **The trees are the tell.** Snow-capped conifers over snow-capped basalt columns read as
+   *our forest map in winter*, because they are literally the forest map's vocabulary. A
+   different world needs different objects in it, not the same objects repainted.
+2. **A biome is a LANDFORM, not a colour.** "Snowy field ringed by trees" is the meadow.
+   "A glacier" is a different shape of ground with its own structures — crevasses, seracs,
+   moraine, meltwater, ice walls — and those structures are what make it unmistakable.
+
+There is a third problem both images share: **the middle is a void.** The brief's "nothing
+stands in the open band" plus "aim for most of the picture being open" produced a large
+featureless centre. It measures well and looks unfinished. The fix is not fewer open areas —
+it is surface detail that lies FLAT: `build_mask` refuses things by colour and by how much
+of an 8px block matches the ground, so pattern painted into the ground at a near value stays
+buildable, while anything that stands up and casts a shadow correctly blocks. Flow lines,
+ripples, drift patterns and faint dust are all free.
+
+### The camera: stop asking
+
+Every board this repo has ever measured comes back at squash **1.000**, straight down —
+`board_source`, the winding board, the S board, and now both new ones. Two documented prompt
+strategies failed at it (the ratio phrasing and the "classic isometric RTS map" phrasing) and
+this was the third. The target of 0.50 has no working example behind it and never has.
+
+So the ice brief below **asks for top-down and says so**, and spends the words it saves on
+the landform instead. All boards agreeing with each other matters more than any of them
+agreeing with the tower sheets, and they already all agree at 1.000.
+
+### Attempt 2: the glacier, as a landform
+
+The design goal changed with it. The meadow already gives the roster its open, high-capacity
+map. The glacier is the opposite pole and the ICE ITSELF supplies it: crevasse fields and
+moraine stripes cut the buildable surface into **pockets**, so placement becomes a puzzle of
+which island covers which stretch of road, rather than a continuous wall. The art and the
+gameplay want the same picture, which is the point.
+
+```text
+[Attach THREE files, in this order:
+   1. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\towers\_source_fire.png
+      ^ buildings that will stand on this map - match their light and their painting style
+   2. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\towers\_source_water.png
+      ^ ditto
+   3. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\board_source.png
+      ^ an existing map in the same game - match its RENDERING STYLE and its CAMERA. Nothing else.]
+
+Paint a game map for a 2D tower defense, seen from directly above.
+
+Image 3 is an existing map in the same game. Match its rendering: the same painterly finish,
+the same level of detail, the same bright even daylight, and THE SAME CAMERA - looked at
+from straight overhead, flat, no horizon, no sky, ground filling the whole frame. Do NOT
+copy anything else from it. Images 1 and 2 are buildings that will be placed on your map;
+match the direction and softness of the light on their stonework.
+
+Aspect ratio 16:9, landscape. No transparency, no border, no vignette, no text, no
+watermark, no UI, no characters, no towers, no buildings.
+
+THE PLACE - this is the whole brief, read it before anything else:
+
+The surface of a GREAT GLACIER, seen from above. Not a snowy field. Not a forest in winter.
+A slow river of ancient ice, hundreds of metres thick, filling the frame from edge to edge.
+
+THERE ARE NO TREES ON THIS MAP. No conifers, no spruce, no pines, no bushes, no grass, no
+soil, no meadow, not one. Anything green is wrong. If a tree appears anywhere in the picture
+the map has failed.
+
+WHAT THE ICE LOOKS LIKE:
+- The main surface is packed snow over ice: bright, clean, sunlit, near-white with the
+  faintest cool blue in its hollows. This is the ground the player builds on and most of the
+  picture is made of it.
+- It is NOT featureless. Long, gentle FLOW LINES curve across it - pale bands showing which
+  way the ice is moving, like the grain in a slow river - together with soft drift ripples
+  and faint scour marks. All of this is painted FLAT INTO the surface: it is texture, not
+  objects, and nothing in it stands up or casts a shadow.
+- Keep the ICE SURFACE ITSELF pale, near-white. Save saturated blue for the meltwater and
+  the crevasse depths only.
+
+WHAT BREAKS THE ICE UP - these are the map's real features:
+- CREVASSE FIELDS: groups of long parallel splits in the ice, following the flow lines,
+  their depths dark and shadowed. Several across the map, some at the edges and two or three
+  reaching into the middle. Paint their insides DARK and desaturated - deep blue-black
+  shadow, NOT glowing cyan.
+- SERACS: zones where the ice has buckled into a chaos of standing blocks and towers of ice,
+  casting real shadows. Two or three such zones, at the edges and in the corners.
+- MORAINE: long stripes of dark grey-brown rock rubble carried along on the ice surface,
+  running with the flow. They are dark and clearly distinct from the white ice. Keep them
+  NARROW - a couple of stripes, not a field of debris.
+- MELTWATER: intense TURQUOISE pools and one narrow meltwater channel cutting down into the
+  ice. This is the only strongly coloured thing on the map and it must be unmistakably
+  BLUE - much bluer than the ice around it.
+- ICE WALLS at the outer rim of the picture: where the glacier ends, deep blue-green ice
+  cliffs showing how thick the ice is, with dark bare rock beyond them.
+
+THE OPEN GROUND - what the game needs:
+- Between and around those features, the ice must leave WIDE, CLEAN, OPEN AREAS of plain
+  snow surface - generous connected pockets, each big enough to hold several buildings, with
+  nothing standing in them at all.
+- Every stretch of the road must have such an open pocket beside it within a short distance.
+  A stretch of road walled in by crevasses on both sides is a stretch nobody can defend.
+- Inside those pockets: no seracs, no rubble, no ice blocks, no boulders, no debris. Flat
+  surface texture only.
+
+THE ROAD:
+- An ancient PAVED CAUSEWAY laid across the glacier, kept swept clear - one continuous ribbon
+  of DARK, NEARLY BLACK stone slabs. It must read as the darkest thing on the open ice.
+- It is NOT pale, NOT grey-white, NOT snow-covered, NOT an ice track, and it never blends
+  into the snow.
+- It enters at the LEFT edge near the TOP, runs down and to the right across the whole map in
+  a long descending line with two broad hooks in it, and ends at a small dark stone gatehouse
+  low in the frame, about two thirds of the way across.
+- It THREADS BETWEEN the crevasse fields - the ice dictates its route, so it bends around
+  them rather than crossing them.
+- Constant width for its whole length, about 5% of the image width, edge to edge. No
+  widening, no plaza, no fork, no side path, no bridge, no gate across it.
+- It never crosses itself, and nothing overlaps or hides any part of it.
+
+THE FRAME:
+- The right 16% of the image and the top 6% are covered by interface in the game. Fill those
+  strips with seracs, crevasse fields, moraine or the ice walls, and put nothing there the
+  player needs to see. Keep the road and the gatehouse out of both.
+
+LIGHT:
+- Bright, flat, even winter daylight from the upper left. Lit EVENLY corner to corner: no
+  cloud shadows, no dark corners, no vignette, no blue dusk, no aurora, no god rays. Err
+  bright - a moody blue glacier makes every building placed on it look pasted on.
+```
+
+**Measuring it.** Both switches are needed, and the road one especially: the road detector is
+"pale and not green", which a snowfield satisfies, so without `--road` the tool decides 69%
+of the image is road and reports a meaningless 0% band.
+
+```
+python tools/art_match.py <board.png> --ground=232,238,247 --tol=55 --road=85,88,95 --roadtol=45
+python tools/build_mask.py <board.png> --ground=232,238,247 --tol=55
+```
+
+Eyedrop both colours off the finished painting before trusting either. Reject on the **band**
+figure and on the trees: one conifer anywhere means the brief was read as the meadow again.
+
+### Attempt 2 landed. What it measured, and what it cost
+
+`great_glacier_v1.png` is in the game as `glacier` / **Glacier Pass**. It is a different
+place rather than a repaint: no trees anywhere, crevasse fields, seracs, moraine stripes,
+turquoise meltwater and blue ice walls.
+
+| | glacier v1 | **glacier v2** | winding | s | spiral |
+|---|---|---|---|---|---|
+| open band (want 80%) | 72% | **OK** | 62% | 74% | 78% |
+| open ground | 68.6% | **48.8%** | 53.5% | 67.2% | — |
+| buildable spots | 46 | **28** | 33 | 29 | 24 |
+| road | 1527px | **1685px** | 3199px | 2518px | 4042px |
+| towers to cover 95% | 3-4 | **4** | 5-8 | 4-5 | 6-8 |
+| `--play-sim` floor died | 28 | **36** | 32 | 36 | 36 |
+
+**v1 was the roster's generous pole and v2 is not.** The re-generation that fixed its road
+(see below) also let the crevasses cut further into the ice, which took it from 46 buildable
+spots to 28 and from the earliest floor-player death of the four to joint best. That was not
+asked for and is worth knowing: a board's capacity is a property of the PAINTING, so any
+re-generation re-rolls it and it has to be re-measured rather than assumed to carry over.
+
+**The road was traced by tool, not by hand.** `tools/trace_ribbon.py` was written for it and
+`GLACIER_PATH` is its first output; the preview put the line down the middle of the road for
+its whole length on the first run, once the tracer was taught to take the largest connected
+run rather than the first cell it found (dark ice walls and moraine match the road colour and
+form their own islands, and seeding in one of those traced an 11px speck at the top border).
+
+**Every colour reader needed telling what the board is made of.** This is the real lesson of
+the biome work, and it cost four separate fixes:
+
+| reader | default test | what it did on ice |
+|---|---|---|
+| `build_mask.py` open | `(g-b) > 35` | found no ground at all — a black mask, reported as 0% |
+| `art_match.py` road | "pale and not green" | **69% of the image read as road**, so the band came out 0% |
+| `water_mask.py` / water | `b > r+25` | **59% of the image read as water** — the whole map would ripple, and water is excluded from open ground |
+| `art_match.py` hue | ground blue vs masonry blue | meaningless on snow; ignore it, the band and squash still hold |
+
+All three now take `--ground`, `--road` and `--water`, and all three keep the green path
+byte-identical. The failure mode they shared is worth stating on its own: **none of them
+errored.** Each returned a plausible number that was wrong, which is the kind of result that
+gets believed.
+
+Measured with:
+
+```
+python tools/art_match.py <b> --ground=210,222,236 --tol=48 --road=70,72,78 --water=20,130,165
+python tools/build_mask.py <b> --ground=210,222,236 --tol=48 --water=20,130,165 --watertol=95
+python tools/water_mask.py <b> <b>_water.png --water=20,130,165 --watertol=50
+python tools/trace_ribbon.py <b> --road=75,82,88 --tol=50 --name=GLACIER --preview=check.png
+```
+
+Note the water tolerance differs between the two uses on purpose: 95 for the build mask,
+where catching a little extra blue only refuses ground, and **50** for the ripple mask, where
+95 also caught the crevasse interiors and set the cracks flowing. The pools ripple; the
+cracks do not.
+
+The camera came back at 1.000 as predicted, and was not fought.
+
+### v2: what playing it found that measuring it had not
+
+Three faults, all in the road, none visible in any number the tools report:
+
+1. **The road met the left edge at y=61.** The HUD covers the world's top 48px and a creep is
+   drawn `radius * 2.6` tall ABOVE its feet, so a boss (radius 38 → 99px) spawned entirely
+   behind the bar with only its feet showing. v2 enters at y=219. **A spawn wants y > 150.**
+2. **It ended at a painted gatehouse two thirds across** instead of leaving the map, which
+   reads as a door the creeps walk into. v2 runs off the frame with nothing at its end.
+3. **The bottom edge, not the right one**, for the exit: the tower palette covers everything
+   past `PLAY_RIGHT` (1296 of 1536), so a right-edge road hides its last stretch behind the
+   panel and a leak happens where nobody can see it.
+
+All three are now constraints in the template above, and the re-generation kept the glacier
+intact — same landform vocabulary, same style, still no trees.
+
+### Pompeii — volcanic ash
+
+```text
+THE PLACE:
+A wide, open plain of settled volcanic ash at the foot of a smoking volcano. Mostly flat,
+pale grey ash field. Black basalt outcrops, cooled lava ridges and burnt dead trees frame it
+around the EDGES of the picture only. The volcano itself sits far off at the TOP EDGE,
+drawn small and low, with a thin plume - it must not dominate the picture or cast anything
+across the field.
+
+WHAT THE GROUND LOOKS LIKE - read this twice, a program measures it:
+- Flat, open, unbroken ASH. PALE WARM GREY, dry, dusty, evenly lit and clearly BRIGHT - this
+  is a sunlit ash plain, not a night scene and not a burnt ruin.
+- Lit EVENLY corner to corner. NO ash clouds overhead, NO smoke drifting across the ground,
+  NO dark corners, NO vignette, NO orange rim-light washing over the field.
+- Its texture is CALM: soft drifts and faint wind ripples in the ash. No rubble, no scattered
+  rocks, no cracks, no embers, no bones, no ruins lying in it.
+
+THE ROAD:
+- DARK BASALT SLABS, near-black polished stone, the way a Roman road is paved. It must read
+  as clearly DARKER than the pale ash around it and never the same value as the ash.
+- No ash drifted over it, no cracks splitting it, no lava crossing it.
+
+THE ROCKS AND DEAD TREES - at the edges, not in the field:
+- Black basalt outcrops, cooled lava ridges and bare scorched tree trunks, all reading much
+  DARKER than the ash plain. They mass at the outer rim of the picture.
+
+LAVA AND WATER:
+- One or two narrow channels of glowing ORANGE lava may run at the EDGES of the picture. They
+  must not touch the road or the open band beside it, and get no bridge.
+- No blue water anywhere on this map.
+```
+
+Start from `--ground=150,143,135 --tol=55`. Keep it tight: basalt at (45, 40, 38) sits about
+180 away and is safely rejected, but a wide tolerance would start admitting the darker ash
+against the outcrops. The lava is rejected automatically — bright orange is nowhere near the
+grey — so it blocks building without any extra rule.
+
+### Desert
+
+```text
+THE PLACE:
+A wide, open desert basin under bright sun. Mostly flat, firm sand and dry flats. Red-brown
+canyon walls, mesas and scattered rock spires frame it around the EDGES of the picture only.
+A broad open basin with a road across it, NOT a road winding through a canyon.
+
+WHAT THE GROUND LOOKS LIKE - read this twice, a program measures it:
+- Flat, open, firm SAND. WARM GOLDEN TAN, sunlit, evenly lit corner to corner.
+- NO long shadows from the canyon walls reaching into the basin, NO dark corners, NO
+  vignette, NO heat haze or dust blowing across the ground.
+- Its texture is CALM: gentle wind ripples only. No boulders, no scattered stones, no scrub,
+  no cactus, no bones, no dunes tall enough to cast their own shadows.
+
+THE ROAD:
+- PALE COOL GREY FLAGSTONE, clearly COOLER and greyer than the warm sand around it - the two
+  must not be the same colour. It is NOT sand-coloured, NOT a dirt track, NOT buried.
+
+THE CLIFFS AND SPIRES - at the edges, not in the basin:
+- Red-brown canyon walls, mesas and rock spires, reading clearly DARKER and REDDER than the
+  open sand. They mass at the outer rim of the picture.
+
+WATER:
+- One clearly BLUE oasis pool with a few palms at an EDGE of the picture, away from the road.
+  Keep it distinctly BLUER than anything else - the game finds water by its blue.
+```
+
+Desert needs no `--ground`: sunlit sand (215, 188, 140) measures `g-b = 48` and passes the
+default test, while red canyon rock (165, 100, 70) measures `30` and is correctly refused.
+Run the plain `python tools/build_mask.py <board.png>` and check the number.
+
+### What still assumes green, and does not matter much
+
+`art_match.py`'s **hue** verdict compares the open ground's blue channel against the tower
+masonry's. On snow that comparison is meaningless (snow's blue is ~245 against masonry's 46)
+and it will report a failure that means nothing. Its **squash**, **value** and **band**
+numbers stay valid on any biome, and those are the three worth rejecting a board on.

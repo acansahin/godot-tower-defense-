@@ -1,0 +1,98 @@
+[Attach THREE files, in this order:
+   1. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\towers\_source_fire.png
+   2. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\towers\_source_water.png
+   3. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\board_source.png
+      ^ an existing map in the same game - take its LIGHT LEVEL and camera only, NOT its layout and NOT its colours]
+
+Paint a game map for a 2D tower defense. Images 1 and 2 are buildings the player will place
+on it; image 3 is an existing map in the same game.
+
+THE TOWERS COME FIRST. Images 1 and 2 were painted before this map and cannot be repainted,
+so the ground must join THEM. Study them: how high the camera sits, the direction and
+softness of the light on their stonework, and how bright that stonework is. Your painting
+has to look like the ground those exact buildings are standing on.
+
+Aspect ratio 16:9, landscape. No transparency, no border, no frame, no vignette, no text,
+no watermark, no UI, no characters, no towers, no buildings.
+
+THE PLACE:
+A wide, open, snow-covered valley floor under bright winter sun. Mostly flat, untouched
+snowfield. Dark evergreen spruce, frozen rock outcrops and low ice-crusted cliffs frame it
+around the EDGES of the picture only. A broad snowfield with a road across it, NOT a road
+cut through a forest.
+
+THE ROAD:
+- One continuous road crossing the whole picture, entering at the LEFT edge about a third of
+  the way down and ending at a small stone gatehouse about three quarters of the way across
+  and low in the frame.
+- Three or four LONG, LAZY curves - wide sweeping bends, generously far apart from one
+  another. NOT a spiral, NOT switchbacks, NOT hairpins, NOT a zigzag, and it never doubles
+  back to run close alongside itself.
+- Constant width for its whole length, about 5% of the image width edge to edge. No
+  widening, no plaza, no crossroads, no fork, no side path.
+- It never crosses itself, never passes under anything, and no tree, cliff or bridge hides
+  any stretch of it.
+- DARK, WET, NEARLY BLACK STONE, swept clear of snow - a dark ribbon crossing a white field.
+  It must read as the DARKEST thing in the open part of the picture. It is NOT pale, NOT
+  grey-white, NOT snow-covered, NOT icy, and it never blends into the snow.
+- Low banks of ploughed snow along its edges are welcome, and must not spread into the wide
+  open band beyond them.
+
+THE OPEN GROUND - the single most important requirement in this brief:
+- The ground on BOTH SIDES of the road, for its entire length, is completely EMPTY for a wide
+  band - at least 15% of the image width beyond each kerb. The whole inside of every bend is
+  open too, all the way across.
+- NOTHING STANDS IN IT. Not one tree, rock, boulder, stump, fallen log, bush, fence, ruin,
+  signpost or ice block. If an object would cast its own shadow, it does not belong there. A
+  single picturesque boulder in the middle of an otherwise open pocket ruins that pocket.
+- Beyond that band the snowfield keeps opening into wider flats and gentle rises. More open
+  ground anywhere is always better than less.
+
+WHAT THE GROUND LOOKS LIKE - read this twice, a program measures it:
+- Flat, open, unbroken SNOW. Bright, clean, sunlit white with cool blue-grey shading in the
+  gentlest dips. One continuous surface with no objects standing in it.
+- Lit EVENLY corner to corner. NO long blue tree shadows reaching in from the treeline, NO
+  cloud shadows, NO dark corners, NO vignette, NO dramatic pools of light.
+- Its texture is CALM: soft drifts and faint wind ripples only. No rocks poking through, no
+  scattered stones, no tussocks of dead grass, no footprints, no debris.
+
+THE TREES AND CLIFFS - at the edges, not in the field:
+- Dark blue-green spruce heavy with snow, and dark frozen rock. They read much DARKER than
+  the snowfield. They mass at the outer rim: a treeline on the far side, groves in the
+  corners, ice-crusted cliff walls along the borders.
+- The right 16% of the image and the top 6% are covered by interface in the game. Fill those
+  strips with dense forest, cliffs or distant hills and put nothing there the player needs to
+  see. Keep the road and the gatehouse out of both.
+
+WATER:
+- One clearly BLUE patch of open meltwater or blue glacial ice at an EDGE of the picture,
+  away from the road. It must be distinctly BLUER than the snow - the game finds water by its
+  blue, and white ice will not read as water at all.
+- It must NOT touch the road or the open band beside it, must not cross the road, and gets no
+  bridge.
+
+THE CAMERA - the requirement most maps fail, so read this twice:
+- The ground is seen from a THREE-QUARTER view, looking down at it at an angle, the same way
+  the buildings in images 1 and 2 are seen. NOT from straight overhead.
+- Concretely, and this is the test: where the road runs LEFT-TO-RIGHT across the picture it
+  must be drawn about HALF as wide as where it runs TOP-TO-BOTTOM.
+- Everything standing on the ground obeys the same view. Trees show their sides and their
+  trunks, not only their tops. Rocks and cliffs show a face.
+
+THE PROJECTION MUST BE OBLIQUE, NOT PERSPECTIVE - this one comes from the engine:
+- Compress the view uniformly. The top of the picture is NOT further away than the bottom.
+- Do NOT converge parallel lines. Do NOT make distant things smaller: a tree at the top of
+  the image is the same size as the same tree at the bottom.
+- The road is the SAME WIDTH at the top of the picture as at the bottom.
+- NO horizon line, NO sky, NO clouds, NO distant mountain range. Ground from edge to edge.
+
+MATCH ON:
+- Light: bright open daylight from the upper left, soft-edged, no hard cast shadows - the
+  same direction and softness as the light on the buildings in images 1 and 2.
+- Value: the open sunlit snow must be BRIGHT. A moody blue dusk looks better on its own and
+  makes every building placed on it look pasted on. Err light.
+- Rendering: soft painted edges, no hard black outline, painterly, the same detail density
+  as image 3.
+
+
+Use case: stylized-concept. Produce one finished new map. The endpoint gatehouse is the sole exception to no buildings; no reference towers placed on the map. Constant physical road width is projected obliquely, horizontal stretches half as thick as vertical stretches. Keep the road about 5% image width on vertical stretches, and 2.5% on horizontal stretches. All three references are style references only, not edit targets. Prioritize completely empty broad snowfield, dark cleared road and uniformly bright daylight.
