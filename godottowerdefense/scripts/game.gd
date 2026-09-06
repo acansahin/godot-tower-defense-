@@ -1264,6 +1264,23 @@ var ruleset: String = Balance.DEFAULT_RULESET
 ## reset(), so a mid-run retry stays on the map the player chose. What IS saved is the stars
 ## earned per (board, ruleset); see Meta.
 var selected_board: String = DEFAULT_BOARD
+
+## SANDBOX: a run for testing the game rather than playing it. Everything is unlocked from
+## wave 1, the run can start at any wave, and gold and lives are whatever was asked for.
+##
+## The one rule that makes it safe: **a sandbox run writes NOTHING to Meta** -- no stars, no
+## best wave, no Essence (see main.gd's victory and game-over paths). Without that, an
+## afternoon of testing would hand out the stars that gate the maps and set a best-wave
+## record nobody earned, and there would be no way to tell the two apart afterwards.
+##
+## Set only by the sandbox panel's own start button and cleared whenever the menu loads, so
+## it can never leak into a normal run.
+var sandbox: bool = false
+## Wave the sandbox run begins on. 1 is a normal start.
+var sandbox_wave: int = 1
+## Gold and lives a sandbox run begins with, replacing the ruleset's own.
+var sandbox_gold: int = 100000
+var sandbox_lives: int = 200
 var gold: int = 0
 var lives: int = 0
 var is_over: bool = false
@@ -1529,6 +1546,12 @@ func reset() -> void:
 	# left as-is by a mid-run reset() so a retry keeps the difficulty the player chose.
 	gold = Balance.ruleset_start_gold(ruleset) + Meta.bonus_start_gold()
 	lives = Balance.ruleset_start_lives(ruleset) + Meta.bonus_start_lives()
+	# A sandbox run replaces both outright rather than adding to them, so what the panel says
+	# is what the run starts with -- a Workshop bonus quietly changing the number would make
+	# the sandbox useless for reproducing anything.
+	if sandbox:
+		gold = sandbox_gold
+		lives = sandbox_lives
 	is_over = false
 	is_won = false
 	wave_reached = 0

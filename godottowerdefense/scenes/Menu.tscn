@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://scripts/menu.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/Workshop.tscn" id="3"]
@@ -6,6 +6,7 @@
 [ext_resource type="Texture2D" path="res://assets/art/menu/menu_bg.png" id="5"]
 [ext_resource type="PackedScene" path="res://scenes/HowToPlay.tscn" id="6"]
 [ext_resource type="PackedScene" path="res://scenes/MapPanel.tscn" id="7"]
+[ext_resource type="PackedScene" path="res://scenes/SandboxPanel.tscn" id="8"]
 
 [sub_resource type="Gradient" id="scrim_gradient"]
 offsets = PackedFloat32Array(0, 0.30, 0.56)
@@ -127,6 +128,11 @@ custom_minimum_size = Vector2(220, 46)
 layout_mode = 2
 text = "Language: English"
 
+[node name="SandboxButton" type="Button" parent="UI/Root/Center/Column/Panel/VBox"]
+custom_minimum_size = Vector2(220, 46)
+layout_mode = 2
+text = "MENU_SANDBOX"
+
 [node name="QuitButton" type="Button" parent="UI/Root/Center/Column/Panel/VBox"]
 custom_minimum_size = Vector2(220, 46)
 layout_mode = 2
@@ -139,4 +145,7 @@ visible = false
 visible = false
 
 [node name="MapPanel" parent="UI/Root" instance=ExtResource("7")]
+visible = false
+
+[node name="SandboxPanel" parent="UI/Root" instance=ExtResource("8")]
 visible = false

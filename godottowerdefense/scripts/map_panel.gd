@@ -80,7 +80,8 @@ func _close_rect() -> Rect2:
 
 ## True when the player has earned enough stars anywhere to open `board_id`.
 func _unlocked(board_id: String) -> bool:
-	return Meta.total_stars() >= int(Game.BOARDS[board_id]["star_gate"])
+	# A sandbox run is for testing every map, so the gates do not apply to it.
+	return Game.sandbox or Meta.total_stars() >= int(Game.BOARDS[board_id]["star_gate"])
 
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion:
