@@ -315,6 +315,7 @@ clean-ish save:
 | `desert` | **wave 50, WON** |
 | `winding` | wave 49 |
 | `ash` | wave 47 |
+| `s` | wave 47 |
 | `glacier` | wave 43 |
 
 So the sentence further down — "a maxed board clearing the last wave is the MINIMUM bar" —
@@ -323,8 +324,13 @@ was true when it was written and free placement, the progression gate and three 
 have all landed since. **Do not read a single board's `--fill-board` number as a verdict on a
 change**: read it against this table, and remember each run rolls its own `run_seed`, so the
 avatar order and the back half's waves differ run to run — the 43-to-50 spread is partly that
-noise and nobody has separated the two yet. `s` and `spiral` are not in the table because
-they were still measuring; fold them in when someone runs them.
+noise and nobody has separated the two yet. `spiral` is not in the table because it was
+still measuring; fold it in when someone runs it.
+
+Note also that `--fill-board` is NOT a sandbox run: it writes to `Meta` like any other, so a
+measuring pass leaves stars, a best wave and Essence behind in `user://save.json`. The five
+rows above cost a star on `desert` and took the save from three runs to eight. `--dump-meta`
+already carries this warning; `--fill-board` and `--play-sim` deserve it too.
 
 **A level is a board AND a ruleset** (GAME_STRATEGY_V2.md §12.4). `Meta.stars` is keyed
 `"<board>:<ruleset>"` through `Meta.star_key()`, six boards x three rulesets x three stars
