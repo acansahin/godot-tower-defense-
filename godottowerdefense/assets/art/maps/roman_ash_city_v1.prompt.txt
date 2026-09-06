@@ -1,0 +1,114 @@
+[Attach THREE files, in this order:
+   1. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\towers\_source_fire.png
+      ^ buildings that will stand on this map - match their light and their painting style
+   2. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\towers\_source_water.png
+      ^ ditto
+   3. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\board_source.png
+      ^ an existing map in the same game - match its RENDERING STYLE and its CAMERA. Nothing else.]
+
+Paint a game map for a 2D tower defense, seen from directly above.
+
+Image 3 is an existing map in the same game. Match its rendering: the same painterly finish,
+the same level of detail, the same bright even daylight, and THE SAME CAMERA - looked at from
+straight overhead, flat, no horizon, no sky, ground filling the whole frame. Do NOT copy
+anything else from it. Images 1 and 2 are buildings that will be placed on your map; match the
+direction and softness of the light on their stonework.
+
+Aspect ratio 16:9, landscape. No transparency, no border, no vignette, no text, no watermark,
+no UI, no characters, no towers, no modern buildings.
+
+THE PLACE - this is the whole brief, read it before anything else:
+
+A ROMAN CITY BURIED IN VOLCANIC ASH, seen from straight above. Not an ash field. Not a ruined
+forest. A dead town drowned to its rooftops in pale grey ash: you are looking down at a street
+grid that is still legible, with everything between the streets filled and smothered.
+
+BECAUSE THE CAMERA POINTS STRAIGHT DOWN THERE IS NO VOLCANO IN THE PICTURE. Do not draw a
+mountain, a cone, a horizon, a sky or a smoke plume - none of them can be seen from overhead.
+The eruption shows only on the GROUND: settled ash everywhere, and one dark tongue of cooled
+lava entering from the top edge of the frame.
+
+NOTHING IS GREEN. No grass, no trees, no bushes, no moss, no ivy, no crops. Anything green is
+wrong.
+
+WHAT THE ASH LOOKS LIKE:
+- The main surface is settled volcanic ash: PALE WARM GREY, dry, dusty, sunlit and clearly
+  BRIGHT. This is the ground the player builds on and most of the picture is made of it. It is
+  not a night scene, not a charred black waste, and not a smoking ruin.
+- It is NOT featureless. Long soft wind drifts, faint ripples, and pale streaks of finer ash
+  curve across it, together with the ghosted rectangles of walls buried just under the surface.
+  All of this is painted FLAT INTO the ash: it is texture, not objects, and nothing in it
+  stands up or casts a shadow.
+- Lit EVENLY corner to corner. NO smoke drifting over the ground, NO ash cloud shadows, NO
+  dark corners, NO vignette, NO orange rim-light washing across the field.
+
+WHAT BREAKS THE ASH UP - these are the map's real features, and they are RECTILINEAR:
+- CITY BLOCKS: dense masses of half-buried masonry - stubs of insula walls, tiled roof ridges
+  breaking the surface, courtyards choked with ash. They are BLOCKY and SQUARE-CORNERED, laid
+  out on a grid, not scattered like boulders. Several across the map, including two or three
+  reaching into the middle.
+- COLONNADES: straight rows of broken column stumps standing along the main streets, casting
+  short real shadows.
+- THE AMPHITHEATRE: one large oval bowl of stone seating half-filled with ash, at an edge or a
+  corner of the picture. It is the one curved structure on the map and it should be
+  unmistakable from above.
+- COLLAPSE FIELDS: zones where roofs have fallen in - broken tile, snapped beams and rubble
+  heaped over the ash. Two or three such zones, at the edges and in the corners.
+- Keep every one of these DARKER than the open ash, so the plain is unmistakably the bright
+  part of the picture.
+
+LAVA - the map's one strongly coloured feature:
+- One dark tongue of cooled lava enters at the TOP edge, and one or two NARROW channels of
+  glowing ORANGE lava run at the EDGES of the picture. Molten orange, with black crust at
+  their banks.
+- They must not touch the road, must not cross it, must not run through the open ash beside
+  it, and get no bridge. There is NO BLUE WATER anywhere on this map.
+
+THE OPEN GROUND - what the game needs:
+- Between and around the city blocks, the ash must leave WIDE, CLEAN, OPEN AREAS of plain
+  drifted surface - the buried FORUM square, wide street junctions, ash-filled market grounds
+  and open lots. Generous connected pockets, each big enough to hold several buildings, with
+  nothing standing in them at all.
+- Every stretch of the road must have such an open pocket beside it within a short distance. A
+  street walled in by standing masonry on both sides is a stretch nobody can defend.
+- Inside those pockets: no columns, no rubble, no wall stubs, no fallen tile, no debris. Flat
+  ash texture only.
+
+THE ROAD:
+- The city's main street, still swept clear: one continuous ribbon of DARK BASALT SLABS,
+  near-black polished paving with cart ruts worn into it. It must read as the darkest thing on
+  the open ash.
+- It is NOT pale, NOT grey-white, NOT ash-covered, NOT cracked apart, and it never blends into
+  the ash.
+- Because it is a Roman street it runs in STRAIGHT SEGMENTS meeting at SQUARE CORNERS - right
+  angles, not lazy curves and not hairpins. Six to eight straight runs.
+- It enters at the LEFT edge about ONE QUARTER of the image height down, with broad open ash
+  above it. No part of the road may go above that entry. It works its way down and right
+  across the map, and EXITS THROUGH THE BOTTOM EDGE at about 70% of the image width. The road
+  is visibly CUT OFF by the bottom frame and continues beyond it: NO gatehouse, NO gate, NO
+  arch, NO door, NO terminus, NO structure of any kind at either end.
+- The route doubles back on itself the way a street grid does, so two legs of it may run
+  parallel - but any two parallel legs must be AT LEAST 14% OF THE IMAGE WIDTH APART, with a
+  city block or an open lot filling the space between them. Never closer.
+- Constant width for its whole length, about 5% of the image width, edge to edge. No widening,
+  no plaza across it, no fork, no side path, no bridge, no steps, no gate.
+- It never crosses itself, and nothing overlaps or hides any part of it. Side alleys may be
+  suggested as ash-filled gaps between blocks, but they must be clearly NARROWER and PALER
+  than the main street so it is never mistaken for them.
+
+THE FRAME:
+- The right 16% of the image and the top 6% are covered by interface in the game. Fill those
+  strips with city blocks, collapse fields or the amphitheatre, and put nothing there the
+  player needs to see. Keep the road out of both.
+
+LIGHT:
+- Bright, flat, even daylight from the upper left. Lit EVENLY corner to corner: no cloud
+  shadows, no dark corners, no vignette, no dusk, no god rays, no fire glow over the field.
+  Err bright - a moody grey ruin makes every building placed on it look pasted on.
+
+
+Use case: stylized-concept. Generate one finished map. All three images are style/lighting references only; do not copy their terrain or place their towers. Follow this brief's Roman ash city and straight-down camera. Critical geometry: the black main street has 6 to 8 straight segments with sharp 90-degree corners, no rounded bends; enters left at 25% height and exits bottom at 70% width, no endpoint structure. Wide near-white warm grey ash pockets next to every stretch. No vegetation, blue water, sky or volcano. Rectilinear city blocks and one amphitheatre, never a natural boulder landscape.
+
+REFINEMENT PROMPT
+
+Edit this Roman city buried in ash. Preserve painterly overhead rendering, bright warm-grey ash, rectilinear buried city blocks, top-right amphitheatre, top cooled lava tongue and right-edge orange lava. Correct ROAD GEOMETRY and clear ash build pockets. Erase existing road completely and lay one SIX-SEGMENT, right-angle, near-black basalt street following these image coordinates exactly (percentages x,y): (0,27) -> (48,27) -> (48,54) -> (20,54) -> (20,81) -> (70,81) -> (70,100). Sharp square corners, constant width 5% IMAGE WIDTH, no bevelled or rounded corners. These coordinates describe road centerline. Thus entrance left at roughly quarter height, no road above entrance, bottom exit at 70%. Three horizontal legs separated by 27% image height = over 14% image width. No other black paths. No fork, bridge, steps, terminus or endpoint building. Relocate ruins away from new street as needed. Broad CLEAN EMPTY connected ash lots on BOTH sides of every road stretch, smooth pale wind ripples and ghosted buried foundations only; remove columns, rubble and scattered debris in build pockets and shoulders. Keep straight colonnades with short shadows only alongside distant blocks beyond the open shoulders. Keep substantial dark square Roman masonry masses at edges and several in middle but leave most playable ground clean open ash. No greenery, water, smoke, sky, volcano, modern buildings, UI or text. Same 16:9.

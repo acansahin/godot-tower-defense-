@@ -1,0 +1,7 @@
+undefined
+
+Use case: stylized-concept. One finished 16:9 game map. The three supplied references control painterly rendering and lighting only, not layout or environment. Main priority: at least three quarters of image reads as empty flat buildable salt pan, with calm shallow polygon cracks, warm tan sand and bone-white salt patches. Rim rocks confined tightly to edges. One oasis toward lower-left edge away from road, never in rightmost 16% or top 6%. Road is a cool slate-grey flagstone ribbon with constant physical width about 5% of image width. Enters left at 25% height, never goes above its entry, takes 3-4 broad lazy bends down/right, exits bottom at 70% width. No structure at either end. Broad empty shoulders, no rocks inside bends. No structures, no scattered debris, no greenery except oasis palms, no extra water.
+
+REFINEMENT PROMPT
+
+Edit only the lower half of the slate road in this salt lake map. Preserve entire environment, oasis, lighting, salt textures, empty flats and upper road. The road currently exits bottom at 58% width. Move its bottom exit RIGHT to precisely 70% width, making the last broad lazy curve sweep right before descending out of frame. At bottom, centerline must be x=70%, clearly left of rightmost 16% interface strip. Restore old vacated road as matching flat cracked salt crust. Keep continuous cool grey-blue flagstone, consistent width, no structure or endpoint marker, no branches. Preserve 16:9 and all other details. No new objects, vegetation or water.

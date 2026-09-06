@@ -6,13 +6,21 @@ readable rather than production-architected.
 
 Before pressing **Play** you choose a **map** and a **difficulty**; together they make a
 LEVEL, and each level keeps its own best star count (★ finish · ★★ lose ≤5 lives ·
-★★★ lose none). Three maps ship — **Winding Forest** (the default), **Twin Falls**
-(short road, open ground, everything reachable: build wide) and **Spiral Arena** (the
-longest road and the least ground, where Fire reaches only three quarters of the route).
-Twin Falls opens at 4 stars and Spiral Arena at 12, so the maps you have not played yet are
-visible as targets rather than hidden. All three are hand-painted 1536x864 worlds whose
-gameplay roads are **traced out of their paintings**, not authored beside them, and every
-one of their properties lives in a single `Game.BOARDS` row.
+★★★ lose none). Six maps ship, and what separates them is COVERAGE — how much of the road
+one tower can watch — rather than decoration:
+
+| map | opens at | the fight |
+|---|---|---|
+| **Winding Forest** | — | the default; a long road and middling coverage |
+| **Twin Falls** | 4 ★ | short road, open ground, everything reachable: build wide |
+| **Glacier Pass** | 8 ★ | a causeway over moving ice; crevasses cut the ground into pockets |
+| **Spiral Arena** | 12 ★ | the longest road and the least ground; Fire reaches three quarters of it |
+| **Ashfall Plain** | 16 ★ | burnt ash under a live volcano; the flows decide where you may stand |
+| **Salt Basin** | 20 ★ | a dry lake floor: the most buildable ground and the shortest road |
+
+A locked map is visible as a target rather than hidden. All six are hand-painted 1536x864
+worlds whose gameplay roads are **traced out of their paintings**, not authored beside them,
+and every one of their properties lives in a single `Game.BOARDS` row.
 
 Enemy speed is scaled per map so a wave crosses any of the three in the same time; what
 differs between them is **coverage** — how much road one tower can watch — which is what

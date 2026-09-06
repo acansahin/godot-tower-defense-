@@ -253,21 +253,32 @@ used to, drawing rings around six pockets, has been removed), but the mechanism 
 `--fill-board` sweep the pads when a board has them (`main.gd` `_buildable_lattice()`), so
 the harnesses measure the spots the player is actually offered.
 
-## There are FOUR boards, and one table decides everything about them
+## There are SIX boards, and one table decides everything about them
 
 `Game.BOARDS` is the whole registry: road control points, smoothing, obstacles, the
 painting, the water mask, the waterfall regions, the open-ground mask, the map-panel
 thumbnail, the display keys, the star gate and the measured road length. **A board is a row in it and nothing else.**
 
-| id | name | road | spots | shape of the fight |
-|---|---|---|---|---|
-| `winding` | Winding Forest | 3199px | 33 | the default; middling coverage |
-| `s` | Twin Falls | **2518px** | 29 | 100% of the road reachable, 4 towers cover it — build wide |
-| `spiral` | Spiral Arena | **4042px** | **24** | least ground, and Fire reaches only **76%** of the road |
-| `glacier` | Glacier Pass | 1685px | 28 | crevasses cut the ice into pockets; 4 towers cover it |
+| id | name | road | spots | play-sim floor | shape of the fight |
+|---|---|---|---|---|---|
+| `winding` | Winding Forest | 3199px | 33 | w32 | the default; middling coverage |
+| `s` | Twin Falls | **2518px** | 29 | w36 | 100% of the road reachable, 4 towers cover it — build wide |
+| `spiral` | Spiral Arena | **4042px** | **24** | w36 | least ground, and Fire reaches only **76%** of the road |
+| `glacier` | Glacier Pass | 1685px | 28 | w36 | crevasses cut the ice into pockets; 4 towers cover it |
+| `ash` | Ashfall Plain | 1743px | 37 | **w43** | burnt ash under a live volcano; the most generous coverage in the roster |
+| `desert` | Salt Basin | **1514px** | **54** | **w31** | a dry lake floor: the most ground and the shortest road |
 
-Those numbers come from `--dump-board --map:<id>` and are the reason the three play
-differently: it is COVERAGE, not decoration. Re-run it after touching any of them.
+Those numbers come from `--dump-board --map:<id>` and `--play-sim --map:<id>`, and they are
+the reason the six play differently: it is COVERAGE, not decoration. Re-run both after
+touching any of them.
+
+**The last two columns disagree, and that is the useful part.** `desert` has the most
+buildable ground of any board — 54 spots against the winding board's 33 — and the floor
+player dies EARLIEST on it, wave 31 against 36 on three of the others. Nothing is wrong with
+the board: `--play-sim` buys board before depth and never sells, so 54 spots is 54 ways to
+spend a run's gold on Lv1 towers. **Spots are not difficulty**, a wide board cannot be
+assumed to be the gentle one, and the unlock ladder is ordered off the played result rather
+than off the count.
 
 Three things about this are load-bearing:
 
@@ -295,10 +306,40 @@ leaving the map. The replacement exits through the BOTTOM edge, and bottom rathe
 because the tower palette covers everything past `PLAY_RIGHT` (1296) — a leak under the panel
 is a leak nobody sees. Both constraints are written into `docs/board-art-prompt.md`.
 
+**The `--fill-board` ceiling no longer clears wave 50, and that is repo-wide rather than a
+property of any one board.** Measured while wiring `ash` and `desert` in, one run each on a
+clean-ish save:
+
+| board | maxed board reaches |
+|---|---|
+| `desert` | **wave 50, WON** |
+| `winding` | wave 49 |
+| `ash` | wave 47 |
+| `glacier` | wave 43 |
+
+So the sentence further down — "a maxed board clearing the last wave is the MINIMUM bar" —
+describes a bar the SHIPPED DEFAULT BOARD misses by one wave, and the glacier by seven. It
+was true when it was written and free placement, the progression gate and three more boards
+have all landed since. **Do not read a single board's `--fill-board` number as a verdict on a
+change**: read it against this table, and remember each run rolls its own `run_seed`, so the
+avatar order and the back half's waves differ run to run — the 43-to-50 spread is partly that
+noise and nobody has separated the two yet. `s` and `spiral` are not in the table because
+they were still measuring; fold them in when someone runs them.
+
 **A level is a board AND a ruleset** (GAME_STRATEGY_V2.md §12.4). `Meta.stars` is keyed
-`"<board>:<ruleset>"` through `Meta.star_key()`, four boards x three rulesets x three stars
-= 36, and `star_gate` opens `s` at 4 stars, `glacier` at 8 and `spiral` at 12. Save version 3 migrates the
-old ruleset-only keys onto `winding`, the only board Phase 1 could be played on.
+`"<board>:<ruleset>"` through `Meta.star_key()`, six boards x three rulesets x three stars
+= 54, and `star_gate` opens `s` at 4 stars, `glacier` at 8, `spiral` at 12, `ash` at 16 and
+`desert` at 20 — all reachable, since the four boards below `ash` are worth 36 between them.
+Save version 3 migrates the old ruleset-only keys onto `winding`, the only board Phase 1
+could be played on.
+
+**The map panel scales its rows to fit, and that is not decoration either.** `map_panel.gd`
+grows the panel with the board count and the screen does not grow with it: at six boards the
+fixed 96px row put the Back button 94px below the bottom edge, which is the How to Play trap
+again — a panel the player cannot leave. `_row_scale()` divides the room left over by the
+rows asked for, and everything inside a row is drawn as a fraction of it, so a seventh board
+needs no constant re-tuned. Below its 0.62 floor the answer is a scrolling list, not a
+smaller font.
 
 `--map:<id>` pins one board for a harness run and is validated now; `--show-maps` opens the
 map panel on the title screen, since which board is selected and what each lock costs live
@@ -543,8 +584,8 @@ since which avatars are down is the very thing it is reporting on.)
 **Measured, not assumed.** Five `--play-sim` runs of the 50-wave standard after the gate all
 WON and all killed four avatars, finishing on **20, 1, 20, 15 and 18 lives** against the one
 pre-gate run's 20 — so the floor player survives, but it can now finish on one life where it
-used to finish untouched. `--fill-board` still wins wave 50, so `FINAL_HP_FACTOR`'s ceiling
-calibration still holds, and `--dump-stats` is byte-identical (the stat tables did not move;
+used to finish untouched. `--fill-board` still won wave 50 at the time, so `FINAL_HP_FACTOR`'s ceiling
+calibration held, and `--dump-stats` is byte-identical (the stat tables did not move;
 only who may reach them did). The leftover gold at the end grew from 143 to 261-1300, which
 is the fifth off the per-tower spending ceiling showing up — small, and the wrong thing to
 close by cutting costs (see the `TIER_COSTS` comment in `balance.gd` for why).

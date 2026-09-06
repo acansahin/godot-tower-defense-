@@ -1,0 +1,132 @@
+[Attach THREE files, in this order:
+   1. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\towers\_source_fire.png
+      ^ buildings that will stand on this map - match their light and their painting style
+   2. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\towers\_source_water.png
+      ^ ditto
+   3. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\board_source.png
+      ^ an existing map in the same game - match its RENDERING STYLE and its CAMERA. Nothing else.]
+
+Paint a game map for a 2D tower defense, seen from directly above.
+
+Image 3 is an existing map in the same game. Match its rendering: the same painterly finish,
+the same level of detail, the same bright even daylight, and THE SAME CAMERA - looked at from
+straight overhead, flat, no horizon, no sky, ground filling the whole frame. Do NOT copy
+anything else from it. Images 1 and 2 are buildings that will be placed on your map; match the
+direction and softness of the light on their stonework.
+
+Aspect ratio 16:9, landscape. No transparency, no border, no vignette, no text, no watermark,
+no UI, no characters, no towers, no buildings.
+
+THE PLACE - this is the whole brief, read it before anything else:
+
+BURNT LAND AT THE FOOT OF AN ERUPTING VOLCANO, seen from straight above. This is WILDERNESS,
+not a settlement. There are NO ruins, NO walls, NO columns, NO paved city, NO houses, NO
+amphitheatre and NO structures of any kind anywhere in the picture. Nothing here was ever
+built by anyone.
+
+A wide plain of settled volcanic ash, scorched and dead, with a volcano at the TOP-LEFT of the
+frame and its lava running out of it across the land.
+
+THE VOLCANO - and it is seen FROM ABOVE, which is the part to get right:
+- The cone fills the TOP-LEFT CORNER of the picture. Because the camera looks straight down
+  you are seeing the mountain from overhead: a broad dark cone spreading out of the corner, its
+  CRATER a rough ring near the top-left with a glowing ORANGE-WHITE throat inside it, and steep
+  radial gullies running down its flanks like the ribs of a fan.
+- Do NOT draw it as a mountain silhouette against a sky. There is NO sky, NO horizon, NO cloud
+  and NO smoke plume rising into the air - none of them exist from directly above. Heat haze
+  and a faint pale glow over the crater are all you get.
+- Its flanks are dark, steep, rough and clearly unwalkable. They are DARKER than the ash plain
+  and read instantly as "not flat ground".
+
+WHAT THE PLAIN LOOKS LIKE:
+- The main surface is settled volcanic ash over burnt earth: PALE WARM GREY, dry, dusty,
+  sunlit and clearly BRIGHT. This is the ground the player builds on and most of the picture
+  is made of it. It is NOT black, NOT charred dark, NOT a night scene. The land is dead, but
+  it is dead in broad daylight.
+- It is NOT featureless. Long soft wind drifts and faint ripples curve across it, together
+  with dark SOOT STAINING, pale streaks of finer ash, and thin CRACKS in the crust with a dull
+  ember glow deep inside them. All of this is painted FLAT INTO the ground: it is texture, not
+  objects, and nothing in it stands up or casts a shadow.
+- Lit EVENLY corner to corner. NO smoke drifting over the ground, NO ash cloud shadows, NO
+  dark corners, NO vignette, NO orange rim-light washing across the field.
+
+WHAT BREAKS THE PLAIN UP - these are the map's real features, all of them NATURAL:
+- COOLED LAVA FLOWS: broad lobes and tongues of solidified black lava, their surface a jagged
+  rubble of broken clinker, raised above the ash and casting real shadow along their edges.
+  Several of them, spreading downhill AWAY from the volcano, some at the edges and two or three
+  reaching into the middle. They are the map's main obstacle and they are unmistakably BLACK
+  against the pale ash.
+- BURNT FOREST: stands of dead trees, bare charred trunks with no leaves, snapped and leaning,
+  their shadows lying across the ash. Groups of them at the edges and in the corners. Nothing
+  green anywhere in the picture - no leaves, no grass, no moss, no new growth.
+- FISSURE FIELDS: groups of long parallel splits in the ground, dark and shadowed inside, with
+  a few venting pale steam. Two or three groups.
+- SCATTERED VOLCANIC BOMBS: a small number of big dark boulders thrown out by the eruption,
+  each with a shallow impact scar around it. Keep them OUT of the open areas described below.
+
+THE LAVA - the map's one strongly coloured feature, and it obeys one rule:
+- TWO OR THREE narrow channels of molten ORANGE lava run out of the crater: intense glowing
+  orange with black crusted banks, brightest at their centres, cooling to dark as they go.
+- EVERY PART OF THE LAVA STAYS IN THE UPPER-LEFT QUARTER OF THE PICTURE AND ALONG THE TOP EDGE,
+  which is ABOVE AND LEFT OF THE ROAD'S ENTRY POINT. One channel may leave the frame through
+  the LEFT edge high up, above the road's entry; another may run east along the TOP edge and
+  leave through the right. NO lava anywhere below or right of the road. It never touches the
+  road, never crosses it, never runs through the open ash beside it, and gets no bridge.
+- There is NO BLUE WATER anywhere on this map.
+
+THE OPEN GROUND - what the game needs:
+- Between and around the flows, the ash must leave WIDE, CLEAN, OPEN AREAS of plain drifted
+  surface - generous connected pockets, each big enough to hold several buildings, with nothing
+  standing in them at all.
+- Every stretch of the road must have such an open pocket beside it within a short distance. A
+  stretch of road walled in by lava flows on both sides is a stretch nobody can defend.
+- Inside those pockets: no boulders, no burnt trunks, no clinker, no rubble, no debris. Flat
+  ash texture only. A single picturesque rock in the middle of an otherwise open pocket ruins
+  that pocket.
+
+THE ROAD:
+- An old track worn across the ash down to the bare dark rock beneath it: one continuous ribbon
+  of DARK, NEARLY BLACK VOLCANIC STONE, swept clear of ash by use. It must read as the darkest
+  thing on the open plain.
+- It is NOT pale, NOT grey-white, NOT ash-covered, NOT cracked apart, and it never blends into
+  the ash. It is a natural worn track, NOT paved, NOT flagstoned, NOT a built road - no kerbs,
+  no slabs, no masonry, no square corners.
+- Its shape is a long, natural, WINDING route with broad organic bends: it enters at the LEFT
+  edge about ONE QUARTER of the image height down, sweeps RIGHT across the upper middle of the
+  plain, hooks back down and LEFT across the centre, then turns down and right and EXITS
+  THROUGH THE BOTTOM EDGE at about 70% of the image width. Three broad hooks, no hairpins, no
+  zigzag, no straight lines and no right angles anywhere.
+- No part of the road may go above its entry height. The road is visibly CUT OFF by the bottom
+  frame and continues beyond it: NO gatehouse, NO gate, NO arch, NO terminus, NO marker, NO
+  structure of any kind at either end.
+- It THREADS BETWEEN the cooled lava flows - the land dictates its route, so it bends around
+  them rather than crossing them.
+- Constant width for its whole length, about 5% of the image width, edge to edge. No widening,
+  no fork, no side path, no bridge, no steps.
+- It never crosses itself, and nothing overlaps or hides any part of it.
+
+THE FRAME:
+- The right 16% of the image and the top 6% are covered by interface in the game. Fill those
+  strips with lava flows, burnt forest, fissures or the volcano's flank, and put nothing there
+  the player needs to see. Keep the road out of both.
+
+LIGHT:
+- Bright, flat, even daylight from the upper left. Lit EVENLY corner to corner: no cloud
+  shadows, no dark corners, no vignette, no dusk, no god rays, no fire glow washing over the
+  plain. Err bright - a dark moody wasteland makes every building placed on it look pasted on.
+
+
+Use case: stylized-concept. One new finished 16:9 map, references only for painterly rendering and light. Absolutely no masonry, paved slabs, ruins, buildings, water, living vegetation. The dark route is SMOOTH NATURAL EXPOSED VOLCANIC BEDROCK, not cobblestones. Wide constant 5%-image-width track: enter left at y25%, sweep broadly right across upper-middle, hook down-left across middle, then turn down-right and exit bottom x70%; no part above entry. Keep massive open bright ash pockets next to every stretch. Overhead volcano crater confined top-left above entrance; all molten orange channels ONLY upper-left quarter or along top edge, no molten channels elsewhere or touching track. Dull hairline ember cracks in ash remain subtle flat texture. Dark cooled lava lobes are distinct raised obstacles; no debris in open pockets. No horizon or mountain silhouette.
+
+REFINEMENT
+
+Correct this overhead volcanic wilderness game map. Maintain same painterly detail and natural volcanic theme, but make these required fixes:
+1. Open ash ground must be MUCH BRIGHTER pale warm grey, almost light chalk-grey in bright even midday sun. Current muddy dark brown is wrong. Preserve faint flat wind drifts and soot texture but lighten every buildable pocket uniformly. No vignette.
+2. Shrink volcano into TOP LEFT CORNER, entirely above y=22%. Its overhead crater, radial gullies and glowing throat remain recognizable. All molten orange channels stay ABOVE y=22% or in topmost 6% strip; remove all orange from left lower edge, right edge and lower fissures. Those lower fissures become dark unlit cracks. Lava never meets road.
+3. Erase existing track then redraw a clean NEAR BLACK natural smooth bedrock track, no paving or slabs, constant width 5% of whole image. Left entrance y=27%, broadly sweeps right to around (65%,38%), then hooks down-left through (40%,60%), then sweeps down-right and exits bottom at x=70%. Broad rounded organic turns, no hairpin, no part above entry, no branches or obstacles on track.
+4. Wide clean pale ash shoulders and connected empty pockets on BOTH sides all along track. Move central cooled lava rubble away from those shoulders; keep cooled BLACK lava lobes in a few middle zones and at rim. Keep dead burnt trees, boulders, fissure fields only outside empty building pockets. Rightmost 16% and top6% contain obstacles but no track.
+No structures, ruins, masonry, blue water, greenery, sky, smoke plume or horizon. Preserve 16:9.
+
+ENTRANCE REFINEMENT
+
+Change ONLY the first third of the black natural track in this image. Its left-edge entrance is currently at 42% height, far too low. ERASE that old entrance, replacing with pale matching ash. Draw NEW entrance at left edge exactly 26% height (around 245 pixels from top in this 941px-high image). Make new entrance run gently DOWN-RIGHT across upper-middle to join existing upper bend near image center. No portion of track goes above its entrance. Shrink/erase the very bottom tip of volcano flank if needed to leave clear pale ash separating new road from volcano; do not touch lava or crater. Preserve remaining track, bright ash, obstacles, style, lighting and bottom exit. Same natural unpaved dark rock, same width. No second entrance, no branch, no buildings. Keep road clear and unobscured.
