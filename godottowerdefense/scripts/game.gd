@@ -206,6 +206,34 @@ const S_PATH: Array = [
 
 ## Painted pools and waterfalls on the S board. Rocks and trees remain cosmetic, matching
 ## the spiral profile; only unmistakable water rejects tower placement.
+## Control points for the glacier board (`assets/art/maps/great_glacier_v2.png`), the first
+## road in this project that was NOT read off the painting by hand:
+## `python tools/trace_ribbon.py <board> --road=75,82,88 --tol=50 --name=GLACIER` marched it
+## out of the art and printed this block. The road is dark stone on white ice, which is the
+## cleanest separation any board has offered, and the tracer's preview put the line down the
+## middle of it for its whole length.
+##
+## v2 REPLACED v1 over three faults found by playing it. v1 met the left edge at y=61, and
+## the HUD bar covers the world's top 48px while a creep is drawn `radius * 2.6` tall above
+## its feet — so a boss (radius 38, so 99px) spawned entirely behind the bar and only its
+## feet showed. The entry is at y=219 now, which clears it with room. v1 also STOPPED at a
+## painted gatehouse two thirds across rather than leaving the map; v2 runs off the BOTTOM
+## edge at x=1156, chosen over the right edge because the tower palette covers everything
+## past PLAY_RIGHT (1296) and a leak under the panel is a leak nobody sees.
+const GLACIER_PATH: Array = [
+	Vector2(2, 219), Vector2(39, 219), Vector2(75, 222), Vector2(112, 215),
+	Vector2(167, 219), Vector2(208, 241), Vector2(244, 248), Vector2(274, 274),
+	Vector2(307, 307), Vector2(358, 318), Vector2(402, 314), Vector2(450, 296),
+	Vector2(491, 281), Vector2(516, 252), Vector2(549, 263), Vector2(579, 241),
+	Vector2(634, 241), Vector2(667, 259), Vector2(704, 277), Vector2(715, 321),
+	Vector2(744, 340), Vector2(759, 373), Vector2(788, 398), Vector2(832, 406),
+	Vector2(880, 406), Vector2(932, 406), Vector2(968, 406), Vector2(1020, 421),
+	Vector2(1038, 450), Vector2(1064, 490), Vector2(1053, 523), Vector2(1038, 556),
+	Vector2(1012, 586), Vector2(1012, 626), Vector2(1034, 670), Vector2(1082, 718),
+	Vector2(1093, 751), Vector2(1119, 780), Vector2(1156, 799), Vector2(1163, 843),
+	Vector2(1156, 850),
+]
+
 const S_OBSTACLES: Array = [
 	[Vector2(133, 110), 55.0], [Vector2(74, 303), 55.0],
 	[Vector2(234, 569), 108.0], [Vector2(105, 708), 72.0],
@@ -436,6 +464,18 @@ const BOARDS := {
 		"waterfall_b": Vector4(0.07, 0.72, 0.06, 0.20),
 		"name_key": "MAP_S", "desc_key": "MAP_S_DESC",
 		"star_gate": 4, "road_len": 2518.0,
+	},
+	"glacier": {
+		"path": GLACIER_PATH, "subdiv": 2, "obstacles": [], "build_zones": [],
+		"art": "res://assets/art/maps/great_glacier_v2.png",
+		"water": "res://assets/art/maps/great_glacier_v2_water.png",
+		"build_mask": "res://assets/art/maps/great_glacier_v2_build.png",
+		"thumb": "res://assets/art/maps/glacier_thumb.png",
+		# The meltwater does not fall anywhere, so neither region is used.
+		"waterfall_a": Vector4.ZERO,
+		"waterfall_b": Vector4.ZERO,
+		"name_key": "MAP_GLACIER", "desc_key": "MAP_GLACIER_DESC",
+		"star_gate": 8, "road_len": 1681.0,
 	},
 	"spiral": {
 		"path": PATH, "subdiv": 2, "obstacles": OBSTACLES, "build_zones": [],

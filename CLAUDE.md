@@ -248,7 +248,7 @@ used to, drawing rings around six pockets, has been removed), but the mechanism 
 `--fill-board` sweep the pads when a board has them (`main.gd` `_buildable_lattice()`), so
 the harnesses measure the spots the player is actually offered.
 
-## There are THREE boards, and one table decides everything about them
+## There are FOUR boards, and one table decides everything about them
 
 `Game.BOARDS` is the whole registry: road control points, smoothing, obstacles, the
 painting, the water mask, the waterfall regions, the open-ground mask, the map-panel
@@ -264,6 +264,7 @@ Those numbers come from `--dump-board --map:<id>` and are the reason the three p
 differently: it is COVERAGE, not decoration. Re-run it after touching any of them.
 
 Three things about this are load-bearing:
+| `glacier` | Glacier Pass | 1685px | 28 | crevasses cut the ice into pockets; 4 towers cover it |
 
 - **The table replaced three parallel `match` statements** — one here, two in `map.gd` (the
   water mask and the painting) — and both of `map.gd`'s had a `_` fallback to the spiral. So
@@ -281,9 +282,18 @@ Three things about this are load-bearing:
   instead; **never reintroduce a bounce**.
 
 **A level is a board AND a ruleset** (GAME_STRATEGY_V2.md §12.4). `Meta.stars` is keyed
-`"<board>:<ruleset>"` through `Meta.star_key()`, three boards x three rulesets x three stars
-= 27, and `star_gate` opens `s` at 4 stars and `spiral` at 12. Save version 3 migrates the
+`"<board>:<ruleset>"` through `Meta.star_key()`, four boards x three rulesets x three stars
+= 36, and `star_gate` opens `s` at 4 stars, `glacier` at 8 and `spiral` at 12. Save version 3 migrates the
 old ruleset-only keys onto `winding`, the only board Phase 1 could be played on.
+
+**Where a road may enter and leave is a rule, not a taste.** The glacier's first version was
+rejected on play and both faults are measurable. Its road met the left edge at y=61 while the
+HUD covers the world's top 48px and a creep is drawn `radius * 2.6` tall ABOVE its feet — so
+a boss (radius 38 → 99px) spawned entirely behind the bar and only its feet showed. **A spawn
+wants `y > 150`**. Its road also ENDED at a painted gatehouse two thirds across instead of
+leaving the map. The replacement exits through the BOTTOM edge, and bottom rather than right
+because the tower palette covers everything past `PLAY_RIGHT` (1296) — a leak under the panel
+is a leak nobody sees. Both constraints are written into `docs/board-art-prompt.md`.
 
 `--map:<id>` pins one board for a harness run and is validated now; `--show-maps` opens the
 map panel on the title screen, since which board is selected and what each lock costs live

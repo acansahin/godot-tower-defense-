@@ -1,0 +1,94 @@
+[Attach THREE files, in this order:
+   1. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\towers\_source_fire.png
+      ^ buildings that will stand on this map - match their light and their painting style
+   2. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\towers\_source_water.png
+      ^ ditto
+   3. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\board_source.png
+      ^ an existing map in the same game - match its RENDERING STYLE and its CAMERA. Nothing else.]
+
+Paint a game map for a 2D tower defense, seen from directly above.
+
+Image 3 is an existing map in the same game. Match its rendering: the same painterly finish,
+the same level of detail, the same bright even daylight, and THE SAME CAMERA - looked at
+from straight overhead, flat, no horizon, no sky, ground filling the whole frame. Do NOT
+copy anything else from it. Images 1 and 2 are buildings that will be placed on your map;
+match the direction and softness of the light on their stonework.
+
+Aspect ratio 16:9, landscape. No transparency, no border, no vignette, no text, no
+watermark, no UI, no characters, no towers, no buildings.
+
+THE PLACE - this is the whole brief, read it before anything else:
+
+The surface of a GREAT GLACIER, seen from above. Not a snowy field. Not a forest in winter.
+A slow river of ancient ice, hundreds of metres thick, filling the frame from edge to edge.
+
+THERE ARE NO TREES ON THIS MAP. No conifers, no spruce, no pines, no bushes, no grass, no
+soil, no meadow, not one. Anything green is wrong. If a tree appears anywhere in the picture
+the map has failed.
+
+WHAT THE ICE LOOKS LIKE:
+- The main surface is packed snow over ice: bright, clean, sunlit, near-white with the
+  faintest cool blue in its hollows. This is the ground the player builds on and most of the
+  picture is made of it.
+- It is NOT featureless. Long, gentle FLOW LINES curve across it - pale bands showing which
+  way the ice is moving, like the grain in a slow river - together with soft drift ripples
+  and faint scour marks. All of this is painted FLAT INTO the surface: it is texture, not
+  objects, and nothing in it stands up or casts a shadow.
+- Keep the ICE SURFACE ITSELF pale, near-white. Save saturated blue for the meltwater and
+  the crevasse depths only.
+
+WHAT BREAKS THE ICE UP - these are the map's real features:
+- CREVASSE FIELDS: groups of long parallel splits in the ice, following the flow lines,
+  their depths dark and shadowed. Several across the map, some at the edges and two or three
+  reaching into the middle. Paint their insides DARK and desaturated - deep blue-black
+  shadow, NOT glowing cyan.
+- SERACS: zones where the ice has buckled into a chaos of standing blocks and towers of ice,
+  casting real shadows. Two or three such zones, at the edges and in the corners.
+- MORAINE: long stripes of dark grey-brown rock rubble carried along on the ice surface,
+  running with the flow. They are dark and clearly distinct from the white ice. Keep them
+  NARROW - a couple of stripes, not a field of debris.
+- MELTWATER: intense TURQUOISE pools and one narrow meltwater channel cutting down into the
+  ice. This is the only strongly coloured thing on the map and it must be unmistakably
+  BLUE - much bluer than the ice around it.
+- ICE WALLS at the outer rim of the picture: where the glacier ends, deep blue-green ice
+  cliffs showing how thick the ice is, with dark bare rock beyond them.
+
+THE OPEN GROUND - what the game needs:
+- Between and around those features, the ice must leave WIDE, CLEAN, OPEN AREAS of plain
+  snow surface - generous connected pockets, each big enough to hold several buildings, with
+  nothing standing in them at all.
+- Every stretch of the road must have such an open pocket beside it within a short distance.
+  A stretch of road walled in by crevasses on both sides is a stretch nobody can defend.
+- Inside those pockets: no seracs, no rubble, no ice blocks, no boulders, no debris. Flat
+  surface texture only.
+
+THE ROAD:
+- An ancient PAVED CAUSEWAY laid across the glacier, kept swept clear - one continuous ribbon
+  of DARK, NEARLY BLACK stone slabs. It must read as the darkest thing on the open ice.
+- It is NOT pale, NOT grey-white, NOT snow-covered, NOT an ice track, and it never blends
+  into the snow.
+- It enters at the LEFT edge near the TOP, runs down and to the right across the whole map in
+  a long descending line with two broad hooks in it, and ends at a small dark stone gatehouse
+  low in the frame, about two thirds of the way across.
+- It THREADS BETWEEN the crevasse fields - the ice dictates its route, so it bends around
+  them rather than crossing them.
+- Constant width for its whole length, about 5% of the image width, edge to edge. No
+  widening, no plaza, no fork, no side path, no bridge, no gate across it.
+- It never crosses itself, and nothing overlaps or hides any part of it.
+
+THE FRAME:
+- The right 16% of the image and the top 6% are covered by interface in the game. Fill those
+  strips with seracs, crevasse fields, moraine or the ice walls, and put nothing there the
+  player needs to see. Keep the road and the gatehouse out of both.
+
+LIGHT:
+- Bright, flat, even winter daylight from the upper left. Lit EVENLY corner to corner: no
+  cloud shadows, no dark corners, no vignette, no blue dusk, no aurora, no god rays. Err
+  bright - a moody blue glacier makes every building placed on it look pasted on.
+
+
+Use case: stylized-concept. One finished game map. All three images are references only. The small dark endpoint gatehouse explicitly requested is the sole exception to no buildings. No reference towers on the map. Follow THIS brief's directly overhead camera. No trees or vegetation anywhere. Preserve generous connected near-white buildable pockets beside every road stretch. Road has two broad hooks around the crevasse fields and constant width about 5% of image width. Do not imitate either earlier meadow or winter forest maps.
+
+REFINEMENT PROMPT
+
+Edit this glacier map, changing only the causeway route/width and its endpoint position, repainting vacated road as matching pale flat glacier ice. Preserve the vegetation-free glacier, bright daylight, painterly rendering, dark crevasses, edge seracs, narrow moraines and turquoise meltwater. Road must be a constant 5% of total image width (about 84 pixels in this 1672-wide image), dark nearly black stone slabs, seen overhead. Entrance at left edge at 15% image height so its entire width clears the top 6% interface strip. Route descends rightward with exactly TWO broad lazy hooks around the existing crevasse fields, not many small wiggles; no crossing crevasses or water, no bridges. Keep generous empty flat pale building pockets alongside every stretch. End at the same small dark gatehouse relocated to x=67%, y=84%. Keep road and gatehouse outside rightmost 16% and top 6%. No other buildings, trees, vegetation, text or UI. Preserve 16:9.
