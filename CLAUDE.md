@@ -316,6 +316,7 @@ clean-ish save:
 | `winding` | wave 49 |
 | `ash` | wave 47 |
 | `s` | wave 47 |
+| `spiral` | wave 46 |
 | `glacier` | wave 43 |
 
 So the sentence further down — "a maxed board clearing the last wave is the MINIMUM bar" —
@@ -324,8 +325,8 @@ was true when it was written and free placement, the progression gate and three 
 have all landed since. **Do not read a single board's `--fill-board` number as a verdict on a
 change**: read it against this table, and remember each run rolls its own `run_seed`, so the
 avatar order and the back half's waves differ run to run — the 43-to-50 spread is partly that
-noise and nobody has separated the two yet. `spiral` is not in the table because it was
-still measuring; fold it in when someone runs it.
+noise and nobody has separated the two yet. All six are measured now, one run each, and
+five of them miss the bar: the spread is 43 to 50 and only the newest board clears it.
 
 Note also that `--fill-board` is NOT a sandbox run: it writes to `Meta` like any other, so a
 measuring pass leaves stars, a best wave and Essence behind in `user://save.json`. The five
