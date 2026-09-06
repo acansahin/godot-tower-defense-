@@ -1069,75 +1069,689 @@ Three faults, all in the road, none visible in any number the tools report:
 All three are now constraints in the template above, and the re-generation kept the glacier
 intact — same landform vocabulary, same style, still no trees.
 
-### Pompeii — volcanic ash
+### Boards five and six: the volcano and the desert, as landforms
+
+The two briefs that used to sit here were three swapped blocks each, in the form the
+snowfield came out of -- and the snowfield is the reason that form is gone. Identical
+structure plus a new palette is a RECOLOUR, and a recolour is not a map. So both are full
+briefs now, each built on the glacier v2 template that actually worked: straight-down camera,
+a landform with its own vocabulary, entry a quarter of the way down the LEFT edge, exit
+through the BOTTOM edge, and no gatehouse at either end.
+
+Each is kept beside the art it is for, and that copy is the one to paste:
+`assets/art/maps/ashfall_plain_v1.prompt.txt` and `assets/art/maps/salt_basin_v1.prompt.txt`.
+
+**Each fills a pole the roster does not have.** The four shipped boards sit between 24 and 33
+build spots and between 62% and 78% open band; nothing is at either extreme.
+
+| | landform | roster pole | reject the image if |
+|---|---|---|---|
+| **Ashfall Plain** (`ash`) | burnt ground at the foot of an erupting volcano | pockets between the lava flows -- measure it, do not assume it | anything built appears (ruins, walls, columns); the ground is dark rather than pale ash; lava reaches below or right of the road; the volcano is a silhouette against a sky |
+| **Salt Basin** (`desert`) | the floor of an evaporated salt lake, ringed by mesas | **breadth**: the open, high-capacity board -- 60+ spots, band >= 80% | the band measures under 75%; anything stands loose in the middle of the flats; it reads as dunes or a canyon |
+
+Two things they do NOT change: the camera is asked for straight down and not fought (every
+board this repo has measured comes back 1.000), and the road's entry height, bottom exit and
+missing gatehouse are the three faults playing the glacier found that no tool reported.
+
+#### Ashfall Plain -- burnt land under a volcano
+
+**This board was first briefed as Pompeii, a Roman city buried to its rooftops, and that
+brief was rejected on sight.** `assets/art/maps/roman_ash_city_v1.png` is what it produced
+and it is worth keeping as the counter-example. Three things went wrong and all three were
+the brief's, not the generator's:
+
+1. **A ruined city is a set of BUILDINGS, and this map wanted a place.** The picture came
+   back as identical stamped rectangles of masonry scattered over a flat pan -- archaeology,
+   not terrain. Every other board in the roster is a landform (a glacier, a basin, a forest);
+   a settlement is the one thing among them that reads as scenery rather than ground.
+2. **"Square corners" plus "parallel legs at least 14% apart" is a recipe for a MAZE.** The
+   two rules were meant to produce a street grid whose blocks a tower could cover from
+   between. Together they produced evenly spaced right-angled runs with nothing to bend them
+   -- a puzzle-book maze laid on ash. Neither rule survives.
+3. **The volcano was forbidden, and that was wrong.** The ban came from "the camera looks
+   straight down, so there is no horizon to put a cone on", which is true and irrelevant: a
+   volcano seen FROM ABOVE is a crater ring with a glowing throat and radial gullies spreading
+   out of a corner, and it reads instantly. What cannot be drawn is the SILHOUETTE and the
+   plume, so those are what the brief forbids now.
+
+What replaces it is wilderness: an ash plain at the foot of an erupting volcano, with the
+cone in the top-left corner seen from overhead, cooled black lava lobes as the obstacles,
+stands of burnt trunks, fissure fields, and molten channels running out of the crater.
+
+**The ground stays PALE, and that is not a stylistic retreat from "burnt".** Two measurements
+forbid a dark board: `art_match.py` wants open-ground luminance >= 97, below which the towers
+read as stickers pasted on the board, and a near-black track on scorched dark earth is the
+"grey road on grey ash" this file already warns is untraceable. So the burnt reading is
+carried by what stands ON the plain -- black clinker flows, charred trunks, soot staining,
+ember glow down in the crust cracks -- while the plain itself is bright ash in daylight.
+
+**The lava has one rule, and it is geometric rather than artistic.** It must all stay above
+and left of the road's entry, in the upper-left quarter and along the top edge. Molten rock
+is impassable and gets no bridge, so a channel that wanders across the route makes the board
+unplayable; confining it to the quarter the road is forbidden to enter (the road may never go
+above its own entry height) is what makes "it never crosses the road" checkable rather than
+hopeful.
 
 ```text
-THE PLACE:
-A wide, open plain of settled volcanic ash at the foot of a smoking volcano. Mostly flat,
-pale grey ash field. Black basalt outcrops, cooled lava ridges and burnt dead trees frame it
-around the EDGES of the picture only. The volcano itself sits far off at the TOP EDGE,
-drawn small and low, with a thin plume - it must not dominate the picture or cast anything
-across the field.
+[Attach THREE files, in this order:
+   1. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\towers\_source_fire.png
+      ^ buildings that will stand on this map - match their light and their painting style
+   2. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\towers\_source_water.png
+      ^ ditto
+   3. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\board_source.png
+      ^ an existing map in the same game - match its RENDERING STYLE and its CAMERA. Nothing else.]
 
-WHAT THE GROUND LOOKS LIKE - read this twice, a program measures it:
-- Flat, open, unbroken ASH. PALE WARM GREY, dry, dusty, evenly lit and clearly BRIGHT - this
-  is a sunlit ash plain, not a night scene and not a burnt ruin.
-- Lit EVENLY corner to corner. NO ash clouds overhead, NO smoke drifting across the ground,
-  NO dark corners, NO vignette, NO orange rim-light washing over the field.
-- Its texture is CALM: soft drifts and faint wind ripples in the ash. No rubble, no scattered
-  rocks, no cracks, no embers, no bones, no ruins lying in it.
+Paint a game map for a 2D tower defense, seen from directly above.
+
+Image 3 is an existing map in the same game. Match its rendering: the same painterly finish,
+the same level of detail, the same bright even daylight, and THE SAME CAMERA - looked at from
+straight overhead, flat, no horizon, no sky, ground filling the whole frame. Do NOT copy
+anything else from it. Images 1 and 2 are buildings that will be placed on your map; match the
+direction and softness of the light on their stonework.
+
+Aspect ratio 16:9, landscape. No transparency, no border, no vignette, no text, no watermark,
+no UI, no characters, no towers, no buildings.
+
+THE PLACE - this is the whole brief, read it before anything else:
+
+BURNT LAND AT THE FOOT OF AN ERUPTING VOLCANO, seen from straight above. This is WILDERNESS,
+not a settlement. There are NO ruins, NO walls, NO columns, NO paved city, NO houses, NO
+amphitheatre and NO structures of any kind anywhere in the picture. Nothing here was ever
+built by anyone.
+
+A wide plain of settled volcanic ash, scorched and dead, with a volcano at the TOP-LEFT of the
+frame and its lava running out of it across the land.
+
+THE VOLCANO - and it is seen FROM ABOVE, which is the part to get right:
+- The cone fills the TOP-LEFT CORNER of the picture. Because the camera looks straight down
+  you are seeing the mountain from overhead: a broad dark cone spreading out of the corner, its
+  CRATER a rough ring near the top-left with a glowing ORANGE-WHITE throat inside it, and steep
+  radial gullies running down its flanks like the ribs of a fan.
+- Do NOT draw it as a mountain silhouette against a sky. There is NO sky, NO horizon, NO cloud
+  and NO smoke plume rising into the air - none of them exist from directly above. Heat haze
+  and a faint pale glow over the crater are all you get.
+- Its flanks are dark, steep, rough and clearly unwalkable. They are DARKER than the ash plain
+  and read instantly as "not flat ground".
+
+WHAT THE PLAIN LOOKS LIKE:
+- The main surface is settled volcanic ash over burnt earth: PALE WARM GREY, dry, dusty,
+  sunlit and clearly BRIGHT. This is the ground the player builds on and most of the picture
+  is made of it. It is NOT black, NOT charred dark, NOT a night scene. The land is dead, but
+  it is dead in broad daylight.
+- It is NOT featureless. Long soft wind drifts and faint ripples curve across it, together
+  with dark SOOT STAINING, pale streaks of finer ash, and thin CRACKS in the crust with a dull
+  ember glow deep inside them. All of this is painted FLAT INTO the ground: it is texture, not
+  objects, and nothing in it stands up or casts a shadow.
+- Lit EVENLY corner to corner. NO smoke drifting over the ground, NO ash cloud shadows, NO
+  dark corners, NO vignette, NO orange rim-light washing across the field.
+
+WHAT BREAKS THE PLAIN UP - these are the map's real features, all of them NATURAL:
+- COOLED LAVA FLOWS: broad lobes and tongues of solidified black lava, their surface a jagged
+  rubble of broken clinker, raised above the ash and casting real shadow along their edges.
+  Several of them, spreading downhill AWAY from the volcano, some at the edges and two or three
+  reaching into the middle. They are the map's main obstacle and they are unmistakably BLACK
+  against the pale ash.
+- BURNT FOREST: stands of dead trees, bare charred trunks with no leaves, snapped and leaning,
+  their shadows lying across the ash. Groups of them at the edges and in the corners. Nothing
+  green anywhere in the picture - no leaves, no grass, no moss, no new growth.
+- FISSURE FIELDS: groups of long parallel splits in the ground, dark and shadowed inside, with
+  a few venting pale steam. Two or three groups.
+- SCATTERED VOLCANIC BOMBS: a small number of big dark boulders thrown out by the eruption,
+  each with a shallow impact scar around it. Keep them OUT of the open areas described below.
+
+THE LAVA - the map's one strongly coloured feature, and it obeys one rule:
+- TWO OR THREE narrow channels of molten ORANGE lava run out of the crater: intense glowing
+  orange with black crusted banks, brightest at their centres, cooling to dark as they go.
+- EVERY PART OF THE LAVA STAYS IN THE UPPER-LEFT QUARTER OF THE PICTURE AND ALONG THE TOP EDGE,
+  which is ABOVE AND LEFT OF THE ROAD'S ENTRY POINT. One channel may leave the frame through
+  the LEFT edge high up, above the road's entry; another may run east along the TOP edge and
+  leave through the right. NO lava anywhere below or right of the road. It never touches the
+  road, never crosses it, never runs through the open ash beside it, and gets no bridge.
+- There is NO BLUE WATER anywhere on this map.
+
+THE OPEN GROUND - what the game needs:
+- Between and around the flows, the ash must leave WIDE, CLEAN, OPEN AREAS of plain drifted
+  surface - generous connected pockets, each big enough to hold several buildings, with nothing
+  standing in them at all.
+- Every stretch of the road must have such an open pocket beside it within a short distance. A
+  stretch of road walled in by lava flows on both sides is a stretch nobody can defend.
+- Inside those pockets: no boulders, no burnt trunks, no clinker, no rubble, no debris. Flat
+  ash texture only. A single picturesque rock in the middle of an otherwise open pocket ruins
+  that pocket.
 
 THE ROAD:
-- DARK BASALT SLABS, near-black polished stone, the way a Roman road is paved. It must read
-  as clearly DARKER than the pale ash around it and never the same value as the ash.
-- No ash drifted over it, no cracks splitting it, no lava crossing it.
+- An old track worn across the ash down to the bare dark rock beneath it: one continuous ribbon
+  of DARK, NEARLY BLACK VOLCANIC STONE, swept clear of ash by use. It must read as the darkest
+  thing on the open plain.
+- It is NOT pale, NOT grey-white, NOT ash-covered, NOT cracked apart, and it never blends into
+  the ash. It is a natural worn track, NOT paved, NOT flagstoned, NOT a built road - no kerbs,
+  no slabs, no masonry, no square corners.
+- Its shape is a long, natural, WINDING route with broad organic bends: it enters at the LEFT
+  edge about ONE QUARTER of the image height down, sweeps RIGHT across the upper middle of the
+  plain, hooks back down and LEFT across the centre, then turns down and right and EXITS
+  THROUGH THE BOTTOM EDGE at about 70% of the image width. Three broad hooks, no hairpins, no
+  zigzag, no straight lines and no right angles anywhere.
+- No part of the road may go above its entry height. The road is visibly CUT OFF by the bottom
+  frame and continues beyond it: NO gatehouse, NO gate, NO arch, NO terminus, NO marker, NO
+  structure of any kind at either end.
+- It THREADS BETWEEN the cooled lava flows - the land dictates its route, so it bends around
+  them rather than crossing them.
+- Constant width for its whole length, about 5% of the image width, edge to edge. No widening,
+  no fork, no side path, no bridge, no steps.
+- It never crosses itself, and nothing overlaps or hides any part of it.
 
-THE ROCKS AND DEAD TREES - at the edges, not in the field:
-- Black basalt outcrops, cooled lava ridges and bare scorched tree trunks, all reading much
-  DARKER than the ash plain. They mass at the outer rim of the picture.
+THE FRAME:
+- The right 16% of the image and the top 6% are covered by interface in the game. Fill those
+  strips with lava flows, burnt forest, fissures or the volcano's flank, and put nothing there
+  the player needs to see. Keep the road out of both.
 
-LAVA AND WATER:
-- One or two narrow channels of glowing ORANGE lava may run at the EDGES of the picture. They
-  must not touch the road or the open band beside it, and get no bridge.
-- No blue water anywhere on this map.
+LIGHT:
+- Bright, flat, even daylight from the upper left. Lit EVENLY corner to corner: no cloud
+  shadows, no dark corners, no vignette, no dusk, no god rays, no fire glow washing over the
+  plain. Err bright - a dark moody wasteland makes every building placed on it look pasted on.
 ```
 
-Start from `--ground=150,143,135 --tol=55`. Keep it tight: basalt at (45, 40, 38) sits about
-180 away and is safely rejected, but a wide tolerance would start admitting the darker ash
-against the outcrops. The lava is rejected automatically — bright orange is nowhere near the
-grey — so it blocks building without any extra rule.
+**Measuring it.** Unchanged from the city version -- the palette did not move, only what is
+standing on it. Ash is a grey, so the default `(g - b) > 35` ground test finds nothing at all
+and reports 0%; the road detector's "pale and not green" would call most of the plain road.
+Both have to be declared:
 
-### Desert
+```
+python tools/art_match.py <b> --ground=150,143,135 --tol=55 --road=45,42,40 --roadtol=42
+python tools/build_mask.py <b> --ground=150,143,135 --tol=55 --water=225,110,35 --watertol=80
+python tools/water_mask.py <b> <b>_water.png --water=225,110,35 --watertol=55
+python tools/trace_ribbon.py <b> --road=45,42,40 --tol=42 --name=ASHFALL --preview=check.png
+```
+
+Eyedrop all three colours off the finished painting first; the numbers above are estimates.
+Keep the ground tolerance TIGHT: the cooled flows at (45, 40, 38) sit about 180 away and are
+safely rejected, but a wide tolerance starts admitting the darker ash banked against them.
+Watch the **band** figure especially on this one: black lava lobes plus burnt stands plus the
+volcano's flank is a lot of refused ground, and the plain has to stay open in spite of them.
+
+**The lava is this board's water, and that is deliberate.** `water_mask.py` and
+`build_mask.py` both take a declared `--water` colour, so handing them the lava's orange does
+two useful things at once: the channels stop being buildable, and `shaders/water_flow.gdshader`
+displaces them, so the lava CREEPS. The shader's only colour of its own is a blue-cyan glint
+at 0.018 strength on flat water, which is invisible against orange -- everything else it does
+is a UV offset of the painting. The board therefore ships with no blue water and still gets
+the one animated feature every other board has. Note the two tolerances differ on purpose,
+the same way the glacier's do: wider for the build mask, where over-catching only refuses
+ground, and tighter for the ripple mask, where over-catching sets the wrong thing moving.
+
+**What this board's gameplay pole is, honestly: unknown until it is measured.** The depth pole
+claimed for the city version was a property of the street grid -- parallel legs a tower could
+cover two of -- and it died with the grid. What is left is a plain cut into wedges by flows
+radiating from one corner, which is nearer the glacier's pockets than to anything else in the
+roster. `--dump-board` decides, and if it lands on top of the glacier the road is the thing to
+re-roll, not the biome.
+
+
+#### What the volcano board's first attempt measured
+
+`volcanic_ash_wilderness_v1.png` obeyed the brief on everything the brief had learned to ask
+for: the volcano is a crater seen from overhead with radial gullies and no sky, the lava stays
+above and left of the road's entry, the road is dark, organic, enters at the left a third down
+and leaves through the bottom, and there is nothing built anywhere.
+
+```
+python tools/art_match.py <b> --ground=185,176,170 --tol=48 --road=55,52,50 --roadtol=38 --water=242,158,31 --watertol=70
+python tools/build_mask.py <b> --ground=185,176,170 --tol=48 --water=242,158,31 --watertol=70
+```
+
+| | volcano v1 | salt basin v1 | winding | s | glacier v2 |
+|---|---|---|---|---|---|
+| open ground | 55.0% | 74.1% | 53.5% | 67.2% | 48.8% |
+| buildable band | OK | OK | 62% | 74% | OK |
+| open ground luminance | 172.2 | 199.6 | 108.5 | -- | -- |
+| ground `g - b` | **6** | 35 | -- | -- | -- |
+| ground squash | 1.062 | not measured | 1.000 | -- | -- |
+
+**Two boards in a row have now come back far too bright**, 172 and 200 against a roster lit
+for about 106. That is not a coincidence and it is worth stating as a rule: the briefs all
+carry "err bright - a moody board makes every building look pasted on", which was written
+against the winding board's 73.3, and generators oblige past the point where the instruction
+stops helping. **Every new board brief should now say bright AND bounded.**
+
+**The ash measured `g - b = 6` - dead neutral - and that is the snowfield trap wearing a
+different coat.** The brief asked for PALE WARM GREY and what arrived is a neutral grey plain
+with black rock on it, which is a snowfield. Nothing else separates warm volcanic dust from
+cold snow at this distance: not the trees, which are burnt either way, and not the value.
+Ask for red clearly above blue and check the number, because the eye forgives it in isolation
+and stops forgiving it the moment the board sits next to the glacier in the map panel.
+
+The third fault is one no verdict line reports and the histogram shows plainly: **the picture
+is two values.** 43% of it sits at luminance 160-200 and 36% below 60, with almost nothing
+between. That reads as graphic rather than as ground, and it is also the real source of the
+"the middle looks empty" complaint - a white field with a few black blobs on it has nothing to
+look at, however much is technically in the frame.
+
+#### The volcano edit, and why it is not the desert's edit
+
+The desert was too empty and needed things added; this board is not, and the same edit copied
+across would have made it worse. What carries over is the METHOD - deepen the value, split new
+material into flat versus standing, place standing things by the 20%-of-width band rule - and
+what inverts is the content: warmth instead of ochre, MID-tones instead of more objects, and
+clinker REMOVED from the road's shoulder rather than rock added to the far field.
 
 ```text
-THE PLACE:
-A wide, open desert basin under bright sun. Mostly flat, firm sand and dry flats. Red-brown
-canyon walls, mesas and scattered rock spires frame it around the EDGES of the picture only.
-A broad open basin with a road across it, NOT a road winding through a canyon.
+[Attach TWO files, in this order:
+   1. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\maps\volcanic_ash_wilderness_v1.png
+      ^ the map to edit
+   2. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\towers\_source_fire.png
+      ^ buildings that will stand on this map - ONLY a colour, light and value reference, never insert them]
 
-WHAT THE GROUND LOOKS LIKE - read this twice, a program measures it:
-- Flat, open, firm SAND. WARM GOLDEN TAN, sunlit, evenly lit corner to corner.
-- NO long shadows from the canyon walls reaching into the basin, NO dark corners, NO
-  vignette, NO heat haze or dust blowing across the ground.
-- Its texture is CALM: gentle wind ripples only. No boulders, no scattered stones, no scrub,
-  no cactus, no bones, no dunes tall enough to cast their own shadows.
+Edit image 1, the volcanic ash game map. Image 2 is ONLY a colour, light and brightness
+reference; never insert its buildings.
 
-THE ROAD:
-- PALE COOL GREY FLAGSTONE, clearly COOLER and greyer than the warm sand around it - the two
-  must not be the same colour. It is NOT sand-coloured, NOT a dirt track, NOT buried.
+KEEP THE SAME MAP. Same 16:9 framing, same straight-down camera, same painterly rendering,
+same even upper-left daylight. DO NOT MOVE THE ROAD: the dark track keeps its exact route,
+exact width, its left entry, both of its bends and its exit through the bottom edge - preserve
+every road pixel as closely as possible. Keep the volcano, its crater and every lava channel
+exactly where they are. Keep the burnt tree stands and the dark masses around the outer rim.
+No buildings, no ruins, no towers, no text, no characters, no vignette, nothing green.
 
-THE CLIFFS AND SPIRES - at the edges, not in the basin:
-- Red-brown canyon walls, mesas and rock spires, reading clearly DARKER and REDDER than the
-  open sand. They mass at the outer rim of the picture.
+Three changes, and nothing else.
 
-WATER:
-- One clearly BLUE oasis pool with a few palms at an EDGE of the picture, away from the road.
-  Keep it distinctly BLUER than anything else - the game finds water by its blue.
+1 THE ASH IS THE WRONG COLOUR. It is currently neutral grey and reads as SNOW.
+- Give it a clear WARM cast: pale dove grey with brown-ochre and faint rust in it, the colour
+  of volcanic dust, not of snow. Red clearly above blue everywhere in the open ground.
+- Bring its overall brightness DOWN by about a fifth. Still daylight, still evenly lit corner
+  to corner, still the bright part of the picture - just not bleached white.
+- Vary it: broad soft patches of warmer and cooler ash, pale drifts against darker settled
+  dust, soot staining spreading downwind of the black flows.
+
+2 THE PICTURE IS ONLY TWO VALUES - near-white ash and near-black rock, with nothing between.
+Fill that gap, and put most of the new material in the MIDDLE of the value range:
+- OLDER WEATHERED LAVA: flows that erupted long ago, now dulled to MID GREY and mid brown-grey
+  under a film of ash, softer-edged than the fresh black clinker. Broad and low.
+- ASH RIDGES AND DRIFTS: long low banks of drifted ash with one gently shaded side, following
+  the wind across the plain.
+- SOOT FANS and warm grey-brown grit spreading out from the black flows.
+- EMBER CRACKS: thin fissures in the crust with a dull orange glow deep inside them, small and
+  scattered, nothing like the size of the lava channels.
+- The near-black clinker already in the picture stays black. Do not brighten it; add the
+  middle range around it.
+
+3 THE SURFACE TEXTURE IS TOO BUSY. The heavy swirling impasto runs at the same strength across
+the whole plain and will fight with the pieces the player puts on it.
+- Calm it down: keep the sense of drifted, wind-worked ash, but make the swirls softer, finer
+  and much more varied - strong in places, almost smooth in others. It is ground, not brushwork.
+
+WHERE NEW THINGS MAY GO - this is a rule, not a preference. Two kinds:
+- FLAT DETAIL with no height and no shadow - soot staining, grit, ember cracks, colour
+  variation, fine drift patterns - may go ANYWHERE, including right up to the edge of the road.
+  More of it is always better.
+- ANYTHING WITH HEIGHT that casts a shadow - ash ridges, weathered flows, rock, clinker,
+  burnt trunks - must stay AT LEAST 20% OF THE IMAGE WIDTH from the nearest edge of the road
+  (about 334 pixels on this 1672-wide image), on both sides, for the road's whole length.
+- The few small black clinker clumps currently sitting close beside the road, in the middle of
+  the picture, VIOLATE that rule: remove them and restore matching flat ash where they were.
+  The strip of open ash along both sides of the causeway, and the whole inside of every bend,
+  must be clear of anything that stands up.
+
+Everything else stays: the road untouched, the volcano and lava untouched, the rim untouched,
+the same light, the same straight-down camera, no sky, no horizon, no smoke plume, no snow.
 ```
 
-Desert needs no `--ground`: sunlit sand (215, 188, 140) measures `g-b = 48` and passes the
-default test, while red canyon rock (165, 100, 70) measures `30` and is correctly refused.
-Run the plain `python tools/build_mask.py <board.png>` and check the number.
+
+#### The volcano's edit landed, and it is the first board to hit the value target
+
+`volcanic_ash_wilderness_v2.png`:
+
+| | **volcano v2** | volcano v1 | salt basin v2 | winding | s | glacier v2 |
+|---|---|---|---|---|---|---|
+| open ground luminance | **117.3** | 172.2 | 140.1 | 108.5 | -- | -- |
+| ground `g - b` | **14-23** | 6 | 60 | -- | -- | -- |
+| open ground | 59.4% | 55.0% | 84.0% | 53.5% | 67.2% | 48.8% |
+| buildable band | OK | OK | 99.4% | 62% | 74% | OK |
+| ground squash | 1.000 | 1.062 | 0.969 | 1.000 | -- | -- |
+
+Measured and traced with:
+
+```
+python tools/art_match.py <b> --ground=145,124,105 --tol=62 --road=45,42,40 --roadtol=36 --water=233,137,18 --watertol=70
+python tools/build_mask.py <b> --ground=145,124,105 --tol=62 --water=233,137,18 --watertol=70
+python tools/trace_ribbon.py <b> --road=45,42,40 --tol=36 --name=ASHFALL --preview=check.png
+```
+
+**117.3 against a target of 105 is the closest any board has come**, and it arrived two boards
+after the "err bright" rule was identified as the reason they kept overshooting. Asking for a
+proportional cut from a measured start ("down about a fifth") did what asking for a direction
+never did. The warmth landed with it: `g - b` moved from 6 -- dead neutral, a snowfield with
+black rock on it -- to 14-23, red clearly above blue, and the luminance histogram is spread
+across 20-140 instead of piling up at both ends. The two-value look is gone.
+
+**The road traced end to end on the first setting**, 44 control points, the preview line down
+the middle of the track for its whole length. Two notes for whoever wires it in:
+
+- **The tracer returned it backwards** -- spawn at the bottom edge, keep at the left -- because
+  it picks its two ends by graph diameter and has no idea which way creeps walk. The brief's
+  road enters LEFT and exits BOTTOM, so the array wants reversing. That is a property of the
+  tool, not a fault in the painting.
+- **26.6% of the board matches the road colour** at tol 36, because the rim clinker and the
+  volcano's flank are the same near-black. The largest-connected-run rule picked the road
+  correctly -- this is exactly the case that rule was written for -- but the margin is thinner
+  than the desert's and any re-grade should re-check it.
+
+**One thing the edit introduced that the brief forbade: the field is no longer evenly lit.**
+Ash measures 158 at the top right and 92 at the lower left, a visible gradient across the
+plain. It cost no ground -- the build mask covers the dark corner as one connected region, so
+the "a shadow across the meadow deletes the meadow" failure did not happen -- so it is
+cosmetic rather than structural, and not worth another generation on its own. It does mean
+towers in the lower left stand on ground darker than the register the roster was painted for.
+
+
+#### Salt Basin -- the desert
+
+This is the board the roster has been missing since "Long Meadow" was first written up: an
+OPEN, high-capacity map, the pole all four shipped boards fail. The salt pan supplies it for
+free -- a dry lake floor is empty by nature, where a meadow's emptiness has to be carved out
+of a forest.
+
+**The centre-void problem is the one to watch.** "Nothing stands in the open" plus "aim for
+most of the picture open" is what made both first-attempt boards measure well and look
+unfinished. The fix is not fewer open areas: `build_mask` refuses things by colour and by how
+much of an 8px block matches the ground, so pattern painted FLAT at a near value stays
+buildable. Salt-crust polygon cracking, old shoreline rings, braided channel scars and wind
+ripples are all free, and the brief asks for all four.
+
+```text
+[Attach THREE files, in this order:
+   1. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\towers\_source_fire.png
+      ^ buildings that will stand on this map - match their light and their painting style
+   2. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\towers\_source_water.png
+      ^ ditto
+   3. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\board_source.png
+      ^ an existing map in the same game - match its RENDERING STYLE and its CAMERA. Nothing else.]
+
+Paint a game map for a 2D tower defense, seen from directly above.
+
+Image 3 is an existing map in the same game. Match its rendering: the same painterly finish,
+the same level of detail, the same bright even daylight, and THE SAME CAMERA - looked at from
+straight overhead, flat, no horizon, no sky, ground filling the whole frame. Do NOT copy
+anything else from it. Images 1 and 2 are buildings that will be placed on your map; match the
+direction and softness of the light on their stonework.
+
+Aspect ratio 16:9, landscape. No transparency, no border, no vignette, no text, no watermark,
+no UI, no characters, no towers, no buildings.
+
+THE PLACE - this is the whole brief, read it before anything else:
+
+A DRIED-OUT SALT LAKE BASIN in the desert, seen from straight above. Not a dune sea. Not a
+canyon. The flat white-gold floor of a lake that evaporated: a huge open pan of cracked salt
+crust and firm sand, filling the frame from edge to edge, with red rock walls only at the very
+rim of the picture.
+
+THIS MAP IS DEFINED BY HOW EMPTY IT IS. It is the widest, most open map in the game and that
+is the entire point of it. Aim for at least three quarters of the picture to be flat, clean,
+buildable ground with nothing standing in it.
+
+NOTHING IS GREEN except the few palms at the oasis. No grass, no meadow, no scrub, no bushes,
+no cactus anywhere else.
+
+WHAT THE GROUND LOOKS LIKE:
+- The main surface is the dry lake floor: WARM GOLDEN TAN sand and pale bone-white salt crust,
+  sunlit, firm and flat. This is the ground the player builds on and most of the picture is
+  made of it. Bright and open - err light.
+- It is NOT featureless. The salt crust is broken into a huge network of shallow POLYGON CRACKS
+  like dried mud; pale mineral rings mark old shorelines; faint braided scars show where water
+  once ran; gentle wind ripples cross the sand. All of this is painted FLAT INTO the ground: it
+  is texture, not objects, and nothing in it stands up or casts a shadow.
+- Lit EVENLY corner to corner. NO long shadows from the rim reaching into the basin, NO dark
+  corners, NO vignette, NO heat haze, NO blowing dust over the ground.
+- Nothing lies loose on the flats: no boulders, no scattered stones, no scrub, no bones, no
+  dead wood, no dunes tall enough to cast their own shadow.
+
+WHAT BREAKS THE FLATS UP - and there is deliberately LITTLE of it:
+- CANYON WALLS AND MESAS: red-brown cliff walls and flat-topped mesas, clearly DARKER and
+  REDDER than the pale floor. They mass at the OUTER RIM of the picture and ring the basin.
+- YARDANGS: a few wind-carved rock fins standing out of the flats, sharp-edged and aligned the
+  same way, like the wind carved them. Two or three small groups only, and none of them in the
+  middle of the map.
+- SALT PANS: two or three broad patches where the crust is blinding white and rougher, raised
+  into low ridges. They are TEXTURE, drawn flat - the player can still build on them.
+- Keep the middle of the basin clear. If you are tempted to add one picturesque rock in the
+  centre of an open pan, do not: a single object ruins that whole pocket.
+
+THE OASIS - the map's water:
+- One clearly BLUE spring pool with a small stand of date palms, at an EDGE of the picture,
+  away from the road. Deep turquoise-blue, the only strongly coloured thing on the map, and
+  unmistakably BLUER than everything else - the game finds water by its blue and animates it.
+- It must not touch the road, must not cross it, and gets no bridge or ford. Do not scatter
+  extra pools or wet patches through the basin.
+
+THE OPEN GROUND - what the game needs:
+- The flats on BOTH SIDES of the road, for its entire length, are completely EMPTY for a wide
+  band - at least 15% of the image width beyond each kerb. The whole inside of every bend is
+  open too, all the way across.
+- Beyond that band the basin keeps opening into more flat pan. More open ground anywhere is
+  always better than less.
+
+THE ROAD:
+- An old caravan causeway: one continuous ribbon of COOL GREY-BLUE FLAGSTONE, the colour of wet
+  slate, laid across the pale floor. It must read clearly COOLER and DARKER than the warm sand
+  around it, and clearly greyer and less red than the canyon rock at the rim. It is NOT
+  sand-coloured, NOT a dirt track, NOT buried, NOT sunk into the ground.
+- Three or four LONG, LAZY curves - wide sweeping bends, generously far apart from one another,
+  like a country lane. NOT a spiral, NOT switchbacks, NOT hairpins, NOT a zigzag, and it never
+  doubles back to run close alongside itself.
+- It enters at the LEFT edge about ONE QUARTER of the image height down, with broad open flats
+  above it. No part of the road may go above that entry. It crosses the whole basin down and to
+  the right, and EXITS THROUGH THE BOTTOM EDGE at about 70% of the image width. The road is
+  visibly CUT OFF by the bottom frame and continues beyond it: NO gatehouse, NO gate, NO arch,
+  NO waystation, NO terminus, NO structure of any kind at either end.
+- Constant width for its whole length, about 5% of the image width, edge to edge. No widening,
+  no plaza, no crossroads, no fork, no side path, no bridge, no gate across it.
+- It never crosses itself, and nothing overlaps or hides any part of it.
+
+THE FRAME:
+- The right 16% of the image and the top 6% are covered by interface in the game. Fill those
+  strips with canyon walls, mesas or yardangs, and put nothing there the player needs to see.
+  Keep the road and the oasis out of both.
+
+LIGHT:
+- Bright, flat, even desert daylight from the upper left. Lit EVENLY corner to corner: no cloud
+  shadows, no dark corners, no vignette, no sunset, no god rays. Err bright - a moody amber
+  desert makes every building placed on it look pasted on.
+```
+
+**Measuring it.** Sand was believed to be the one biome needing no `--ground`, on the
+estimate that sunlit sand (215, 188, 140) measures `g - b = 48` and passes the default test by
+accident. **The board that arrived disproved it** -- see the measurements below, where a
+bleached pan lands exactly on the threshold and the undeclared reading is noise. Declare the
+ground, and the road too: pale flats are "pale and not green" the same way snow is.
+
+```
+python tools/art_match.py <b> --road=110,118,128 --roadtol=45 --water=30,120,160
+python tools/build_mask.py <b>
+python tools/water_mask.py <b> <b>_water.png --water=30,120,160 --watertol=55
+python tools/trace_ribbon.py <b> --road=110,118,128 --tol=45 --name=DESERT --preview=check.png
+```
+
+**The road's colour is a deviation from the earlier sketch, and it is about the tracer.** That
+sketch asked for "pale cool grey flagstone", which is a real desert road and nearly
+untraceable: pale grey on pale gold is a few units of separation, and `trace_ribbon.py` marches
+the largest connected run of a declared colour. The brief asks for wet-slate grey-blue instead
+-- still cool, still stone, but a clear step DARKER than the floor. It stays far from the
+canyon rock too (about 100 away, safe at tol 45), so the tracer cannot wander off into the rim.
+
+
+#### What the salt basin's first attempt measured
+
+`salt_lake_basin_v1.png` came back with the road right -- left entry a quarter down, three
+organic bends, bottom exit at 70%, no gatehouse -- and the open pan is genuinely the roster's
+most generous ground:
+
+| | salt basin v1 | winding | s | glacier v2 |
+|---|---|---|---|---|
+| open ground | **74.1%** | 53.5% | 67.2% | 48.8% |
+| buildable band | OK | 62% | 74% | OK |
+| open ground luminance | **199.6** | 108.5 | -- | -- |
+
+Two findings, and neither is the one the eye reports first (which was "it looks empty").
+
+**1. `art_match.py`'s value verdict is a FLOOR, and this board sails over the ceiling nobody
+wrote.** Open ground measures 199.6 against a roster whose tower masonry runs 49.9 to 124.6
+and against every other board's ~106. The check passes because it only ever asked "is the
+board bright enough that the towers do not look pasted on"; the winding board's 73.3 is what
+it was written against. At 199.6 the failure is the mirror image -- a bleached pan with dark
+towers standing on it -- and the tool reports OK. **Read the number, not the verdict.**
+
+**2. The doc's own "desert needs no `--ground`" exception was wrong, and wrong in the way
+these mistakes always are: it returned a plausible number.** That line came from an ESTIMATE
+of sunlit sand at (215, 188, 140), `g - b = 48`, comfortably over `build_mask.py`'s threshold
+of 35. The painting that arrived is bleached: its sand measures (235, 208, 173), `g - b = 35`,
+sitting exactly ON the threshold, with **42% of the whole image inside the 30-39 bucket**. So
+the default test flips a coin per pixel across the entire basin. Undeclared, the band read
+"65% -- TOO CLOSED"; declared, the same painting reads OK and 74.1% open. Measure this board
+as:
+
+```
+python tools/art_match.py <b> --ground=233,208,175 --tol=62 --road=135,135,135 --roadtol=40 --water=30,142,157
+python tools/build_mask.py <b> --ground=233,208,175 --tol=62 --water=30,142,157 --watertol=90
+```
+
+The road came back pale grey cobble at about (135, 135, 135) rather than the wet-slate
+grey-blue the brief asked for -- traceable, since it is the only cool thing in a warm
+picture, but only just. Re-eyedrop it on any re-generation.
+
+#### The edit that fixes both, and the rule it turns on
+
+Emptiness and brightness have one fix between them, because half of "it looks empty" is that
+nothing in the picture has a different VALUE from anything else. The edit deepens the sand
+while leaving the salt crust pale, and adds features -- but the features split into two kinds
+whose difference is the whole of the placement rule:
+
+- **Flat detail is free and unlimited.** `build_mask.py` refuses by colour and by how much of
+  an 8px block matches the ground, so polygon cracking, channel scars, shoreline rings, gravel
+  fans and ripples painted FLAT at a near value stay buildable. They may go right up to the
+  kerb.
+- **Anything with height costs build spots exactly where the game measures them.** The band
+  `art_match.py` reports is 70-300 world px from the road, which on a 1672px painting is a
+  strip about 20% of the image width on each side. So standing rocks are welcome anywhere
+  BEYOND that strip and forbidden inside it -- which is also the honest version of the
+  original brief's "keep the middle clear", stated as a distance instead of a wish.
+
+```text
+[Attach TWO files, in this order:
+   1. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\maps\salt_lake_basin_v1.png
+      ^ the map to edit
+   2. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\towers\_source_fire.png
+      ^ buildings that will stand on this map - ONLY a light and value reference, never insert them]
+
+Edit image 1, the desert salt-basin game map. Image 2 is ONLY a lighting and brightness
+reference; never insert its buildings.
+
+KEEP THE SAME MAP. Same 16:9 framing, same straight-down camera, same painterly rendering,
+same bright even daylight from the upper left. Above all, DO NOT MOVE THE ROAD: the grey
+cobbled causeway keeps its exact route, its exact width, its left entry, all three of its
+bends and its exit through the bottom edge. Keep the oasis pool and its palms exactly where
+they are. Keep the red-brown rock walls around the rim. No buildings, no ruins, no towers, no
+text, no characters, no vignette.
+
+Two things to change, and nothing else.
+
+CHANGE 1 - THE GROUND IS TOO BRIGHT AND TOO UNIFORM. Deepen and enrich it:
+- The sand is currently bleached almost to white paper. Bring it down to a DEEPER, WARMER
+  GOLDEN OCHRE - honey and amber rather than bone. Roughly a third less bright overall, still
+  clearly sunlit, still evenly lit corner to corner, but with real colour in it.
+- Keep the SALT CRUST pale, near-white and cool. Deepening the sand while the salt stays pale
+  is the point: the contrast between the two is what the picture is missing.
+- Vary the ground's tone across the basin: broad soft patches of paler and deeper sand, rust
+  and pale mineral staining, faint bands of coarser darker grit. Nothing uniform.
+
+CHANGE 2 - ADD NATURAL FEATURES SO THE BASIN IS NOT EMPTY. There are two kinds and the
+difference between them decides where each may go.
+
+FLAT DETAIL - things painted INTO the ground with no height and no shadow. These may go
+ANYWHERE, including right up to the edge of the road, and the more of them the better:
+- Much stronger salt-crust POLYGON CRACKING - a big network of shallow plates across the pan.
+- Braided DRY CHANNEL SCARS where water once ran into the basin, wandering across the flats.
+- Old SHORELINE RINGS - concentric pale mineral bands marking where the lake shrank.
+- Fans of darker GRAVEL and coarse grit spreading out from the rim.
+- Wind ripples in the loose sand, and faint drifts against nothing.
+
+STANDING FEATURES - things with height that cast a real shadow. These are what the map has
+too few of, and they must obey ONE placement rule:
+- ROCK CLUSTERS: groups of weathered red-brown boulders, three to eight stones together, the
+  same rock as the rim. Six or seven such clusters across the basin.
+- LOW SHELVES of bedrock breaking through the pan, with a shadowed edge on one side.
+- A few small wind-carved rock fins, sharp-edged and all leaning the same way.
+- THE RULE: no standing feature may come within 20% OF THE IMAGE WIDTH of the road, on either
+  side. The strip of open flat ground running along both sides of the causeway for its whole
+  length must stay completely clear - not one boulder, not one shelf, not one fin in it. That
+  strip is where the game lets the player build, and a single rock in it deletes a whole
+  pocket. Put the clusters in the wide far field beyond it, in the corners, and up against
+  the rim.
+- Group them. Six clusters of five stones reads as a landscape; thirty single stones spread
+  evenly reads as scatter.
+
+Everything else stays: the road untouched, the oasis untouched, the rim untouched, the same
+light, the same camera, the same style, no sky, no horizon, no dunes.
+```
+
+Re-measure after the edit with the commands above, and expect the ground reference colour to
+have moved -- eyedrop it again rather than reusing (233, 208, 175). What must NOT move is the
+road: it is the thing `trace_ribbon.py` will read, and an edit that nudges it invalidates a
+trace that has already been checked.
+
+
+#### The salt basin's edit landed, and it is the best-measuring board in the repo
+
+`salt_lake_basin_v2.png`, measured against every board that ships:
+
+| | **salt basin v2** | salt basin v1 | winding | s | glacier v2 | spiral |
+|---|---|---|---|---|---|---|
+| open ground | **84.0%** | 74.1% | 53.5% | 67.2% | 48.8% | -- |
+| buildable band (want 80%) | **99.4%** | OK | 62% | 74% | OK | 78% |
+| open ground luminance | **140.1** | 199.6 | 108.5 | -- | -- | 106.4 |
+| ground `g - b` | **60** | 35 | -- | -- | -- | -- |
+| ground squash | 0.969 | -- | 1.000 | -- | -- | -- |
+
+**99.4% of the band open is the first time any board has cleared that bar**, and it is what
+the two-kinds rule bought: the flat detail the edit added -- polygon cracking, channel scars,
+shoreline rings, gravel fans -- costs nothing, and every standing rock went into the far field
+where the band never looks. The board is emphatically the breadth pole it was briefed as.
+
+**The threshold straddle is gone too.** Warming the sand moved `g - b` from 35 to about 60, so
+the default green test and the declared-ground test now AGREE (140.1 against 142.2) where on
+v1 they disagreed by a whole verdict. A board measuring the same two ways is a board whose
+numbers can be trusted; this one no longer needs `--ground` at all.
+
+Value came down from 199.6 to 140.1 against a target of 105 and a roster whose masonry runs
+50-125. That is no longer the mirror-image failure it was, but it is still the brightest board
+in the game, and whether it needs a last nudge is a question for a screenshot with towers
+standing on it rather than for another measurement. `grade_board.py` is the lever if it does.
+
+**`--against` reported ROAD MOVED, and it was a false alarm worth recording.** The check ran
+with the DEFAULT road detector -- "pale and not green" -- which matched 21429 blocks on the
+bleached v1 (most of the pan, not the road) against 1844 on the warm v2. It compared two
+garbage masks and produced a confident verdict from them: "median 44px, 46.8% within
+ROAD_HALF, re-trace the path". The road had not moved at all. **Pass `--road` to `--against`
+on any board whose ground colour changed between the two images**, or the comparison measures
+the detector rather than the edit.
+
+The trace confirms it, and the road came out on the first good setting -- left edge to bottom
+edge, 38 control points, the preview line down the middle of the causeway for its whole
+length:
+
+```
+python tools/trace_ribbon.py <b> --road=120,118,112 --tol=75 --name=DESERT --preview=check.png
+python tools/build_mask.py <b> --ground=195,133,72 --tol=55 --water=29,129,145 --watertol=90
+```
+
+Note the trace needed tol **75** and the matching set is 11.4% of the board: the edit warmed
+the ROAD along with the ground, from the briefed wet-slate grey-blue to (142, 137, 125). It
+still traces cleanly because it is the only cool-neutral thing in a warm picture, but the
+margin is thinner than the glacier's and any further re-grade should re-check it.
+
+**What is left to find out is whether it is too EASY.** 84% open ground and a road that traces
+to roughly 1390 world px -- shorter than the glacier's 1681, the shortest in the roster -- is a
+lot of ground watching a little road. `--dump-board` and `--play-sim` decide that, and the
+lever if it is too generous is the ROAD (longer, or further from the rim), not the openness,
+which is the whole point of this board.
+
 
 ### What still assumes green, and does not matter much
 

@@ -234,6 +234,56 @@ const GLACIER_PATH: Array = [
 	Vector2(1156, 850),
 ]
 
+## Control points for the desert board (`assets/art/maps/salt_lake_basin_v2.png`), traced the
+## same way the glacier was:
+## `python tools/trace_ribbon.py <board> --road=120,118,112 --tol=75 --name=DESERT`.
+##
+## The tolerance is wide (75 against the glacier's 50) because the board was re-graded after
+## it was first generated and the grade warmed the ROAD along with the ground: the brief asked
+## for wet-slate grey-blue and the cobble came back at (142, 137, 125). It still traces because
+## it is the only cool-neutral thing in a warm picture, but the margin is thinner than the
+## glacier's — re-check it if the board is ever re-graded again.
+##
+## Enters the LEFT edge at y=204 (over the y>150 floor the HUD imposes) and leaves through the
+## BOTTOM at x=1079, clear of PLAY_RIGHT.
+const DESERT_PATH: Array = [
+	Vector2(2, 204), Vector2(2, 241), Vector2(42, 248), Vector2(79, 244),
+	Vector2(119, 244), Vector2(175, 237), Vector2(222, 237), Vector2(274, 244),
+	Vector2(311, 244), Vector2(340, 263), Vector2(384, 285), Vector2(413, 303),
+	Vector2(443, 321), Vector2(491, 332), Vector2(542, 343), Vector2(579, 340),
+	Vector2(616, 343), Vector2(671, 343), Vector2(718, 351), Vector2(751, 362),
+	Vector2(777, 387), Vector2(803, 421), Vector2(821, 454), Vector2(814, 498),
+	Vector2(814, 542), Vector2(792, 571), Vector2(810, 615), Vector2(829, 648),
+	Vector2(858, 670), Vector2(891, 681), Vector2(924, 692), Vector2(961, 707),
+	Vector2(1012, 733), Vector2(1034, 769), Vector2(1064, 788), Vector2(1079, 821),
+	Vector2(1079, 861), Vector2(1067, 861),
+]
+
+## Control points for the volcanic board (`assets/art/maps/volcanic_ash_wilderness_v2.png`):
+## `python tools/trace_ribbon.py <board> --road=45,42,40 --tol=36 --name=ASHFALL`.
+##
+## REVERSED from what the tracer printed. It picks its two ends by graph diameter and has no
+## idea which way creeps walk, so it called the bottom exit the spawn; the road is drawn to
+## enter at the LEFT and leave through the BOTTOM, so the array is flipped here. Check the
+## direction on any re-trace — a reversed road is not an error the tools can see.
+##
+## 26.6% of this painting matches the road colour, because the rim clinker and the volcano's
+## flank are the same near-black; the tracer's largest-connected-run rule is what picks the
+## road out of that, and it is exactly the case that rule was written for.
+const ASHFALL_PATH: Array = [
+	Vector2(9, 296), Vector2(20, 292), Vector2(72, 285), Vector2(116, 277),
+	Vector2(152, 270), Vector2(208, 263), Vector2(244, 263), Vector2(285, 266),
+	Vector2(322, 270), Vector2(358, 274), Vector2(399, 285), Vector2(454, 296),
+	Vector2(498, 303), Vector2(535, 303), Vector2(571, 296), Vector2(608, 288),
+	Vector2(645, 281), Vector2(678, 266), Vector2(715, 255), Vector2(748, 244),
+	Vector2(785, 233), Vector2(825, 226), Vector2(862, 226), Vector2(902, 226),
+	Vector2(946, 237), Vector2(983, 248), Vector2(1012, 270), Vector2(1031, 299),
+	Vector2(1038, 347), Vector2(1027, 395), Vector2(998, 421), Vector2(965, 446),
+	Vector2(917, 483), Vector2(913, 520), Vector2(920, 556), Vector2(943, 593),
+	Vector2(968, 619), Vector2(998, 637), Vector2(1034, 663), Vector2(1064, 689),
+	Vector2(1079, 733), Vector2(1082, 769), Vector2(1082, 806), Vector2(1082, 850),
+]
+
 const S_OBSTACLES: Array = [
 	[Vector2(133, 110), 55.0], [Vector2(74, 303), 55.0],
 	[Vector2(234, 569), 108.0], [Vector2(105, 708), 72.0],
@@ -440,8 +490,15 @@ const OBSTACLES: Array = [
 ## to draw three postage stamps. Re-run the tool after any repaint.
 ##
 ## `star_gate` is GAME_STRATEGY_V2.md §12.4's unlock ladder. Ordered by measured difficulty:
-## winding ships first, `s` is the roomiest (42 spots, 100% of its road reachable), spiral
-## is the tightest (fewest spots, longest road, Fire reaches only 80% of it).
+## winding ships first, `s` is the roomiest of the originals (100% of its road reachable),
+## spiral is the tightest (fewest spots, longest road, Fire reaches only 76% of it).
+##
+## The last two are ordered by `--play-sim`, and it inverted the guess. `ash` (37 spots,
+## floor player dies wave 43) sits at 16 and `desert` (54 spots, dies wave 31) at 20 — the
+## board with MORE ground is the harder one, because the floor player buys board before
+## depth and 54 spots is 54 ways to spend a run's gold on Lv1 towers. That is a property of
+## that player, not proof the board is hard for a human; what it does prove is that spots
+## are not difficulty, and a wide board cannot be assumed to be the gentle one.
 const BOARDS := {
 	"winding": {
 		"path": WINDING_PATH, "subdiv": 4, "obstacles": [], "build_zones": [],
@@ -477,6 +534,33 @@ const BOARDS := {
 		"name_key": "MAP_GLACIER", "desc_key": "MAP_GLACIER_DESC",
 		"star_gate": 8, "road_len": 1681.0,
 	},
+	"desert": {
+		"path": DESERT_PATH, "subdiv": 2, "obstacles": [], "build_zones": [],
+		"art": "res://assets/art/maps/salt_lake_basin_v2.png",
+		"water": "res://assets/art/maps/salt_lake_basin_v2_water.png",
+		"build_mask": "res://assets/art/maps/salt_lake_basin_v2_build.png",
+		"thumb": "res://assets/art/maps/desert_thumb.png",
+		# The oasis is a flat spring, so it ripples as a lake and falls nowhere.
+		"waterfall_a": Vector4.ZERO,
+		"waterfall_b": Vector4.ZERO,
+		"name_key": "MAP_DESERT", "desc_key": "MAP_DESERT_DESC",
+		"star_gate": 20, "road_len": 1514.0,
+	},
+	"ash": {
+		"path": ASHFALL_PATH, "subdiv": 2, "obstacles": [], "build_zones": [],
+		"art": "res://assets/art/maps/volcanic_ash_wilderness_v2.png",
+		# There is no water on this board. The mask holds the LAVA instead, which is what
+		# makes the channels both unbuildable and animated: water_flow.gdshader is a UV
+		# displacement of the painting, and its one colour of its own is a blue-cyan glint at
+		# 0.018 strength that orange swallows whole. So the lava creeps.
+		"water": "res://assets/art/maps/volcanic_ash_wilderness_v2_water.png",
+		"build_mask": "res://assets/art/maps/volcanic_ash_wilderness_v2_build.png",
+		"thumb": "res://assets/art/maps/ash_thumb.png",
+		"waterfall_a": Vector4.ZERO,
+		"waterfall_b": Vector4.ZERO,
+		"name_key": "MAP_ASH", "desc_key": "MAP_ASH_DESC",
+		"star_gate": 16, "road_len": 1743.0,
+	},
 	"spiral": {
 		"path": PATH, "subdiv": 2, "obstacles": OBSTACLES, "build_zones": [],
 		"art": "res://assets/art/board_source.png",
@@ -494,6 +578,18 @@ const BOARDS := {
 ## are both tuned to this road, so it is 1.0 by definition and every other board is a ratio
 ## of it. Changing which board this names re-paces every OTHER board, not this one.
 const SPEED_REFERENCE_BOARD := "winding"
+
+## TEMPORARY: every board open to everyone, whatever `star_gate` says.
+##
+## One switch rather than six zeroed gates, for two reasons. `star_gate` is also the map
+## panel's SORT key (`board_ids()` below), so zeroing the values would scramble the list into
+## dictionary order and the ladder would have to be reconstructed from memory to put it back.
+## And the gate numbers are a design decision measured against `--play-sim`, not a value to
+## throw away for a demo.
+##
+## Set back to `false` to restore the ladder — nothing else has to change, and the panel goes
+## back to drawing "N ★ to open" on the rows the player has not earned.
+const ALL_BOARDS_OPEN := true
 
 ## The board a fresh install starts on, and the only one with star_gate 0. Also what an
 ## unknown id falls back to.

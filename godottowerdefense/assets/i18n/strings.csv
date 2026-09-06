@@ -115,6 +115,10 @@ MAP_SPIRAL,Spiral Arena,Spiral Arena
 MAP_SPIRAL_DESC,"The longest road and the least ground. Fire reaches only three quarters of it.","En uzun yol, en az zemin. Fire yolun sadece dörtte üçüne yetişir."
 MAP_GLACIER,Glacier Pass,Glacier Pass
 MAP_GLACIER_DESC,"A causeway over moving ice. Crevasses cut the ground into pockets.","Hareketli buzun üstünde bir geçit. Yarıklar zemini ceplere bölüyor."
+MAP_DESERT,Salt Basin,Salt Basin
+MAP_DESERT_DESC,"A dry lake floor. The most open ground in the game, and the shortest road across it.","Kurumuş bir göl tabanı. Oyunun en açık zemini, ve üstündeki en kısa yol."
+MAP_ASH,Ashfall Plain,Ashfall Plain
+MAP_ASH_DESC,"Burnt ground under a live volcano. The flows decide where you may stand.","Yanmış toprak, uyanık bir yanardağ. Nerede durabileceğine lav karar verir."
 MENU_SANDBOX,Sandbox,Test Modu
 SANDBOX_TITLE,SANDBOX,TEST MODU
 SANDBOX_SUBTITLE,"Everything unlocked. Nothing is saved: no stars, no record, no Essence.","Her şey açık. Hiçbir şey kaydedilmez: yıldız yok, rekor yok, Öz yok."

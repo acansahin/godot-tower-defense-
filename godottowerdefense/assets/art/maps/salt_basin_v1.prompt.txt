@@ -1,0 +1,97 @@
+[Attach THREE files, in this order:
+   1. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\towers\_source_fire.png
+      ^ buildings that will stand on this map - match their light and their painting style
+   2. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\towers\_source_water.png
+      ^ ditto
+   3. C:\Users\alica\OneDrive\Belgeler\GitHub\godot-tower-defense-\godottowerdefense\assets\art\board_source.png
+      ^ an existing map in the same game - match its RENDERING STYLE and its CAMERA. Nothing else.]
+
+Paint a game map for a 2D tower defense, seen from directly above.
+
+Image 3 is an existing map in the same game. Match its rendering: the same painterly finish,
+the same level of detail, the same bright even daylight, and THE SAME CAMERA - looked at from
+straight overhead, flat, no horizon, no sky, ground filling the whole frame. Do NOT copy
+anything else from it. Images 1 and 2 are buildings that will be placed on your map; match the
+direction and softness of the light on their stonework.
+
+Aspect ratio 16:9, landscape. No transparency, no border, no vignette, no text, no watermark,
+no UI, no characters, no towers, no buildings.
+
+THE PLACE - this is the whole brief, read it before anything else:
+
+A DRIED-OUT SALT LAKE BASIN in the desert, seen from straight above. Not a dune sea. Not a
+canyon. The flat white-gold floor of a lake that evaporated: a huge open pan of cracked salt
+crust and firm sand, filling the frame from edge to edge, with red rock walls only at the very
+rim of the picture.
+
+THIS MAP IS DEFINED BY HOW EMPTY IT IS. It is the widest, most open map in the game and that
+is the entire point of it. Aim for at least three quarters of the picture to be flat, clean,
+buildable ground with nothing standing in it.
+
+NOTHING IS GREEN except the few palms at the oasis. No grass, no meadow, no scrub, no bushes,
+no cactus anywhere else.
+
+WHAT THE GROUND LOOKS LIKE:
+- The main surface is the dry lake floor: WARM GOLDEN TAN sand and pale bone-white salt crust,
+  sunlit, firm and flat. This is the ground the player builds on and most of the picture is
+  made of it. Bright and open - err light.
+- It is NOT featureless. The salt crust is broken into a huge network of shallow POLYGON CRACKS
+  like dried mud; pale mineral rings mark old shorelines; faint braided scars show where water
+  once ran; gentle wind ripples cross the sand. All of this is painted FLAT INTO the ground: it
+  is texture, not objects, and nothing in it stands up or casts a shadow.
+- Lit EVENLY corner to corner. NO long shadows from the rim reaching into the basin, NO dark
+  corners, NO vignette, NO heat haze, NO blowing dust over the ground.
+- Nothing lies loose on the flats: no boulders, no scattered stones, no scrub, no bones, no
+  dead wood, no dunes tall enough to cast their own shadow.
+
+WHAT BREAKS THE FLATS UP - and there is deliberately LITTLE of it:
+- CANYON WALLS AND MESAS: red-brown cliff walls and flat-topped mesas, clearly DARKER and
+  REDDER than the pale floor. They mass at the OUTER RIM of the picture and ring the basin.
+- YARDANGS: a few wind-carved rock fins standing out of the flats, sharp-edged and aligned the
+  same way, like the wind carved them. Two or three small groups only, and none of them in the
+  middle of the map.
+- SALT PANS: two or three broad patches where the crust is blinding white and rougher, raised
+  into low ridges. They are TEXTURE, drawn flat - the player can still build on them.
+- Keep the middle of the basin clear. If you are tempted to add one picturesque rock in the
+  centre of an open pan, do not: a single object ruins that whole pocket.
+
+THE OASIS - the map's water:
+- One clearly BLUE spring pool with a small stand of date palms, at an EDGE of the picture,
+  away from the road. Deep turquoise-blue, the only strongly coloured thing on the map, and
+  unmistakably BLUER than everything else - the game finds water by its blue and animates it.
+- It must not touch the road, must not cross it, and gets no bridge or ford. Do not scatter
+  extra pools or wet patches through the basin.
+
+THE OPEN GROUND - what the game needs:
+- The flats on BOTH SIDES of the road, for its entire length, are completely EMPTY for a wide
+  band - at least 15% of the image width beyond each kerb. The whole inside of every bend is
+  open too, all the way across.
+- Beyond that band the basin keeps opening into more flat pan. More open ground anywhere is
+  always better than less.
+
+THE ROAD:
+- An old caravan causeway: one continuous ribbon of COOL GREY-BLUE FLAGSTONE, the colour of wet
+  slate, laid across the pale floor. It must read clearly COOLER and DARKER than the warm sand
+  around it, and clearly greyer and less red than the canyon rock at the rim. It is NOT
+  sand-coloured, NOT a dirt track, NOT buried, NOT sunk into the ground.
+- Three or four LONG, LAZY curves - wide sweeping bends, generously far apart from one another,
+  like a country lane. NOT a spiral, NOT switchbacks, NOT hairpins, NOT a zigzag, and it never
+  doubles back to run close alongside itself.
+- It enters at the LEFT edge about ONE QUARTER of the image height down, with broad open flats
+  above it. No part of the road may go above that entry. It crosses the whole basin down and to
+  the right, and EXITS THROUGH THE BOTTOM EDGE at about 70% of the image width. The road is
+  visibly CUT OFF by the bottom frame and continues beyond it: NO gatehouse, NO gate, NO arch,
+  NO waystation, NO terminus, NO structure of any kind at either end.
+- Constant width for its whole length, about 5% of the image width, edge to edge. No widening,
+  no plaza, no crossroads, no fork, no side path, no bridge, no gate across it.
+- It never crosses itself, and nothing overlaps or hides any part of it.
+
+THE FRAME:
+- The right 16% of the image and the top 6% are covered by interface in the game. Fill those
+  strips with canyon walls, mesas or yardangs, and put nothing there the player needs to see.
+  Keep the road and the oasis out of both.
+
+LIGHT:
+- Bright, flat, even desert daylight from the upper left. Lit EVENLY corner to corner: no cloud
+  shadows, no dark corners, no vignette, no sunset, no god rays. Err bright - a moody amber
+  desert makes every building placed on it look pasted on.
