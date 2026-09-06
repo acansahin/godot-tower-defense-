@@ -579,6 +579,18 @@ const BOARDS := {
 ## of it. Changing which board this names re-paces every OTHER board, not this one.
 const SPEED_REFERENCE_BOARD := "winding"
 
+## TEMPORARY: every board open to everyone, whatever `star_gate` says.
+##
+## One switch rather than six zeroed gates, for two reasons. `star_gate` is also the map
+## panel's SORT key (`board_ids()` below), so zeroing the values would scramble the list into
+## dictionary order and the ladder would have to be reconstructed from memory to put it back.
+## And the gate numbers are a design decision measured against `--play-sim`, not a value to
+## throw away for a demo.
+##
+## Set back to `false` to restore the ladder — nothing else has to change, and the panel goes
+## back to drawing "N ★ to open" on the rows the player has not earned.
+const ALL_BOARDS_OPEN := true
+
 ## The board a fresh install starts on, and the only one with star_gate 0. Also what an
 ## unknown id falls back to.
 const DEFAULT_BOARD := "winding"
