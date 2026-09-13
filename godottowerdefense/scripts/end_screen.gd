@@ -67,6 +67,9 @@ func _death_reason() -> String:
 ## the moment the run stopped being 20 waves long.
 func _verdict(reached: int) -> String:
 	var progress := float(reached) / float(maxi(Balance.STANDARD_WAVES, 1))
+	# Only an ENDLESS run can end past the last wave; "almost to the end" would undersell it.
+	if progress > 1.0:
+		return tr("END_FLAVOUR_6")
 	if progress >= 0.8:
 		return tr("END_FLAVOUR_5")
 	if progress >= 0.5:

@@ -17,6 +17,9 @@ signal wave_starting(number: int)
 signal wave_started(number: int)
 signal wave_preview(text: String, color: Color)  ## Describes the next wave for the HUD.
 signal prep_started                ## The between-waves gap began (send-early available).
+## Balance.STANDARD_WAVES was just cleared in an ENDLESS run, which carries on past it. Main
+## records the level's stars from this, since Game.victory never fires in that mode.
+signal standard_cleared
 
 const ENEMY := preload("res://scenes/Enemy.tscn")
 
@@ -313,7 +316,7 @@ func _spawn_count(n: int, type_def: Dictionary, wave_def: Dictionary) -> int:
 ## previews wave 21 the moment wave 20 begins, and without this a Standard run would show a
 ## generated wave for a fight that Game.declare_victory() means will never happen.
 func _preview_text(n: int) -> String:
-	if n > Balance.STANDARD_WAVES:
+	if not Balance.ENDLESS and n > Balance.STANDARD_WAVES:
 		return tr("WAVE_FINAL")
 	var def: Dictionary = _wave_def(n)
 	# An avatar wave is one boss and nothing else, so "x12" would be a lie. Naming its ELEMENT
@@ -346,7 +349,7 @@ func _preview_text(n: int) -> String:
 
 ## Colour for the preview label: the wave's element, or a default gold if neutral.
 func _preview_color(n: int) -> Color:
-	if n > Balance.STANDARD_WAVES:
+	if not Balance.ENDLESS and n > Balance.STANDARD_WAVES:
 		return Color(0.95, 0.9, 0.7)
 	var def: Dictionary = _wave_def(n)
 	var elem := String(def.get("element", ""))
@@ -423,9 +426,13 @@ func _on_enemy_removed() -> void:
 		# next wave queued. Past this point WaveGenerator (the endless tail past Game.WAVES)
 		# is unreachable from a Standard run; it stays in the codebase for the Endless mode
 		# BUILD NEXT #8 adds.
-		if _wave >= Balance.STANDARD_WAVES:
-			Game.declare_victory()
-			return
+		# With Balance.ENDLESS the last wave is a milestone instead: the level's stars are earned
+		# here (main.gd _on_standard_cleared) and WaveGenerator carries on past it.
+		if _wave == Balance.STANDARD_WAVES:
+			if not Balance.ENDLESS:
+				Game.declare_victory()
+				return
+			standard_cleared.emit()
 		_queue_next_wave()
 
 ## Leak-free bonus + interest on banked gold, granted when a wave is cleared.

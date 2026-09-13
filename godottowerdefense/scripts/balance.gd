@@ -311,6 +311,13 @@ func early_call_bonus(wave: int) -> int:
 ## depend on — see project.godot's ordering.
 const STANDARD_WAVES := 50
 
+## When true the run does not end at STANDARD_WAVES: clearing it records the level's stars and
+## the next wave is queued anyway, so a run ends only when the lives do. STANDARD_WAVES keeps
+## every job it has besides ending the run — the boss waves, and the HP and speed ramps, which
+## keep climbing past it rather than clamping (see wave_speed()). Set false to bring the
+## winnable 50-wave run back; nothing else has to change.
+const ENDLESS := true
+
 ## The four element-avatar waves: evenly spread at 20/40/60/80% of the run, so the fusion
 ## ladder keeps its shape at any length. 50 -> 10/20/30/40, 60 -> 12/24/36/48,
 ## 100 -> 20/40/60/80.

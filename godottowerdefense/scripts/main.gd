@@ -113,6 +113,7 @@ func _ready() -> void:
 	Game.lives_changed.connect(hud.set_lives)
 	Game.game_over.connect(_on_game_over)
 	Game.victory.connect(_on_victory)
+	wave_manager.standard_cleared.connect(_on_standard_cleared)
 	wave_manager.wave_starting.connect(_on_wave_starting)
 	wave_manager.wave_started.connect(hud.set_wave)
 	wave_manager.wave_preview.connect(hud.set_next)
@@ -1889,7 +1890,25 @@ func _on_victory() -> void:
 	# since this only runs on Game.victory — ★★ for ≤5 lives lost, ★★★ for a flawless clear.
 	# Compared against the RULESET's own starting lives, not a hardcoded 20, so Easy's extra
 	# lives do not make ★★★ easier to reach than Normal's.
-	var lives_lost := Balance.ruleset_start_lives(Game.ruleset) - Game.lives
-	var stars := 3 if lives_lost <= 0 else (2 if lives_lost <= 5 else 1)
+	var stars := _stars_earned()
 	Meta.record_stars(_run_board, Game.ruleset, stars)
 	end_screen.show_summary(earned, true, stars)
+
+## ENDLESS mode's stand-in for _on_victory: Balance.STANDARD_WAVES was cleared and the run goes
+## on. The level's stars are earned HERE rather than on the end screen, because by the time an
+## endless run ends every life is gone and every clear would read as one star.
+func _on_standard_cleared() -> void:
+	Audio.play("victory")
+	if Game.sandbox:
+		return
+	var stars := _stars_earned()
+	Meta.record_stars(_run_board, Game.ruleset, stars)
+	hud.set_hint(tr("HINT_STANDARD_CLEARED")
+			% [Balance.STANDARD_WAVES, "★".repeat(stars) + "☆".repeat(3 - stars)])
+
+## ★ for clearing the last wave at all, ★★ for ≤5 lives lost, ★★★ for a flawless clear.
+## Compared against the RULESET's own starting lives, not a hardcoded 20, so Easy's extra
+## lives do not make ★★★ easier to reach than Normal's.
+func _stars_earned() -> int:
+	var lives_lost := Balance.ruleset_start_lives(Game.ruleset) - Game.lives
+	return 3 if lives_lost <= 0 else (2 if lives_lost <= 5 else 1)

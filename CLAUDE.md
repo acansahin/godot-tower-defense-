@@ -656,6 +656,16 @@ Two constants are tied to the road length and nothing else reads it, so they mov
 or the pacing breaks silently: `Balance.BASE_SPEED_*` (at the wrong value a wave-1 enemy
 took 186 seconds to walk the road) and the count ramp `BASE_COUNT_*`.
 
+## The run is ENDLESS again, behind one flag
+
+`Balance.ENDLESS` (true today) stops wave `STANDARD_WAVES` from ending the run: clearing it
+fires `WaveManager.standard_cleared`, which records the level's stars (`main.gd`
+`_on_standard_cleared`) and the generator carries on until the lives are gone. So
+`Game.victory` never fires, and **`--fill-board` / `--play-sim` never print `WON`** — a board
+that clears wave 50 now runs until it dies or hits `--quit-after`, and the wave it dies on is
+the number to read. Every "wave 50, WON" in the tables below was measured with the flag off;
+set it false to get that run back, nothing else has to change.
+
 ## Sandbox: a run for testing the game rather than playing it
 
 `Game.sandbox` turns the progression off. All four avatars are beaten before wave 1, so every

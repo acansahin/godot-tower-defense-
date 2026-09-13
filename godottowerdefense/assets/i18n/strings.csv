@@ -26,7 +26,7 @@ BASIC_2,"Towers always shoot the enemy nearest the exit, the one about to cost y
 BASIC_3,"Tap a tower to open its panel: upgrade it, fuse it, or sell it. Selling refunds everything if the tower never fired a shot, and most of it otherwise.","Bir kuleye dokununca paneli açılır: yükselt, birleştir ya da sat. Hiç ateş etmemiş bir kule tam iade eder, etmişse büyük kısmını."
 BASIC_4,Gold comes from kills. Send Next starts the next wave early and pays a bonus for it.,Altın öldürmekten gelir. Send Next sonraki dalgayı erken başlatır ve bunun için bonus öder.
 BASIC_5,"Pause / Space freezes the game. The speed button / F cycles 1x, 2x, 3x. M mutes all sound.","Pause / Space oyunu dondurur. Hız düğmesi / F 1x, 2x, 3x arasında geçer. M tüm sesi kapatır."
-BASIC_6,A standard run is 50 waves. Clear them all to win. Lose 20 lives and it is over.,Standart bir oyun 50 dalgadır. Hepsini temizlersen kazanırsın. 20 can biterse oyun biter.
+BASIC_6,"The waves never stop. Clear wave 50 to earn the map's stars, then hold out as long as you can. Lose 20 lives and it is over.","Dalgalar hiç bitmez. Haritanın yıldızları için 50. dalgayı temizle, sonra dayanabildiğin kadar dayan. 20 can biterse oyun biter."
 BASIC_GATE_TITLE,Gold only takes a tower to Level 2.,Altın bir kuleyi ancak Seviye 2'ye çıkarır.
 BASIC_GATE_1,"On waves 10, 20, 30 and 40 an element AVATAR arrives, in an order each run picks for itself. Killing one opens two doors at once:","10., 20., 30. ve 40. dalgalarda bir element AVATARI gelir; sıralamayı her oyun kendisi seçer. Birini öldürmek aynı anda iki kapı açar:"
 BASIC_GATE_2,"towers of THAT element can now climb to Level 5,","O ELEMENTİN kuleleri artık Seviye 5'e kadar çıkabilir,"
@@ -83,6 +83,7 @@ END_WAVE,WAVE %d,DALGA %d
 END_RESTART,Restart,Yeniden Başla
 END_MAIN_MENU,Main Menu,Ana Menü
 END_LEAK,"Wave %d, a %s%s got through","Dalga %d, bir %s%s sızdı"
+END_FLAVOUR_6,"Past the last boss, and still standing for a while.","Son bossu geçtin, ve bir süre daha ayakta kaldın."
 END_FLAVOUR_5,The road held almost to the end.,Yol neredeyse sonuna kadar dayandı.
 END_FLAVOUR_4,Past the Guardian at the midpoint.,Ortadaki Muhafız'ı geçtin.
 END_FLAVOUR_3,You took an element off its avatar.,Bir elementi avatarından söktün.
@@ -97,6 +98,7 @@ WAVE_FINAL,Final wave,Son dalga
 WAVE_AVATAR,Next: %s Avatar,Sıradaki: %s Avatarı
 WAVE_AVATAR_UNKNOWN,Next: Element Avatar,Sıradaki: Element Avatarı
 HINT_AVATAR_DOWN,"%s avatar down: %s towers can reach Lv%d, and any tower can fuse %s","%s avatarı düştü: %s kuleleri %d. seviyeye kadar çıkabilir, ve her kule %s ile birleşebilir"
+HINT_STANDARD_CLEARED,"Wave %d cleared %s  -  the waves keep coming","%d. dalga temizlendi %s  -  dalgalar gelmeye devam ediyor"
 HUD_SEND_NEXT,Send Next ▶,Sonrakini Gönder ▶
 WORKSHOP_WALLET,%d Essence,%d Öz
 MENU_MAP,Map: %s,Harita: %s
