@@ -108,22 +108,26 @@ func is_open() -> bool:
 ## canvas transform is what bridges them — the same one the camera's zoom is baked into, which
 ## is why this cannot be a plain subtraction.
 ##
-## Then it is clamped into the screen. The right-hand clamp is the one that matters: the
-## tower palette occupies the right 200px of screen (see Main.tscn) and eats clicks, so a
-## panel that slid under it would be half unusable for towers built on that side.
+## Then it is clamped into the screen, and kept off the tower palette. The palette used to run
+## down the whole right-hand side and this clamp was a literal 208px margin; it is a short
+## column in the top-right corner now (Game.PALETTE_RECT) and the strip below it is buildable,
+## so a panel is only pushed left when it would actually overlap the column — which eats
+## clicks, so a panel under it would be half unusable.
 func _reposition() -> void:
 	if _tower == null or not is_instance_valid(_tower):
 		return
 	var screen_pos: Vector2 = get_viewport().get_canvas_transform() * _tower.global_position
-	_origin = Vector2(screen_pos.x - PANEL_SIZE.x * 0.5,
-			screen_pos.y - PANEL_SIZE.y - STEM)
 	var panel_h := _panel_height()
-	_origin.y = screen_pos.y - panel_h - STEM
-	_origin.x = clampf(_origin.x, 8.0, Game.SCREEN_SIZE.x - PANEL_SIZE.x - 208.0)
+	_origin = Vector2(screen_pos.x - PANEL_SIZE.x * 0.5, screen_pos.y - panel_h - STEM)
 	# Below the tower instead of above it when there is no room up top — a tower near the top
 	# edge would otherwise get a panel hanging off the screen.
 	if _origin.y < 8.0:
 		_origin.y = screen_pos.y + STEM
+	_origin.x = clampf(_origin.x, 8.0, Game.SCREEN_SIZE.x - PANEL_SIZE.x - 8.0)
+	# Vertical position first, so this tests the rect the panel will really occupy.
+	var column := Game.PALETTE_RECT.grow(8.0)
+	if Rect2(_origin, Vector2(PANEL_SIZE.x, panel_h)).intersects(column):
+		_origin.x = column.position.x - PANEL_SIZE.x
 
 func _panel_height() -> float:
 	var n := _rows.size()

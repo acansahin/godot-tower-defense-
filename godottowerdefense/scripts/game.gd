@@ -27,7 +27,7 @@ signal board_changed(board_id: String)
 ## The design viewport — what the player can see at once. UI (the choice screen, the
 ## Workshop, the HUD and the tower palette) is drawn against this, in SCREEN space; the
 ## world below is bigger and the camera scales it down to fit. Converting between the two
-## is what PLAY_RIGHT and PLAY_TOP are for.
+## is what PLAY_TOP and ui_world_rects() are for.
 const SCREEN_SIZE := Vector2(1280, 720)
 ## The playable world. Sized so the WHOLE board fits on screen at one zoom — the camera
 ## never pans, because a tower defense you have to scroll is a tower defense where you
@@ -218,8 +218,10 @@ const S_PATH: Array = [
 ## its feet — so a boss (radius 38, so 99px) spawned entirely behind the bar and only its
 ## feet showed. The entry is at y=219 now, which clears it with room. v1 also STOPPED at a
 ## painted gatehouse two thirds across rather than leaving the map; v2 runs off the BOTTOM
-## edge at x=1156, chosen over the right edge because the tower palette covers everything
-## past PLAY_RIGHT (1296) and a leak under the panel is a leak nobody sees.
+## edge at x=1156, chosen over the right edge because the tower palette then covered the
+## whole right-hand strip and a leak under the panel is a leak nobody sees. The palette is a
+## short column in the top-right corner now (PALETTE_RECT), so the right edge is visible below
+## it — but the corner still is not, and the bottom exit costs nothing.
 const GLACIER_PATH: Array = [
 	Vector2(2, 219), Vector2(39, 219), Vector2(75, 222), Vector2(112, 215),
 	Vector2(167, 219), Vector2(208, 241), Vector2(244, 248), Vector2(274, 274),
@@ -245,7 +247,7 @@ const GLACIER_PATH: Array = [
 ## glacier's — re-check it if the board is ever re-graded again.
 ##
 ## Enters the LEFT edge at y=204 (over the y>150 floor the HUD imposes) and leaves through the
-## BOTTOM at x=1079, clear of PLAY_RIGHT.
+## BOTTOM at x=1079, clear of both UI_SCREEN_RECTS.
 const DESERT_PATH: Array = [
 	Vector2(2, 204), Vector2(2, 241), Vector2(42, 248), Vector2(79, 244),
 	Vector2(119, 244), Vector2(175, 237), Vector2(222, 237), Vector2(274, 244),
@@ -295,37 +297,55 @@ const S_OBSTACLES: Array = [
 const WAVES_PER_BOARD := 10
 const BOARD_SEQUENCE: Array = ["winding", "spiral", "s"]
 
-# Grid placement: towers snap to cells drawn faintly on the grass, flush against
-# the road. The whole board is sized for touch: on a landscape phone the 1280x720
-# design viewport stretches by ~0.5, so a 96x88 cell lands at ~48x44 CSS px —
-# right at the minimum comfortable tap target. Everything else in the game is
-# drawn to match that scale.
-const CELL_WIDTH := 96.0         ## Column width (px); columns step by this.
-const ROAD_HALF := 40.0          ## Road stone half-width; cell edges tile flush to this.
-## Min distance from a cell centre to the road centre-line. A cell flush BESIDE a
-## vertical road sits at ROAD_HALF + CELL_WIDTH*0.5 = 88; one flush ABOVE or BELOW a
-## horizontal road sits at ROAD_HALF + cell_height*0.5 = 84. This has to clear the
-## smaller of the two, with a little slack — the check is `>=` and leaning on float
-## equality would be fragile. Nothing is generated between 82 and 84, so the slack
-## costs nothing.
-const ROAD_CLEARANCE := 82.0
-## Screen px the tower palette occupies down the right-hand side. It is a Control in
-## Main.tscn anchored to the right at offset_left = -200, and (unlike every node in the
-## HUD, which is mouse_filter = IGNORE) it swallows clicks across that whole rect.
-const PALETTE_WIDTH := 200.0
-## Right edge of the buildable area, in WORLD px. The palette lives in SCREEN space while
-## the board lives in world space, and the camera fits the world to the screen, so the
-## panel covers a wider strip of world than its own width: 200 screen px over a 1536px
-## world shown on a 1280px viewport is 240px of board. Anything past here is under the
-## panel, where it cannot be seen and — because the panel eats the click — a tower could
-## never be upgraded or sold. Derived rather than written down because it was wrong for a
-## commit: it stayed at 1488 through a world resize and put two columns under the palette.
-const PLAY_RIGHT := WORLD_SIZE.x * (1.0 - PALETTE_WIDTH / SCREEN_SIZE.x)  # 1296
+## Road stone half-width, for every board and every stretch of every road. It is ONE number,
+## which is why a board painting may never draw a road that widens, narrows or converges with
+## perspective: the keepout, the traced centre-line and the drawn stone would stop agreeing.
+##
+## `CELL_WIDTH` (96) and `ROAD_CLEARANCE` (82) used to sit here, left behind by the 96x88 cell
+## grid that free placement replaced. ROAD_CLEARANCE had no readers at all. Their arithmetic
+## was not wasted, though — it is what sizes the per-board build grid below, because the
+## question it answered (how far from the road does a cell flush against it sit) is the same
+## question a rectilinear board asks.
+const ROAD_HALF := 40.0
+## The tower palette, in SCREEN px: one slim column of four slots in the top-right corner,
+## 8px under the HUD bar. `tower_palette.gd` places ITSELF from this rect and the placement
+## rule reads the same rect (through ui_world_rects), so the two cannot drift apart.
+##
+## It replaced a 200px panel that ran down the whole right-hand side of the screen and was
+## mostly empty: four towers filled two rows of it. That panel lived in the placement rule as
+## ONE vertical line, `PLAY_RIGHT` (world x 1296), past which nothing could be built. A column
+## is a rectangle, so the line became a list of rectangles, and the strip below the column is
+## ordinary board now — which changed the buildable spots on every board, measured with
+## --dump-board at the time.
+##
+## 4 x 84px slots + 3 x 6px gaps + 8px padding top and bottom = 370. Grow it with the roster.
+const PALETTE_RECT := Rect2(1188, 48, 84, 370)
+## The Pause and speed buttons (HUD.tscn, bottom-left). Listed for the same reason as the
+## palette: they take clicks, so a tower under them could never be selected — and before this
+## list existed no bound covered them at all, so a drag released on Pause built a tower
+## behind the button.
+const TIME_CONTROLS_RECT := Rect2(12, 664, 168, 48)
+## Every screen rect that both HIDES the board and EATS clicks on it. The HUD bar is not here
+## because it spans the full width, which PLAY_TOP already expresses as a line.
+const UI_SCREEN_RECTS: Array = [PALETTE_RECT, TIME_CONTROLS_RECT]
+
+static var _ui_world_rects: Array = []
+
+## UI_SCREEN_RECTS converted into WORLD px, computed once. The camera fits the 1536x864 world
+## onto the 1280x720 screen, so a screen rect covers 1.2x as much board as its own size.
+static func ui_world_rects() -> Array:
+	if _ui_world_rects.is_empty():
+		var k := WORLD_SIZE / SCREEN_SIZE
+		for r in UI_SCREEN_RECTS:
+			var screen_rect: Rect2 = r
+			_ui_world_rects.append(Rect2(screen_rect.position * k, screen_rect.size * k))
+	return _ui_world_rects
+
 ## Screen px of the HUD's top bar (HUD.tscn). Every HUD node is mouse_filter = IGNORE so
 ## it costs no clicks, but a cell half under the gold/lives readout is still half invisible.
 const HUD_BAR_HEIGHT := 40.0
-## Top edge of the buildable area, in WORLD px. Same screen-to-world conversion as
-## PLAY_RIGHT.
+## Top edge of the buildable area, in WORLD px: the same screen-to-world conversion as
+## ui_world_rects(), for a UI element that spans the whole width.
 const PLAY_TOP := WORLD_SIZE.y * (HUD_BAR_HEIGHT / SCREEN_SIZE.y)  # 48
 
 # --- Free placement ------------------------------------------------------------
@@ -445,20 +465,6 @@ const ROAD_KEEPOUT := ROAD_HALF + TOWER_SPRITE_HEIGHT * TOWER_BASE_HALF
 ## with `--dump-board` and look at a `--fill-board --shot`, which is what shows the overlap.
 const TOWER_GAP := 112.0
 
-# --- Build pads ----------------------------------------------------------------
-#
-# Free placement answered "may a tower stand here" continuously and correctly, and the board
-# it produced looked accidental: every tower at whatever angle the cursor happened to be, no
-# two rows agreeing. The pads keep exactly that terrain rule and put it on a MARKED lattice,
-# so a built-up board reads as a plan instead of a scatter. Nothing about what is legal
-# ground changes — can_build_at() is still the only judge, and the pads are the subset of it
-# the player is offered.
-#
-# The lattice is HEXAGONAL rather than square, and that is measured rather than a taste:
-# on the winding board a square lattice at this pitch marks 38 spots and the staggered one
-# 47, because the open meadows are small and roundish and a hex pack fits more of them into
-# the same grass. Rows still line up, which is the part the player sees.
-
 
 ## Scenery that BLOCKS building, as [centre, radius] in board px. FOUND IN THE PAINTING, not
 ## invented: tools/trace_road.py's companion scan looks for teal water in the board art and
@@ -470,6 +476,62 @@ const TOWER_GAP := 112.0
 ## here is a place the player is told "no" for a reason they cannot see at a glance.
 const OBSTACLES: Array = [
 	[Vector2(315, 715), 176.0],   # the lake and the pool the waterfall drops into
+]
+
+## The rectilinear board's road, as TURNING POINTS IN CELL COORDINATES rather than world
+## pixels. Every other board's road was read off a painting — traced by tools/trace_road.py or
+## tools/trace_ribbon.py, or typed out by eye — and the result is a curve however it was
+## produced. This one is declared, and the painting will have to follow IT rather than the
+## other way round.
+##
+## Cells, not pixels, because the two constraints that make a grid board work are both
+## statements about cells and neither survives being retyped as world coordinates: every leg
+## is axis-aligned (_path_from_cells refuses a diagonal outright), and the road occupies a
+## whole cell column or row, so the cell beside it sits 112px from the centre-line and the
+## cell above or below 88px — both clear of ROAD_KEEPOUT's 83.2. That is what makes the rank
+## of cells against the road buildable, and it is the thing a curved board cannot offer.
+##
+## THE SHAPE WAS SEARCHED, NOT DRAWN. The question a road layout has to answer here is the
+## one the whole board exists for — does it matter WHERE you build — and `--dump-board`
+## already reports the answer: the gap between `best 1` and `median`. On a board where
+## position is not a decision the two are the same number.
+##
+## A hand-drawn even serpentine (legs on rows 1, 4 and 6) measured 1.35-1.43, WORSE than the
+## winding board's 1.88-2.27 — evenly spaced parallel legs mean almost every cell sees exactly
+## two of them, which is uniformity wearing a grid's clothes. So ~6900 layouts were generated
+## and measured instead. This one measures 2.09-2.29 on 62 cells, and only 3-6 of those cells
+## are within a fifth of the best, so the good spots are actually scarce.
+##
+## FIVE constraints decide which layouts may be ranked at all, and each one throws out
+## layouts that score well by cheating:
+##
+##   * Enters through the LEFT edge below row 1. The HUD covers the top 48px of the world and
+##     a creep is drawn TOWER_SPRITE_HEIGHT above its feet, so a boss spawning higher than
+##     that arrives with only its feet on screen.
+##   * Leaves through the BOTTOM edge, so the last leg runs DOWNWARD. When this was searched
+##     the tower palette hid the whole right-hand strip, and a leak under the panel is a leak
+##     nobody sees. (It is a top-right column now; the grid gained two columns and this
+##     layout was NOT re-searched for them.)
+##   * Never touches itself. A road that shares a cell with itself is not one road.
+##   * NEVER RUNS ALONGSIDE ITSELF one cell away. This one came out of a screenshot rather
+##     than a number, and it cost the highest-scoring layout of all: rows are 88px apart and
+##     the road is ROAD_HALF * 2 = 80px wide, so two parallel legs a single cell apart are
+##     DRAWN as one 176px slab with an 8px seam down it. Creeps walking in opposite
+##     directions inside what reads as one wide road, and no buildable strip between them to
+##     make the doubling back worth anything.
+##   * NO DEAD GROUND: every legal cell must see some road. The least obvious of the five and
+##     the one that matters most — the best-scoring layouts were ones that walled off a
+##     corner, because a dozen worthless cells drag the median down and flatter the very
+##     ratio being ranked. A high ratio bought that way is a worse board, not a better one.
+##
+## What survives: a long lonely straight across row 2, a SHORT leg on row 5 tucked into the
+## right quarter, then a long run back west on row 7. Cells beside the straight see one leg;
+## the pocket at rows 4-6 on the right sees the short leg, the long one below it and the
+## vertical link between them — three — and that pocket is the whole decision. The worst cell
+## on the board still watches 5-10% of the road, so there are no traps either.
+const BASTION_CELLS: Array = [
+	Vector2i(0, 2), Vector2i(10, 2), Vector2i(10, 5), Vector2i(7, 5),
+	Vector2i(7, 7), Vector2i(0, 7), Vector2i(0, 8),
 ]
 
 ## Every board the game can install, keyed by the id `use_board()` takes. ONE table rather
@@ -508,6 +570,7 @@ const BOARDS := {
 		"thumb": "res://assets/art/maps/winding_thumb.png",
 		"waterfall_a": Vector4(0.045, 0.48, 0.055, 0.37),
 		"waterfall_b": Vector4.ZERO,
+		"ambience": "forest",
 		"name_key": "MAP_WINDING", "desc_key": "MAP_WINDING_DESC",
 		"star_gate": 0, "road_len": 3199.0,
 	},
@@ -519,6 +582,7 @@ const BOARDS := {
 		"thumb": "res://assets/art/maps/s_thumb.png",
 		"waterfall_a": Vector4(0.09, 0.12, 0.045, 0.09),
 		"waterfall_b": Vector4(0.07, 0.72, 0.06, 0.20),
+		"ambience": "forest",
 		"name_key": "MAP_S", "desc_key": "MAP_S_DESC",
 		"star_gate": 4, "road_len": 2518.0,
 	},
@@ -531,6 +595,7 @@ const BOARDS := {
 		# The meltwater does not fall anywhere, so neither region is used.
 		"waterfall_a": Vector4.ZERO,
 		"waterfall_b": Vector4.ZERO,
+		"ambience": "glacier",
 		"name_key": "MAP_GLACIER", "desc_key": "MAP_GLACIER_DESC",
 		"star_gate": 8, "road_len": 1681.0,
 	},
@@ -543,6 +608,7 @@ const BOARDS := {
 		# The oasis is a flat spring, so it ripples as a lake and falls nowhere.
 		"waterfall_a": Vector4.ZERO,
 		"waterfall_b": Vector4.ZERO,
+		"ambience": "desert",
 		"name_key": "MAP_DESERT", "desc_key": "MAP_DESERT_DESC",
 		"star_gate": 20, "road_len": 1514.0,
 	},
@@ -558,8 +624,30 @@ const BOARDS := {
 		"thumb": "res://assets/art/maps/ash_thumb.png",
 		"waterfall_a": Vector4.ZERO,
 		"waterfall_b": Vector4.ZERO,
+		"ambience": "ash",
 		"name_key": "MAP_ASH", "desc_key": "MAP_ASH_DESC",
 		"star_gate": 16, "road_len": 1743.0,
+	},
+	"bastion": {
+		# GREYBOX. Every other row names four PNGs; this one names none, and map.gd draws a
+		# flat ground with the road laid over it from Game.active_path instead. That is on
+		# purpose and it is the whole point of this board: the question being measured is
+		# whether a grid over a rectilinear road is worth having, and that answer must not
+		# wait on a painting. Once it is answered, the art follows the declared road rather
+		# than the road being traced out of the art.
+		"path": [], "subdiv": 1, "path_cells": BASTION_CELLS,
+		"obstacles": [], "build_zones": [],
+		# 11 columns x 8 rows, of which this road leaves 62 buildable. The origin is not
+		# cosmetic: can_build_at reserves TOWER_SPRITE_HEIGHT (96) above a tower, so a cell
+		# centre must sit at y >= 144 to be legal at all, and an origin that ignored that
+		# would silently donate its whole top row to the HUD.
+		"grid": {"cell": Vector2(112.0, 88.0), "origin": Vector2(32.0, 108.0)},
+		"art": "", "water": "", "build_mask": "", "thumb": "",
+		"waterfall_a": Vector4.ZERO,
+		"waterfall_b": Vector4.ZERO,
+		"ambience": "",
+		"name_key": "MAP_BASTION", "desc_key": "MAP_BASTION_DESC",
+		"star_gate": 24, "road_len": 3053.0,
 	},
 	"spiral": {
 		"path": PATH, "subdiv": 2, "obstacles": OBSTACLES, "build_zones": [],
@@ -569,6 +657,7 @@ const BOARDS := {
 		"thumb": "res://assets/art/maps/spiral_thumb.png",
 		"waterfall_a": Vector4(0.095, 0.63, 0.05, 0.14),
 		"waterfall_b": Vector4.ZERO,
+		"ambience": "forest",
 		"name_key": "MAP_SPIRAL", "desc_key": "MAP_SPIRAL_DESC",
 		"star_gate": 12, "road_len": 4042.0,
 	},
@@ -642,17 +731,84 @@ func _footprint_is_open(pos: Vector2) -> bool:
 			return false
 	return true
 
+# --- Build grid (rectilinear boards only) --------------------------------------
+#
+# Free placement answers "may a tower stand here" continuously and correctly, and the board
+# it produces looks accidental: every tower at whatever angle the cursor happened to be, no
+# two rows agreeing. A grid keeps exactly that terrain rule — can_build_at() is still the
+# only judge — and quantises WHERE the question is asked, so a built-up board reads as a plan
+# instead of a scatter.
+#
+# It is offered per board rather than everywhere because a grid and a rectilinear road are
+# ONE decision. See active_grid_cell above for why a lattice over a painted curve is the
+# worst of both, and BASTION_CELLS for the road that earns one.
+#
+# The cell is 112x88. The width is TOWER_GAP itself — the spacing measured against a painted
+# tower's 108-147px drawn width, which is the dimension where neighbours read as one mass if
+# they are closer. The height is the retired ROAD_CLEARANCE's arithmetic: a cell flush ABOVE
+# or BELOW a horizontal road run sits ROAD_HALF + 44 = 84px from the centre-line, clearing
+# ROAD_KEEPOUT (83.2) by a hair, while one flush BESIDE a vertical run sits at 112. That
+# asymmetry is why the cell is not square, and it is what makes the row of cells against the
+# road legal — which is most of why a rectilinear board is generous where a curved one is not.
+
+## True when the active board quantises placement to a grid.
+func has_grid() -> bool:
+	return active_grid_cell.x > 0.0 and active_grid_cell.y > 0.0
+
+## Which cell a world point falls in. Meaningless without a grid; callers guard with
+## has_grid(), and the ZERO returned otherwise is never compared against anything real.
+func cell_of(pos: Vector2) -> Vector2i:
+	if not has_grid():
+		return Vector2i.ZERO
+	var local := pos - active_grid_origin
+	return Vector2i(floori(local.x / active_grid_cell.x), floori(local.y / active_grid_cell.y))
+
+## How many cells the grid covers, as (columns, rows). Derived from the play area rather
+## than stored, so a board declares only where its lattice starts and how big a cell is —
+## the two numbers that have to line up with its road.
+func grid_size() -> Vector2i:
+	if not has_grid():
+		return Vector2i.ZERO
+	return Vector2i(int(ceilf((WORLD_SIZE.x - active_grid_origin.x) / active_grid_cell.x)),
+			int(ceilf((WORLD_SIZE.y - active_grid_origin.y) / active_grid_cell.y)))
+
+## The world point at the middle of a cell.
+func cell_centre(cell: Vector2i) -> Vector2:
+	return active_grid_origin + Vector2((float(cell.x) + 0.5) * active_grid_cell.x,
+			(float(cell.y) + 0.5) * active_grid_cell.y)
+
+## Where a tower aimed at `pos` would actually stand: `pos` itself on a free board, the
+## containing cell's centre on a grid board. THE ONE PLACE PLACEMENT IS QUANTISED — main.gd's
+## _placement_point() is its only gameplay caller, and because the drag ghost and the drop
+## both go through that, the preview cannot answer a different question from the drop.
+func snap_to_grid(pos: Vector2) -> Vector2:
+	if not has_grid():
+		return pos
+	return cell_centre(cell_of(pos))
+
 ## True when a tower of TOWER_RADIUS may stand here. `others` is every tower already on the
 ## board (main passes its Towers node's children); pass an empty array to ask only about
 ## the terrain, which is what the coverage harness does.
 func can_build_at(pos: Vector2, others: Array = []) -> bool:
-	if pos.x - TOWER_RADIUS < 0.0 or pos.x + TOWER_RADIUS > PLAY_RIGHT:
+	if pos.x - TOWER_RADIUS < 0.0 or pos.x + TOWER_RADIUS > WORLD_SIZE.x:
 		return false
 	# Upward, the sprite is what has to fit, not the footprint: a tower is hung from its
 	# ground anchor and drawn TOWER_SPRITE_HEIGHT above it, so reserving TOWER_RADIUS here is
 	# what let a tower near the top of the board lose its upper half behind the HUD.
 	if pos.y - TOWER_SPRITE_HEIGHT < PLAY_TOP or pos.y + TOWER_RADIUS > WORLD_SIZE.y:
 		return false
+	# Nothing under the UI that takes clicks. The box is what the player has to be able to SEE
+	# and TAP: the sprite's height upward, as above, and PICK_RADIUS sideways — the tap disc,
+	# which is wider than the footprint — so every tower that stands can also be selected.
+	#
+	# This is also the only thing that refuses a drag released ON the palette: main.gd's
+	# _input catches the release before the GUI does, so the world point under the column has
+	# to be illegal ground in its own right.
+	var body := Rect2(pos.x - PICK_RADIUS, pos.y - TOWER_SPRITE_HEIGHT,
+			PICK_RADIUS * 2.0, TOWER_SPRITE_HEIGHT + TOWER_RADIUS)
+	for rect in ui_world_rects():
+		if (rect as Rect2).intersects(body):
+			return false
 	if dist_to_road(pos) < ROAD_KEEPOUT:
 		return false
 	for entry in active_obstacles:
@@ -676,6 +832,16 @@ func can_build_at(pos: Vector2, others: Array = []) -> bool:
 			return false
 	elif not _footprint_is_open(pos):
 		return false
+	# ONE TOWER PER CELL on a grid board, rather than TOWER_GAP between centres. Not a
+	# refinement — the distance rule is wrong here and silently so: cells are 88px apart
+	# vertically against a TOWER_GAP of 112, so it would refuse every second ROW of the
+	# lattice, and the holes would read as a defect in the grid rather than in the rule.
+	if has_grid():
+		var mine := cell_of(pos)
+		for other in others:
+			if other != null and cell_of(other.position) == mine:
+				return false
+		return true
 	for other in others:
 		if other != null and pos.distance_to(other.position) < TOWER_GAP:
 			return false
@@ -1440,6 +1606,18 @@ var active_board_id: String = ""
 ## image whose get_pixel() does not work — hence the decompress in _load_build_mask().
 var active_build_mask: Image = null
 
+## The active board's BUILD GRID, or ZERO for a board that has none. A board with a grid
+## quantises placement to cell centres (see snap_to_grid); a board without one places freely,
+## which is every painted board in the roster.
+##
+## It is board DATA rather than a mode switch for the same reason the build mask is: a grid
+## only works where the road is rectilinear. The legal ground is a band offset ROAD_KEEPOUT
+## from the road, so on a curved road a square lattice cuts that band at a different angle at
+## every bend — which is exactly why the retired pad lattice marked only 12 spots on the
+## winding board. Six painted boards keep free placement and carry no `grid` field at all.
+var active_grid_cell: Vector2 = Vector2.ZERO
+var active_grid_origin: Vector2 = Vector2.ZERO
+
 ## Cumulative distance from active_path[0] to each waypoint. Towers
 ## rank enemies by how far along the road they are (the First / Last targeting modes)
 ## off this table, so no enemy has to carry its own odometer.
@@ -1509,6 +1687,11 @@ func locale_display_name() -> String:
 ## cleared. Nothing draws between here and the next use_board(); Main installs one in _ready().
 func release_board() -> void:
 	active_board_id = ""
+	# The grid goes with it. Leaving it behind would let a released board's lattice quantise
+	# placement on whatever is configured next - the same class of bug as the board bounce
+	# this function exists to replace, and just as silent.
+	active_grid_cell = Vector2.ZERO
+	active_grid_origin = Vector2.ZERO
 
 ## Selects the endless board for `wave`. The last available profile remains active after its
 ## chapter, so an unfinished map slot never sends a deep run back to an earlier layout.
@@ -1530,8 +1713,49 @@ func use_board(board_id: String) -> void:
 		push_error("Game.use_board: unknown board '%s' (have %s)" % [board_id, str(BOARDS.keys())])
 		return
 	var def: Dictionary = BOARDS[board_id]
-	configure_board(_smooth_path(def["path"], int(def["subdiv"])),
-			def["obstacles"], def["build_zones"], board_id)
+	var cells: Array = def.get("path_cells", [])
+	var path: Array = []
+	if cells.is_empty():
+		path = _smooth_path(def["path"], int(def["subdiv"]))
+	else:
+		path = _path_from_cells(cells, def.get("grid", {}))
+	configure_board(path, def["obstacles"], def["build_zones"], board_id)
+
+## Expands a road DECLARED as cell turning points into the world-space polyline every other
+## system reads. Each run is walked cell by cell, so the result is already as dense as a
+## smoothed road and needs no subdivision — and must not get any, since the 90 degree corners
+## are the point and Catmull-Rom would round them off.
+##
+## The two ends are pushed one cell beyond the board so creeps walk on from off-screen and
+## leave the same way, which is what every traced board does by starting and ending outside
+## WORLD_SIZE.
+func _path_from_cells(cells: Array, grid: Dictionary) -> Array:
+	if cells.size() < 2 or grid.is_empty():
+		push_error("Game._path_from_cells needs two or more cells and a grid")
+		return []
+	var cell: Vector2 = grid["cell"]
+	var origin: Vector2 = grid["origin"]
+	var out: Array = []
+	var at: Vector2i = cells[0]
+	out.append(origin + Vector2((float(at.x) + 0.5) * cell.x, (float(at.y) + 0.5) * cell.y))
+	for i in range(1, cells.size()):
+		var target: Vector2i = cells[i]
+		var step := Vector2i(signi(target.x - at.x), signi(target.y - at.y))
+		# A diagonal leg would break the one property the whole grid rests on: that the cell
+		# beside the road is a known distance from it. Refuse it here rather than let the
+		# board ship with a stretch nothing can be built along.
+		if step.x != 0 and step.y != 0:
+			push_error("Game._path_from_cells: leg %s -> %s is diagonal" % [at, target])
+			return []
+		while at != target:
+			at += step
+			out.append(origin + Vector2((float(at.x) + 0.5) * cell.x,
+					(float(at.y) + 0.5) * cell.y))
+	var lead: Vector2 = (out[0] - out[1]).normalized() * cell.length()
+	out.insert(0, (out[0] as Vector2) + lead)
+	var tail: Vector2 = (out[-1] - out[-2]).normalized() * cell.length()
+	out.append((out[-1] as Vector2) + tail)
+	return out
 
 ## Installs one board's gameplay geometry. The painting itself belongs to that scene's Map
 ## node; this is only the geometry every gameplay system must agree on.
@@ -1544,6 +1768,11 @@ func configure_board(path: Array, obstacles: Array = [], build_zones: Array = []
 	active_obstacles = obstacles.duplicate(true)
 	active_build_zones = build_zones.duplicate(true)
 	active_build_mask = _load_build_mask(board_id)
+	# A board built by configure_board() directly (the id "custom") has no BOARDS row, so it
+	# gets no grid — free placement, which is what every caller of that path expects.
+	var grid: Dictionary = BOARDS.get(board_id, {}).get("grid", {})
+	active_grid_cell = grid.get("cell", Vector2.ZERO)
+	active_grid_origin = grid.get("origin", Vector2.ZERO)
 	_path_cum = PackedFloat32Array()
 	_path_cum.resize(active_path.size())
 	for i in range(1, active_path.size()):

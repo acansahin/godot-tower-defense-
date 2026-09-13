@@ -17,10 +17,17 @@ one tower can watch — rather than decoration:
 | **Spiral Arena** | 12 ★ | the longest road and the least ground; Fire reaches three quarters of it |
 | **Ashfall Plain** | 16 ★ | burnt ash under a live volcano; the flows decide where you may stand |
 | **Salt Basin** | 20 ★ | a dry lake floor: the most buildable ground and the shortest road |
+| **Bastion Works** | 24 ★ | the one BUILD GRID map: square plots, right-angled road, no painting yet |
 
-A locked map is visible as a target rather than hidden. All six are hand-painted 1536x864
-worlds whose gameplay roads are **traced out of their paintings**, not authored beside them,
-and every one of their properties lives in a single `Game.BOARDS` row.
+A locked map is visible as a target rather than hidden. Six of the seven are hand-painted
+1536x864 worlds whose gameplay roads are **traced out of their paintings**, not authored
+beside them, and every one of their properties lives in a single `Game.BOARDS` row.
+
+**Bastion Works is the exception in both directions**: its road is declared in cell
+coordinates and the picture will have to follow it, and it has no picture yet — it draws as
+a flat greybox so its SHAPE could be played and measured before anything was painted. It is
+also the only map where towers snap to a grid, which is a property of that board rather than
+of the game: a lattice only works where the road is made of right angles.
 
 Enemy speed is scaled per map so a wave crosses any of the three in the same time; what
 differs between them is **coverage** — how much road one tower can watch — which is what
@@ -127,10 +134,14 @@ the only audio file that ships is the background music track. See §6.
 ### Controls
 - The game opens on a **title screen**: **Play**, **How to Play** (a controls
   summary), a **Sound** toggle, and **Quit** (hidden on Web).
-- **Drag a tower from the palette** (top-right, lists every tower with its colour
-  and cost) onto **any legal ground** to build it. A green ghost disc marks a legal spot,
-  red an illegal/unaffordable one, and the ghost also previews **the range that tower would
-  cover** — so you can judge placement before spending the gold.
+- **Two ways to build.** DRAG a tower from the palette (a slim column in the top-right
+  corner: each tower's own picture and its price) onto legal ground and release it. Or TAP the palette slot — the slot
+  lights up and the tower stays armed — then tap where it should go; tap the lit slot again
+  (or right-click) to call it off. The tap route is the one that works with a thumb, and
+  both go through the same rule.
+- **The ghost answers three things, not two.** GREEN: this spot is free. AMBER: the ground
+  is fine but you cannot afford it. RED: you cannot build here. It also previews **the range
+  that tower would cover**, so placement can be judged before the gold is spent.
 - **Hover a placed tower** to light up its range ring. Ranges stay faint otherwise, so a
   full board doesn't turn into a tangle of overlapping circles.
 - **Place a tower anywhere the terrain allows, and the terrain decides.** Legal ground is
@@ -141,6 +152,8 @@ the only audio file that ships is the background music track. See §6.
   and writes a mask the placement rule samples, so the forest really is closed ground rather
   than merely looking closed. A lattice of marked pads used to stand between the rule and
   the player; it made legal spots unmissable and decided where towers went, and it is gone.
+  **On Bastion Works the ground is a grid of square plots instead**, drawn all the time and
+  one tower to a plot — same rule underneath, asked at 62 fixed points rather than anywhere.
   The ghost never disappears over bad ground; it turns red, because a ghost that vanishes
   tells you nothing
   about why.
@@ -221,7 +234,7 @@ godottowerdefense/
     ├── menu.gd              # Title screen: play / how-to-play / sound / quit
     ├── main.gd             # Wires the level together (placement, upgrade, fuse, sell)
     ├── map.gd              # Draws the painted board (+ the traced-road overlay, off)
-    ├── grid.gd             # Shades the ground placement refuses, while a tower is dragged
+    ├── grid.gd             # Refused ground while placing; the cell lattice on a grid board
     ├── sprites.gd          # Loads the painted tower art + its ground anchor; null
     │                       # for anything not painted yet, so the code art falls back
     ├── enemy.gd            # Path walking, health, flyer visuals, slow/poison
@@ -234,8 +247,8 @@ godottowerdefense/
     ├── effects.gd          # Object pool on the $Effects node (floating text + bursts)
     ├── area_ring.gd        # Expanding ring at an effect's REAL radius: every splash hit, and the area slow
     ├── wave_manager.gd     # Spawns the seed table + generated waves (archetypes, escorts, bosses, economy)
-    ├── tower_palette.gd    # Top-right drag-source, lists Game.TOWER_ORDER
-    ├── placement_preview.gd # Green/red ghost footprint shown while dragging
+    ├── tower_palette.gd    # Top-right column: one icon + price per tower
+    ├── placement_preview.gd # Green/amber/red ghost footprint shown while placing
     ├── floating_text.gd    # Rising, fading damage / gold label (built in code)
     ├── death_burst.gd      # Expanding ring of dots left by a dying enemy
     ├── hud.gd              # HUD labels + the time controls (pause / speed)
@@ -265,7 +278,7 @@ stays in sync with the **M** key.
 ```
 Main (Node2D)               [main.gd]
 ├── Map (Node2D)            [map.gd]   -> the painted board, stretched to WORLD_SIZE
-├── Grid (Node2D)           [grid.gd]  -> shades refused ground (only while a drag is in progress)
+├── Grid (Node2D)           [grid.gd]  -> refused ground while placing; the cell lattice on a grid board
 │                                         (still named Grid; there is no grid)
 ├── Enemies (Node2D)                   -> enemies spawned here at runtime
 ├── Towers (Node2D)                    -> built towers live here
@@ -336,8 +349,8 @@ globally accessible as `Game`. It holds the board sequence and profiles (`WINDIN
 `PATH`, build zones and obstacles), the active map layout, the placement rule
 (`TOWER_RADIUS`, `ROAD_HALF`, `ROAD_KEEPOUT`, `TOWER_GAP` and the `can_build_at()` that
 reads the active profile) and the
-bounds of the play area (`PLAY_RIGHT`, `PLAY_TOP` — derived from the screen-space UI that
-covers the board, not written down) plus the shared `dist_to_road()` helper, the
+bounds of the play area (`PLAY_TOP` and `ui_world_rects()` — derived from the screen-space
+UI that covers the board, not written down) plus the shared `dist_to_road()` helper, the
 costs, and the mutable `gold` / `lives` with signals. Four more autoloads sit beside it:
 `Balance` (`scripts/balance.gd`, every tunable curve and economy number),
 `Run` (`scripts/run.gd`, the current run's roguelite upgrades and unlocks),
@@ -369,18 +382,24 @@ editing three files and hunting for un-named literals; it is now one file.
   `Game.selected_board` is the one the next run will install. `BOARD_SEQUENCE` /
   `use_board_for_wave()` remain as unreached Endless-mode infrastructure.
 - **`Game.can_build_at(pos, others)`** *is* the placement rule, and the only one: inside
-  the play area (`PLAY_TOP` … `PLAY_RIGHT`, so no tower is half under the HUD bar or under
-  the palette, which also eats the click), at least `ROAD_KEEPOUT` from the road, clear of
+  the play area (below `PLAY_TOP` and clear of `Game.UI_SCREEN_RECTS` — the palette column
+  and the time controls — so no tower is half under the HUD bar or under a control that eats
+  the click), at least `ROAD_KEEPOUT` from the road, clear of
   every circle in `OBSTACLES`, on open ground per the board's build mask (nine samples
   around the tower's base, so it cannot perch on the last grass texel with its back in a
   tree), and at least `TOWER_GAP` from any tower already standing. A board that publishes an
   explicit `active_build_zones` allowlist uses that INSTEAD of the mask, never both — no
   shipped board sets one today.
-- **Placement is free**: `main.gd` `_placement_point()` returns the cursor, and the ghost and
-  the drop both validate through `can_build_at()`, so the preview cannot disagree with the
-  result. A hexagonal lattice of marked pads used to sit between them and has been removed
-  along with `PAD_PITCH`, `PAD_SNAP`, `PAD_ORIGIN_STEPS`, `Game.pads()`, `has_pads()` and
-  `nearest_pad()`.
+- **Where a tower may be AIMED is per-board data.** `main.gd` `_placement_point()` passes the
+  cursor through `Game.snap_to_grid()`, which returns it unchanged on a board with no `grid`
+  field (all six painted ones) and the containing cell's centre on one with it (Bastion
+  Works). The ghost and the drop both go through that one function and then through
+  `can_build_at()`, so the preview cannot disagree with the result. A hexagonal lattice of
+  marked pads used to sit between them and has been removed along with `PAD_PITCH`,
+  `PAD_SNAP`, `PAD_ORIGIN_STEPS`, `Game.pads()`, `has_pads()` and `nearest_pad()`.
+- **A grid board replaces the spacing rule with one tower per cell.** Not a refinement: cells
+  are 88px apart vertically against a `TOWER_GAP` of 112, so the distance rule would refuse
+  every second row of the lattice.
 - **`Game.TOWER_GAP` is what spaces towers now, and it is paired with
   `Game.TOWER_SPRITE_HEIGHT`.** 112px against a 96px sprite. It was 68px — two 30px
   footprints plus air — which is right for the tap disc and wrong for art drawn 108-147px
@@ -400,10 +419,11 @@ editing three files and hunting for un-named literals; it is now one file.
   every square `can_build_at()` rejects, but only while `Main` has switched it on for a
   drag. The painting already says where the lake and the road are; this is for the margins,
   which it cannot.
-- **`TowerPalette`** (top-right) draws every tower in `Game.TOWER_ORDER` with its
-  colour and cost and emits `drag_started(id)` when pressed. **`Main`** then follows the
-  cursor with the **`Preview`** ghost — green or red per `can_build_at()` — and builds on
-  release if the spot is legal and affordable.
+- **`TowerPalette`** (a column in the top-right corner, placed by `Game.PALETTE_RECT`) draws
+  every tower in `Game.TOWER_ORDER` as its Lv1 sprite and price and emits `drag_started(id)`
+  when pressed. **`Main`** then follows the cursor with the **`Preview`** ghost — green,
+  amber or red per `can_build_at()` and the gold — and builds on release, or on the next
+  tap, if the spot is legal and affordable.
 - **`WaveManager`** reads the fixed 24-entry `Game.WAVES` table using plain
   `Timer` nodes (so a restart can't leave a spawn loop running). Each entry picks
   a **creep archetype** from `Game.WAVE_TYPES` (normal / fast / swarm / tank /
@@ -572,12 +592,16 @@ so on a landscape phone everything arrives at roughly half scale — a 60px towe
 lands at ~30 CSS px, which is why the tap target is the *drawn* sprite (much bigger than
 the footprint) and why the sell × sits on the tower rather than in a panel.
 
-The UI eats into the board on two sides, and placement knows it: `Game.PLAY_TOP` and
-`Game.PLAY_RIGHT` convert the HUD bar (40 screen px) and the tower palette (200) into world
-px, and `can_build_at()` keeps a whole tower inside them. The palette matters most — it
-swallows clicks across its whole rect, so a tower under it could never be upgraded or sold.
-`PLAY_RIGHT` was a literal for a while and went stale through a world resize; it is now
-derived. The road is kept out of that strip too.
+The UI eats into the board in three places, and placement knows it. `Game.PLAY_TOP` converts
+the HUD bar (40 screen px) into a world line; `Game.UI_SCREEN_RECTS` lists the two controls that
+sit ON the board and take clicks — the tower palette column (`PALETTE_RECT`, 84x370 in the
+top-right corner) and the Pause/speed buttons — and `Game.ui_world_rects()` converts those.
+`can_build_at()` refuses any tower whose tap disc or sprite would overlap one, so every tower
+that stands can be selected. The palette used to be a 200px panel down the whole right side,
+expressed as one line (`PLAY_RIGHT`, world x 1296); when it became a column that line became
+rectangles and the strip below the column became board, which added spots on every map.
+`--dump-board` prints `road under UI` so a road running beneath a control is a number rather
+than something noticed in play.
 
 If you ever change `TOWER_RADIUS`, these have to move with it or the game quietly
 rebalances itself: `TOWER_DEFS` ranges and splash radii, `tower.gd`

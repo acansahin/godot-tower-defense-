@@ -106,6 +106,13 @@ purchase first, board before depth, the first free pad rather than the best one,
 chosen against the wave's armour, and it never sells. A human plays better than this, so a
 run it clears is not proof the run is easy — but a run it dies early in IS proof of a
 problem. It is what `FINAL_HP_FACTOR` 40 -> 55 and the Pure damage cut were read off),
+`--show-build-grid`
+(stands three towers on the board, arms a placement and turns the build overlay on, so what
+the player is shown WHILE PLACING can be photographed: a grid board's lattice, the cells it
+refuses, the cells already taken, and the ghost. That overlay is the only part of placement
+no number reaches, and reaching it by playing means holding a drag while a screenshot is
+taken — which a harness cannot do, since MCP cannot inject input and `--shot` fires on a
+timer. **Drop `--headless`**),
 `--show-fusion-panel`
 (stands one Lv2 tower on an empty board, fuses it once, unlocks three of the four elements
 and opens its panel, so the panel's `_draw` can be photographed without playing to an avatar
@@ -221,12 +228,43 @@ same tool's scan found. Re-trace after any change to the art and check the resul
 `map.gd`'s `show_road` overlay — it draws the traced line back over the painting, which is
 the only check that catches enemies walking beside the road rather than on it.
 
-**Placement is FREE: `Game.can_build_at()` is the whole rule and it answers about any
-point.** Off the road by `ROAD_KEEPOUT`, out of `OBSTACLES`, inside `PLAY_TOP`/`PLAY_RIGHT`,
-on open ground (below), and `TOWER_GAP` from its neighbours. `main.gd` `_placement_point()`
-returns the cursor, and both the ghost and the drop validate through `can_build_at()`, so
-the preview cannot disagree with the result. `grid.gd` shades the ground the rule REFUSES,
-and only while a tower is being dragged, so the answer is visible before the question.
+**`Game.can_build_at()` is the whole rule on every board and it answers about any point.**
+Off the road by `ROAD_KEEPOUT`, out of `OBSTACLES`, below `PLAY_TOP`, out from under the UI
+that takes clicks (`Game.UI_SCREEN_RECTS`), on open ground (below), and clear of its
+neighbours. `main.gd` `_placement_point()` and the drop both
+validate through it, so the preview cannot disagree with the result. `grid.gd` draws what it
+refuses, so the answer is visible before the question.
+
+**WHERE a tower may be aimed is per-board data, and there are two answers.** A `Game.BOARDS`
+row with no `grid` field places FREELY: the cursor is the spot, the legal set is continuous,
+and `grid.gd` shades the refused ground while something is being placed. A row WITH one
+quantises to cell centres through `Game.snap_to_grid()`, and `grid.gd` draws the lattice
+itself — permanently, since a board with a grid has a road drawn to match it.
+
+**A grid and a rectilinear road are ONE decision, not two.** The legal ground is a band
+offset `ROAD_KEEPOUT` from the road; on a Catmull-Rom curve that band is a curve, and a square
+lattice cuts it at a different angle at every bend. That is not a theory — it is what the
+retired pad lattice measured: **12** spots on the winding board. Do not put a grid on a
+painted curved board; six of the seven rows deliberately have no `grid` field.
+
+The one gate a grid changes is the neighbour clause: **one tower per cell** instead of
+`TOWER_GAP` between centres. Cells are 88px apart vertically against a `TOWER_GAP` of 112, so
+the distance rule would refuse every second ROW of the lattice and the holes would read as a
+defect in the grid rather than in the rule.
+
+**Two ways to place, and the second is the one that works on a phone.** Press-drag-release is
+the mouse gesture. Press and release IN THE SAME SPOT (`main.gd` `TAP_SLOP`) instead ARMS the
+tower: the ghost stays on the board, the palette slot lights up, and the next tap on open
+ground builds it. Cancel by re-tapping the armed slot, or right-clicking. The second tap is
+handled in `_unhandled_input` rather than `_input` precisely so a tap on a button or on the
+palette reaches that control instead of dropping a tower behind it. Note Godot's
+`emulate_mouse_from_touch` is on by default, so a finger already arrived as a mouse event —
+what was missing was never the touch events, it was an interaction that does not ask a thumb
+to hold a drag across the whole screen.
+
+**The ghost has THREE answers, not two.** Ground and price are separate refusals in `_drop()`,
+and while they shared one red the preview could not tell a blocked spot from an unaffordable
+one. Amber is the price; red is the ground.
 
 **A hex lattice of marked pads used to stand between the two, and it has been removed.** It
 existed because free placement produced boards that looked accidental, and it was paid for
@@ -240,11 +278,14 @@ of those numbers.**
 What went with it: `PAD_PITCH`, `PAD_SNAP`, `PAD_ORIGIN_STEPS`, `Game.pads()`,
 `has_pads()`, `nearest_pad()`, the origin search, and `grid.gd`'s pad drawing. What stayed
 is everything that was actually load-bearing — the build mask, `ROAD_KEEPOUT`,
-`TOWER_GAP`, `FOOTPRINT_PROBE` and the `PLAY_TOP`/`PLAY_RIGHT` bounds.
+`TOWER_GAP`, `FOOTPRINT_PROBE` and the play-area bounds (`PLAY_TOP`, plus the UI rects that
+have since replaced `PLAY_RIGHT`).
 
-`--dump-board` and `--fill-board` sweep `main.gd` `_buildable_lattice()`, which now SAMPLES
-the continuous legal set at half the tower spacing rather than enumerating slots. Read its
-count as a capacity estimate: a player placing by hand fits a slightly different number.
+`--dump-board` and `--fill-board` sweep `main.gd` `_buildable_lattice()`, which gives two
+different answers because the boards do. On a free board it SAMPLES the continuous legal set
+at half the tower spacing — read that count as a capacity estimate, since a player placing by
+hand fits a slightly different number. On a grid board it ENUMERATES every cell, so the count
+is the board's specification. `--dump-board` says which it printed.
 
 A board that supplies an explicit `active_build_zones` allowlist gets NO pads — its own rings
 would already be its guides. No shipped board sets this today (the interactive tutorial that
@@ -253,7 +294,7 @@ used to, drawing rings around six pockets, has been removed), but the mechanism 
 `--fill-board` sweep the pads when a board has them (`main.gd` `_buildable_lattice()`), so
 the harnesses measure the spots the player is actually offered.
 
-## There are SIX boards, and one table decides everything about them
+## There are SEVEN boards, and one table decides everything about them
 
 `Game.BOARDS` is the whole registry: road control points, smoothing, obstacles, the
 painting, the water mask, the waterfall regions, the open-ground mask, the map-panel
@@ -261,24 +302,59 @@ thumbnail, the display keys, the star gate and the measured road length. **A boa
 
 | id | name | road | spots | play-sim floor | shape of the fight |
 |---|---|---|---|---|---|
-| `winding` | Winding Forest | 3199px | 33 | w32 | the default; middling coverage |
-| `s` | Twin Falls | **2518px** | 29 | w36 | 100% of the road reachable, 4 towers cover it — build wide |
-| `spiral` | Spiral Arena | **4042px** | **24** | w36 | least ground, and Fire reaches only **76%** of the road |
-| `glacier` | Glacier Pass | 1685px | 28 | w36 | crevasses cut the ice into pockets; 4 towers cover it |
-| `ash` | Ashfall Plain | 1743px | 37 | **w43** | burnt ash under a live volcano; the most generous coverage in the roster |
-| `desert` | Salt Basin | **1514px** | **54** | **w31** | a dry lake floor: the most ground and the shortest road |
+| `winding` | Winding Forest | 3199px | 35 | w37 | the default; middling coverage |
+| `s` | Twin Falls | **2518px** | 34 | **w25** | 100% of the road reachable, 4 towers cover it — build wide |
+| `spiral` | Spiral Arena | **4042px** | 32 | w27-28 | longest road, and Fire reaches only **76%** of it |
+| `glacier` | Glacier Pass | 1685px | 34 | w29-32 | crevasses cut the ice into pockets; 4 towers cover it |
+| `ash` | Ashfall Plain | 1743px | 41 | w32-33 | burnt ash under a live volcano; the most generous coverage in the roster |
+| `desert` | Salt Basin | **1514px** | **61** | w32 | a dry lake floor: the most ground and the shortest road |
+| `bastion` | Bastion Works | 3053px | **72 cells** | w25 (at 62 cells, not re-run) | the only BUILD GRID board, and the only GREYBOX — see below |
+
+**Measured after the tower palette became a top-right column** (see "The palette is a column"
+below), which opened the strip under it and moved every spot count. Ranges are two runs.
 
 Those numbers come from `--dump-board --map:<id>` and `--play-sim --map:<id>`, and they are
-the reason the six play differently: it is COVERAGE, not decoration. Re-run both after
+the reason the seven play differently: it is COVERAGE, not decoration. Re-run both after
 touching any of them.
 
-**The last two columns disagree, and that is the useful part.** `desert` has the most
-buildable ground of any board — 54 spots against the winding board's 33 — and the floor
-player dies EARLIEST on it, wave 31 against 36 on three of the others. Nothing is wrong with
-the board: `--play-sim` buys board before depth and never sells, so 54 spots is 54 ways to
-spend a run's gold on Lv1 towers. **Spots are not difficulty**, a wide board cannot be
+**The last two columns disagree, and that is the useful part.** Before the palette change
+`desert` had the most buildable ground of any board — 54 spots against the winding board's
+33 — and the floor player died EARLIEST on it. Nothing is wrong with the board: `--play-sim`
+buys board before depth and never sells, so 54 spots is 54 ways to spend a run's gold on Lv1
+towers.
+
+**The palette change then reproduced that on purpose, and the A/B is the clearest proof of it
+there is.** Same code, wiped save, HEAD against the column:
+
+| board | spots | HEAD floor | after | fusions reached |
+|---|---|---|---|---|
+| `s` | 29 -> 34 | w44 | w25, w25 | yes -> **none** |
+| `spiral` | 24 -> 32 | w41 | w28, w27 | yes -> **none** |
+| `glacier` | 28 -> 34 | w39 | w32, w29 | yes -> **none** |
+| `ash` | 37 -> 41 | w33 | w33, w32 | none in either |
+| `winding` | 33 -> 35 | w33-35 | w37 | yes in both |
+
+Read the `el=` field of the PLAY-SIM line against `towers=`: `el` greater than `towers` means
+some tower carries more than one element, i.e. the player fused. On the three boards that
+collapsed, the extra spots are exactly what kept the floor player buying Lv1 base towers until
+the avatar waves arrived, so it never fused at all — and a board of Lv2 base towers is what
+dies on wave 25. Where it was not fusing anyway (`ash`) or kept fusing (`winding`), nothing
+moved. **That is a property of this player's policy, not proof the maps got harder for a
+human** — but it is also not noise, and it is the number to argue with before keeping the
+strip open. **Spots are not difficulty**, a wide board cannot be
 assumed to be the gentle one, and the unlock ladder is ordered off the played result rather
 than off the count.
+
+**Never compare a `--play-sim` run against this table; compare it against a run of the old
+code taken the same day.** The harness is not deterministic: it spends on a `delta`-driven
+clock at 8x, so frame timing moves when each purchase lands. On one unchanged build with a
+wiped save, three `winding` runs died on w33, ~w33 and w35+. Worse, a HEAD checkout run with a
+wiped save gave `s` w44, `glacier` w39, `ash` w33 and `spiral` w41 against the w36/w36/w43/w36
+this table used to print — up to ten waves from the single runs it was built on. The reliable
+method is an A/B: a `git worktree` of HEAD beside the working tree, the same board, run
+back to back (never in parallel — both write the same `user://save.json`). Also give it frames: a full 50-wave
+run needs ~40,000 `--quit-after`, and 12,000 cuts a surviving board off around wave 26 with no
+PLAY-SIM line printed, which reads exactly like a hang.
 
 Three things about this are load-bearing:
 
@@ -303,8 +379,11 @@ HUD covers the world's top 48px and a creep is drawn `radius * 2.6` tall ABOVE i
 a boss (radius 38 → 99px) spawned entirely behind the bar and only its feet showed. **A spawn
 wants `y > 150`**. Its road also ENDED at a painted gatehouse two thirds across instead of
 leaving the map. The replacement exits through the BOTTOM edge, and bottom rather than right
-because the tower palette covers everything past `PLAY_RIGHT` (1296) — a leak under the panel
-is a leak nobody sees. Both constraints are written into `docs/board-art-prompt.md`.
+because the tower palette then covered the whole right-hand strip — a leak under the panel
+is a leak nobody sees. Both constraints are written into `docs/board-art-prompt.md`. The
+palette is a top-right column now, and `--dump-board` prints `road under UI` for every board,
+so this is a number rather than a warning: **2.4%** on `winding` (its road leaves through that
+corner), 1.8% on `bastion` (its exit passes under the time controls), 0% on the other five.
 
 **The `--fill-board` ceiling no longer clears wave 50, and that is repo-wide rather than a
 property of any one board.** Measured while wiring `ash` and `desert` in, one run each on a
@@ -312,6 +391,7 @@ clean-ish save:
 
 | board | maxed board reaches |
 |---|---|
+| `bastion` | **wave 50, WON** |
 | `desert` | **wave 50, WON** |
 | `winding` | wave 49 |
 | `ash` | wave 47 |
@@ -325,8 +405,12 @@ was true when it was written and free placement, the progression gate and three 
 have all landed since. **Do not read a single board's `--fill-board` number as a verdict on a
 change**: read it against this table, and remember each run rolls its own `run_seed`, so the
 avatar order and the back half's waves differ run to run — the 43-to-50 spread is partly that
-noise and nobody has separated the two yet. All six are measured now, one run each, and
-five of them miss the bar: the spread is 43 to 50 and only the newest board clears it.
+noise and nobody has separated the two yet. All seven are measured now, one run each, and
+five of them miss the bar: the spread is 43 to 50 and only the two widest boards clear it.
+The two that clear it are the two with the most ground (`desert` 54, `bastion` 62), which is
+the same lever pointing the other way from the `--play-sim` column — more cells raise the
+CEILING and lower the FLOOR, because a maxed board uses every cell and a poor player spends
+its whole run filling them.
 
 Note also that `--fill-board` is NOT a sandbox run: it writes to `Meta` like any other, so a
 measuring pass leaves stars, a best wave and Essence behind in `user://save.json`. The five
@@ -352,9 +436,47 @@ smaller font.
 map panel on the title screen, since which board is selected and what each lock costs live
 entirely in a `_draw()` that no number can see.
 
+### `bastion` is an EXPERIMENT, and it is unfinished on purpose
+
+It exists to answer one question — is a build grid over a rectilinear road worth having —
+and it answers it before any art is made. Three things about it are unlike every other row:
+
+- **It is a GREYBOX.** Its `art`, `water`, `build_mask` and `thumb` are all `""`, and
+  `map.gd` draws a flat ground with the road laid over it from `Game.active_path` instead.
+  An EMPTY field is a declaration and is quiet; a MISSING field is still the loud error it
+  always was. With no build mask, `is_open_ground()` answers true everywhere, so every
+  non-road cell is buildable — which no painted board would be.
+- **Its road is DECLARED, not traced.** `Game.BASTION_CELLS` holds turning points in CELL
+  coordinates and `Game._path_from_cells()` walks them out, refusing a diagonal leg. Cells
+  rather than pixels because the two properties the grid rests on are statements about
+  cells: every leg is axis-aligned, and the road takes a whole cell column or row, so the
+  cell beside it sits 112px from the centre-line and the cell above or below 88px — both
+  clear of `ROAD_KEEPOUT`'s 83.2. That is what makes the rank of cells against the road
+  buildable, and it is what a curved board cannot offer. `"subdiv": 1` keeps the corners
+  square; Catmull-Rom would round them off.
+- **Its shape was SEARCHED, not drawn.** A hand-drawn even serpentine measured a
+  `best 1`/`median` ratio of 1.35-1.43, WORSE than the winding board's 1.88-2.27 — evenly
+  spaced parallel legs mean almost every cell sees exactly two, which is uniformity wearing a
+  grid's clothes. ~6900 layouts were generated and measured instead; this one is 2.09-2.29
+  with only 3-6 of its 62 cells within a fifth of the best. The five constraints that decide
+  which layouts may be ranked at all are written out above `BASTION_CELLS`, and two of them
+  exist because the highest-scoring layouts cheated: one walled off a corner (dead ground
+  drags the median down and flatters the very ratio being ranked), and one ran two legs a
+  single cell apart, which at 88px row spacing and an 80px road is DRAWN as one 176px slab.
+  That second one was caught by a screenshot, not by a number.
+
+**The floor player dies on wave 25 here, earliest in the roster**, and the cause is legible
+in the `--play-sim` line: `towers=62`. It filled every cell with base towers, because that is
+what "board before depth" means on 62 cells, and it is the `desert` effect (54 spots, w31)
+one step further. Capacity is `cells x (build + upgrades + fusions)` against an income ceiling
+of ~41,300 gold, so **this board has the most capacity in the roster and no terrain taking any
+of it back**. Do not read w25 as "the grid is hard"; read it as an unpainted board having no
+scenery yet. The knobs, when it is painted, are the mask and `obstacles` — not the grid.
+
 **Adding a board is a row in `Game.BOARDS` plus its art** — four PNGs (the painting, its
 `_build` and `_water` masks, and a `board_thumb.py` thumbnail), no `match` to update, no
-`map.gd` edit, no menu edit (`Game.board_ids()` sorts the panel off `star_gate`).
+`map.gd` edit, no menu edit (`Game.board_ids()` sorts the panel off `star_gate`). A board may
+skip all four and ship as a greybox while its shape is being decided — see `bastion`.
 
 **The road no longer has to be traced by hand.** `WINDING_PATH` and `S_PATH` were both typed
 out by eye, and that was the step that kept the roster at three; `tools/trace_ribbon.py`
@@ -510,12 +632,25 @@ definitions still carry the real 2000 so nothing is lost. On this board the cap 
 Fire's 18% and twelve — re-measure it whenever the map is repainted, because the two boards
 gave different answers to the same cap.
 
-**The UI covers part of the world, and placement has to know.** The HUD and the tower palette
-live in 1280x720 SCREEN space while the board lives in 1536x864 WORLD space, so the palette's
-200px panel hides 240px of board — and it eats clicks, so a tower under it can never be
-upgraded or sold. `Game.PLAY_TOP` / `Game.PLAY_RIGHT` derive those bounds instead of stating
-them; the literal that came before them went stale through a world resize and put two
-columns of buildable ground under the panel. Keep the road out of that strip too.
+**The UI covers part of the world, and placement has to know.** The HUD, the tower palette
+and the time controls live in 1280x720 SCREEN space while the board lives in 1536x864 WORLD
+space, so a screen rect hides 1.2x its own size of board — and the palette and the buttons
+eat clicks, so a tower under them could never be upgraded or sold. `Game.PLAY_TOP` derives the
+HUD bar as a line; `Game.UI_SCREEN_RECTS` holds the two controls that sit on the board
+(`PALETTE_RECT` and `TIME_CONTROLS_RECT`), and `Game.ui_world_rects()` converts them. Derived,
+never written down: the literal that came before went stale through a world resize and put two
+columns of buildable ground under the panel.
+
+**The palette is a column, and that changed every board.** It was a 200px panel down the whole
+right side — four towers filled two rows of it — and it lived in the rule as ONE vertical line,
+`PLAY_RIGHT` (world x 1296). `tower_palette.gd` is now an 84x370 column in the top-right corner
+that places ITSELF from `Game.PALETTE_RECT`, so the scene and the rule cannot drift apart. The
+line became rectangles, the strip below the column became board, and the time controls — which
+no bound covered, so a drag released on Pause used to build behind the button — got the same
+protection. `can_build_at()` tests the tap disc (`PICK_RADIUS`) sideways and the sprite height
+upward against those rects, which is also the only thing that refuses a drag released ON the
+palette: `main.gd` `_input` catches the release before the GUI does. The buildable spots this
+added are in the board table above; **any change to `PALETTE_RECT` moves them again**.
 
 Two constants are tied to the road length and nothing else reads it, so they move together
 or the pacing breaks silently: `Balance.BASE_SPEED_*` (at the wrong value a wave-1 enemy

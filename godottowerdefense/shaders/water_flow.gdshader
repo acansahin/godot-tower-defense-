@@ -13,6 +13,11 @@ uniform sampler2D water_mask : filter_linear, repeat_disable;
 uniform float lake_strength = 0.00135; // subtle surface motion, roughly two source pixels
 uniform float fall_strength = 0.0028;  // stronger motion inside the waterfall only
 uniform float motion_speed = 1.0;
+// Environment motion outside the mask. Both default to zero, so an unknown board remains
+// perfectly still until its profile opts in.
+uniform float foliage_strength = 0.0;
+uniform float heat_strength = 0.0;
+uniform bool lava_mode = false;
 // centre x/y + half-width/half-height. Two regions cover boards with separated falls.
 uniform vec4 waterfall_region_a = vec4(0.095, 0.63, 0.05, 0.14);
 uniform vec4 waterfall_region_b = vec4(0.0);
@@ -27,9 +32,30 @@ float region_mask(vec2 uv, vec4 region) {
 }
 
 void fragment() {
+	vec4 base = texture(TEXTURE, UV);
 	float m = texture(water_mask, UV).r;
+	float raw_t = TIME * motion_speed;
+
+	// Dark green pixels are foliage; bright grass deliberately fails the luminance term.
+	// Moving only the painting means towers, enemies, road geometry and hit tests stay still.
+	float green_excess = base.g - max(base.r, base.b);
+	float luminance = dot(base.rgb, vec3(0.299, 0.587, 0.114));
+	float foliage = smoothstep(0.025, 0.13, green_excess)
+			* (1.0 - smoothstep(0.36, 0.58, luminance)) * (1.0 - m);
+	float gust = sin(raw_t * 0.72 + UV.y * 18.0)
+			+ sin(raw_t * 1.17 + UV.x * 31.0 + UV.y * 9.0) * 0.35;
+	vec2 foliage_offset = vec2(gust, gust * 0.18) * foliage_strength * foliage;
+
+	// Heat shimmer is intentionally sub-pixel. Two unrelated bands stop the whole map from
+	// sliding as one sheet and give ash/desert air a barely visible optical wobble.
+	float heat = sin(UV.y * 178.0 - raw_t * 2.2)
+			* (0.55 + 0.45 * sin(UV.x * 47.0 + raw_t * 0.43));
+	vec2 heat_offset = vec2(heat * heat_strength, 0.0);
+	vec2 environment_uv = clamp(UV + foliage_offset + heat_offset, vec2(0.0), vec2(1.0));
+	COLOR = texture(TEXTURE, environment_uv);
+
 	if (m > 0.004) {
-		float t = TIME * motion_speed;
+		float t = raw_t * (lava_mode ? 0.38 : 1.0);
 
 		// Per-board fall regions provide motion direction; the water mask still decides the
 		// exact silhouette, so these soft rectangles can never disturb grass or rock.
@@ -44,7 +70,7 @@ void fragment() {
 		vec2 lake_offset = vec2(
 				current_a * 0.58 + current_b * 0.30,
 				current_b * 0.48 - current_a * 0.20 + current_c * 0.16
-		) * lake_strength;
+		) * lake_strength * (lava_mode ? 1.35 : 1.0);
 
 		// Closely spaced bands travel down the waterfall. The second band and the gentle
 		// side drift break the synchronized accordion motion of the old single sine.
@@ -67,7 +93,8 @@ void fragment() {
 		float fall_glint = max(0.0, fall_a * 0.65 + fall_b * 0.35);
 		float glint = (lake_glint * lake * 0.018 + fall_glint * waterfall * 0.055)
 				* interior;
-		water.rgb += vec3(0.28, 0.65, 0.78) * glint;
+		vec3 glint_color = lava_mode ? vec3(1.0, 0.28, 0.025) : vec3(0.28, 0.65, 0.78);
+		water.rgb += glint_color * glint * (lava_mode ? 1.8 : 1.0);
 		COLOR = water;
 	}
 }

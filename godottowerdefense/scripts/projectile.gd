@@ -6,8 +6,8 @@ class_name Projectile
 
 const AreaRing := preload("res://scripts/area_ring.gd")  ## Expanding ring at a REAL radius; see area_ring.gd.
 const ImpactBurst := preload("res://scripts/impact_burst.gd")
-## Fire's impact keeps its own hot core and its falling embers; every other element gets the
-## same burst tinted with its own colour, smaller, and with the gravity off.
+## Base-element impacts use their own material animation; fusion and chaos shots fall back
+## to a tintable generic burst. Fire still keeps its hand-tuned core colour and ember fall.
 const FIRE_IMPACT_COLOR := Color(1.0, 0.43, 0.035)
 const FIRE_IMPACT_GRAVITY := 14.0
 ## Sized down from Fire's: a Water tower fires several times a second, and a full-size bloom
@@ -169,7 +169,20 @@ func _hit(target: Enemy) -> void:
 	# same weight in its own. This tested `element` before, i.e. the build origin — so a Roots
 	# tower grown out of a Fire tower dropped a fireball's impact into a bramble.
 	if shape == "fire":
-		ImpactBurst.spawn(self, impact, FIRE_IMPACT_COLOR, 1.0, FIRE_IMPACT_GRAVITY)
+		ImpactBurst.spawn(self, impact, FIRE_IMPACT_COLOR, 1.0, FIRE_IMPACT_GRAVITY,
+				false, "fire")
+	elif shape == "water":
+		ImpactBurst.spawn(self, impact, color, 0.82, 0.0, false, "water")
+	elif shape == "nature":
+		ImpactBurst.spawn(self, impact, color, 0.86, 0.0, false, "nature")
+	elif shape == "earth":
+		ImpactBurst.spawn(self, impact, color, 0.92, 0.0, false, "earth")
+	elif shape == "lava":
+		ImpactBurst.spawn(self, impact, color, 1.08, FIRE_IMPACT_GRAVITY, false, "lava")
+	elif shape in ["clay", "sun", "steam", "well", "roots", "dinosaur", "flesh_golem"]:
+		ImpactBurst.spawn(self, impact, color, 0.92, 0.0, false, shape)
+	elif shape in ["infernal", "rainbow", "pure"]:
+		ImpactBurst.spawn(self, impact, color, 0.94, 0.0, false, shape)
 	elif burn_time > 0.0:
 		ImpactBurst.spawn(self, impact, color, 1.0, FIRE_IMPACT_GRAVITY)
 	elif ignores_matchup:
@@ -374,8 +387,9 @@ func _draw() -> void:
 		"roots": _draw_roots_bolt(offset, birth)
 		"dinosaur": _draw_dino_bolt(offset, birth)
 		"flesh_golem": _draw_flesh_bolt(offset, birth)
-		# One drawing for the three chaos rows — see _draw_chaos_bolt.
-		"infernal", "rainbow", "pure": _draw_chaos_bolt(offset, birth)
+		"infernal": _draw_infernal_bolt(offset, birth)
+		"rainbow": _draw_rainbow_bolt(offset, birth)
+		"pure": _draw_pure_bolt(offset, birth)
 		_: _draw_plain_bolt(offset, birth)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
@@ -510,6 +524,8 @@ func _draw_clay_bolt(offset: Vector2, birth: float) -> void:
 	var c := color
 	var wob := sin(_visual_time * 15.0)
 	draw_set_transform(offset, 0.0, Vector2.ONE * birth)
+	draw_line(Vector2(-4.0, wob), Vector2(-29.0, wob * 2.8),
+			Color(c.r * 0.55, c.g * 0.42, c.b * 0.32, 0.24), 6.0)
 	for i in 3:
 		var f := float(i)
 		# Darkened rather than tinted: wet clay coming off the lump is the SHADOWED side of
@@ -559,6 +575,13 @@ func _draw_lava_bolt(offset: Vector2, birth: float) -> void:
 	draw_line(Vector2(-6.0, -2.2), Vector2(4.6, 1.4), Color(1.0, 0.72, 0.22, 0.90 * heat), 2.0)
 	draw_line(Vector2(-0.6, -6.0), Vector2(1.8, 6.2), Color(1.0, 0.48, 0.10, 0.72 * heat), 1.6)
 	draw_line(Vector2(1.4, -1.0), Vector2(-5.4, 3.8), Color(1.0, 0.55, 0.14, 0.60 * heat), 1.4)
+	# Tiny hot chips shed from the tumbling shell instead of following one welded-on tail.
+	draw_set_transform(offset, 0.0, Vector2.ONE * birth)
+	for i in 3:
+		var f := float(i)
+		var spark := Vector2(-12.0 - f * 7.0,
+				sin(_visual_time * 19.0 + f * 2.3) * (3.0 + f))
+		draw_circle(spark, 2.2 - f * 0.45, Color(1.0, 0.72, 0.18, 0.74 - f * 0.15))
 
 ## Sun: a disc throwing rays, turning as it goes, and the ONLY bolt in the game with no trail
 ## behind it. Every other shot is a thing being thrown; what a sun does that none of them do
@@ -566,6 +589,9 @@ func _draw_lava_bolt(offset: Vector2, birth: float) -> void:
 ## light rather than as a projectile.
 func _draw_sun_bolt(offset: Vector2, birth: float) -> void:
 	var c := color
+	draw_set_transform(offset, -_visual_time * 2.2, Vector2.ONE * birth)
+	draw_arc(Vector2.ZERO, 13.0 + sin(_visual_time * 11.0) * 1.8, 0.0, TAU, 28,
+			Color(1.0, 0.92, 0.48, 0.26), 3.0, true)
 	draw_set_transform(offset, _visual_time * 4.0, Vector2.ONE * birth)
 	# Eight rays, alternating long and short. Eight equal ones turn into a static star at this
 	# size — the alternation is what makes the rotation visible at all.
@@ -594,12 +620,22 @@ func _draw_steam_bolt(offset: Vector2, birth: float) -> void:
 		draw_circle(puff, 8.0 - f * 1.9, Color(c.r, c.g, c.b, 0.30 - f * 0.07))
 		draw_circle(puff, 4.6 - f * 1.2, Color(c.r, c.g, c.b, 0.42 - f * 0.10))
 	draw_circle(Vector2(1.5, -1.0), 3.4, Color(1.0, 1.0, 1.0, 0.55))
+	# Two hairline curls make the wake gaseous rather than a row of blue circles.
+	for side in 2:
+		var s := -1.0 if side == 0 else 1.0
+		draw_arc(Vector2(-18.0, s * 4.0), 9.0, -1.2, 1.2, 12,
+				Color(0.92, 0.97, 1.0, 0.22), 1.5, true)
 
 ## Well: a drop carried inside a turning ring. Water's blunt head with Nature's rotation on
 ## it — and the ring is the aura the tower exists to project, which is the one thing about
 ## Well a player actually has to learn.
 func _draw_well_bolt(offset: Vector2, birth: float) -> void:
 	var c := color
+	draw_set_transform(offset, 0.0, Vector2.ONE * birth)
+	for i in 3:
+		var f := float(i)
+		draw_circle(Vector2(-11.0 - f * 7.0, sin(_visual_time * 12.0 + f) * 2.5),
+				3.2 - f * 0.65, Color(c.r, c.g, c.b, 0.46 - f * 0.10))
 	# Squashed on y and turning, so it reads as a ring lying around the drop in perspective
 	# rather than as a circle drawn on top of it.
 	draw_set_transform(offset, _visual_time * 6.0, Vector2(1.0, 0.55) * birth)
@@ -628,6 +664,9 @@ func _draw_roots_bolt(offset: Vector2, birth: float) -> void:
 		# there in the photograph.
 		draw_line(prev, to, Color(c.r + 0.22, c.g + 0.26, c.b + 0.16, 0.75 - f * 0.11),
 				3.2 - f * 0.45)
+		if i > 1:
+			var thorn_dir := Vector2(3.0, -4.0 if i % 2 == 0 else 4.0)
+			draw_line(to, to + thorn_dir, Color(c.r + 0.28, c.g + 0.30, c.b + 0.18, 0.62), 1.4)
 		prev = to
 	var barb := PackedVector2Array([
 		Vector2(11.0, 0.0), Vector2(-1.0, -5.4), Vector2(-4.5, 0.0), Vector2(-1.0, 5.4),
@@ -667,6 +706,7 @@ func _draw_dino_bolt(offset: Vector2, birth: float) -> void:
 			var root := hinge.lerp(tip, 0.20 + float(i) * 0.28)
 			draw_line(root, root - Vector2(0.0, s * 3.4), Color(1.0, 0.98, 0.90, 0.85), 1.6)
 	draw_circle(Vector2(-3.5, 0.0), 3.2, Color(c.r, c.g, c.b, 0.60))
+	draw_circle(Vector2(2.5, -5.0), 1.5, Color(1.0, 0.92, 0.26, 0.88))
 
 ## Flesh Golem: a thrown piece of the thing itself, beating. This row grows permanently with
 ## every kill it lands, so its shot is the one that has to look ALIVE — the pulse is a
@@ -697,20 +737,17 @@ func _draw_flesh_bolt(offset: Vector2, birth: float) -> void:
 	draw_circle(Vector2(-0.8, -0.6), 3.8 + beat * 1.8,
 			Color(1.0, 0.80, 0.76, 0.55 + beat * 0.40))
 	draw_circle(Vector2(-2.6, -3.0), 2.2, Color(1.0, 1.0, 1.0, 0.34))
+	for i in 2:
+		var f := float(i)
+		draw_circle(Vector2(-13.0 - f * 9.0, sin(_visual_time * 10.0 + f * 2.0) * 4.0),
+				2.4 - f * 0.5, Color(0.72, 0.12, 0.20, 0.54 - f * 0.14))
 
-## The chaos bolt: Infernal, Rainbow and Pure. ONE drawing for all three, because they share
-## the one rule worth learning — chaos damage, which no armour resists — and a player who has
-## learnt to read this shape has learnt it. They are told apart by colour, which is safe here
-## and nowhere else: nothing else in the game looks like this, so the colour is a label on a
-## known thing rather than the identity itself.
-##
-## Two counter-rotating rings of shards. Counter-rotating on purpose — every other spinning
-## thing on the board turns one way, so opposed motion is the cheapest way to say "this one is
-## not playing by the rules".
-func _draw_chaos_bolt(offset: Vector2, birth: float) -> void:
+## Infernal compresses its three elements into a dark, cracked core. The red orbit and black
+## centre make it feel heavy and destructive beside Rainbow's airy spectrum.
+func _draw_infernal_bolt(offset: Vector2, birth: float) -> void:
 	var c := color
 	draw_set_transform(offset, 0.0, Vector2.ONE * birth)
-	draw_circle(Vector2.ZERO, 14.0, Color(c.r, c.g, c.b, 0.16))
+	draw_circle(Vector2.ZERO, 15.5, Color(c.r, c.g, c.b, 0.18))
 	for ring in 2:
 		var spin: float = 5.0 if ring == 0 else -6.5
 		var radius: float = 11.0 if ring == 0 else 6.8
@@ -724,5 +761,44 @@ func _draw_chaos_bolt(offset: Vector2, birth: float) -> void:
 				at + Vector2(0.0, 3.4).rotated(a),
 			]), Color(c.r, c.g, c.b, 0.85 - float(ring) * 0.18))
 	draw_set_transform(offset, 0.0, Vector2.ONE * birth)
-	draw_circle(Vector2.ZERO, 5.0, c.lightened(0.35))
-	draw_circle(Vector2.ZERO, 2.6, Color(1.0, 1.0, 1.0, 0.92))
+	draw_circle(Vector2.ZERO, 6.0, Color(0.10, 0.02, 0.035, 0.98))
+	draw_line(Vector2(-4.8, -2.0), Vector2(4.2, 2.6), c.lightened(0.32), 1.8)
+	draw_line(Vector2(-1.0, 4.6), Vector2(2.6, -4.8), Color(1.0, 0.55, 0.24, 0.82), 1.4)
+
+## Rainbow is a moving prism: six colour-separated motes follow a pale core on two waves.
+## It shares chaos damage with Infernal but no longer shares its silhouette.
+func _draw_rainbow_bolt(offset: Vector2, birth: float) -> void:
+	const SPECTRUM: Array = [
+		Color(1.0, 0.25, 0.28), Color(1.0, 0.68, 0.20), Color(0.96, 0.94, 0.30),
+		Color(0.30, 0.92, 0.48), Color(0.30, 0.66, 1.0), Color(0.78, 0.38, 1.0),
+	]
+	draw_set_transform(offset, 0.0, Vector2.ONE * birth)
+	for i in 6:
+		var f := float(i)
+		var at := Vector2(-4.0 - f * 5.0, sin(_visual_time * 13.0 - f * 0.85) * 6.0)
+		draw_circle(at, 4.4 - f * 0.36, Color(SPECTRUM[i], 0.72 - f * 0.06))
+	draw_circle(Vector2.ZERO, 10.5, Color(color.r, color.g, color.b, 0.24))
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(8.0, 0.0), Vector2(0.0, -7.0), Vector2(-8.0, 0.0), Vector2(0.0, 7.0),
+	]), Color(0.96, 0.96, 1.0, 0.92))
+	draw_circle(Vector2.ZERO, 3.2, color.lightened(0.28))
+
+## Pure carries all four base elements as orbiting motes around a white diamond. Its clean,
+## symmetric flight is the opposite of Infernal's instability and makes the apex readable
+## even when damage numbers cover the target.
+func _draw_pure_bolt(offset: Vector2, birth: float) -> void:
+	const ELEMENT_COLORS: Array = [
+		Color(0.28, 0.66, 1.0), Color(1.0, 0.34, 0.08),
+		Color(0.30, 0.86, 0.38), Color(0.76, 0.58, 0.36),
+	]
+	draw_set_transform(offset, _visual_time * 3.2, Vector2.ONE * birth)
+	for i in 4:
+		var a := TAU * float(i) / 4.0
+		var at := Vector2(cos(a), sin(a)) * 11.0
+		draw_circle(at, 3.0, ELEMENT_COLORS[i])
+		draw_line(at * 0.50, at, Color(ELEMENT_COLORS[i], 0.58), 1.8)
+	draw_set_transform(offset, -_visual_time * 1.6, Vector2.ONE * birth)
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(0.0, -8.0), Vector2(8.0, 0.0), Vector2(0.0, 8.0), Vector2(-8.0, 0.0),
+	]), Color(1.0, 1.0, 0.96, 0.96))
+	draw_circle(Vector2.ZERO, 3.0, Color(1.0, 1.0, 1.0, 1.0))

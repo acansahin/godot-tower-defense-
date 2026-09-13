@@ -18,7 +18,13 @@ const SHAKE_DECAY := 26.0  ## Pixels of camera shake bled off per second.
 @onready var camera: Camera2D = $Camera2D
 @onready var preview = $Preview  ## Drag ghost.
 
-var _drag_kind: String = ""  ## Tower type being dragged from the palette ("" = none).
+var _drag_kind: String = ""  ## Tower type being placed ("" = none). Drag or tap, same var.
+## Where the press that started this placement landed. A press and release in the same spot
+## is a TAP rather than a drag, and the two mean different things - see _input().
+var _press_pos: Vector2 = Vector2.ZERO
+## True once a tap (rather than a drag) armed the placement: the ghost stays on the board
+## and the NEXT tap puts the tower down.
+var _armed_by_tap: bool = false
 var _hovered: Tower = null   ## Tower under the mouse, drawn with a clear range ring.
 var _shake: float = 0.0      ## Current camera shake magnitude in px; decays to 0.
 ## Harness only (--fill-board/--auto-pick): buy every fusion a tower is offered as soon as it
@@ -114,8 +120,9 @@ func _ready() -> void:
 	hud.send_pressed.connect(wave_manager.send_now)
 	palette.drag_started.connect(_on_drag_started)
 	Game.shake_requested.connect(_add_shake)
-	# The pad overlay hides the pad a tower stands on, so it has to redraw whenever the set
-	# of towers changes — built, sold, or moved by a board swap.
+	# The build overlay answers "may a tower stand here", and that answer includes the towers
+	# already standing — so it has to redraw whenever that set changes: built, sold, or moved
+	# by a board swap.
 	grid.towers = towers_root
 	Game.towers_changed.connect(grid.queue_redraw)
 
@@ -195,6 +202,10 @@ func _ready() -> void:
 		Meta.last_seen -= 4 * 3600
 		Meta._persist()
 		print("--- clock rewound 4h; relaunch to collect ---")
+	if OS.get_cmdline_user_args().has("--show-build-grid"):
+		call_deferred("_show_build_grid")
+	if OS.get_cmdline_user_args().has("--show-touch-drag"):
+		call_deferred("_show_touch_drag")
 	if OS.get_cmdline_user_args().has("--show-fusion-panel"):
 		call_deferred("_show_fusion_panel", true)
 	# The same board, left unfused at Lv2 with its own element locked: the state that draws
@@ -608,6 +619,74 @@ func _show_fusion_panel(fused: bool = true) -> void:
 		t.add_element("water")
 	tower_panel.open_for(t)
 
+## TEMPORARY verification harness: stands a few towers on the board, arms a placement and
+## turns the build overlay on, so what the player is shown WHILE PLACING can be photographed.
+##
+## It exists because that overlay is the only part of placement no number can reach. A grid
+## board's lattice, the cells it refuses, the cells already taken and the ghost's three
+## colours all live in _draw(), and reaching them by playing means holding a drag while a
+## screenshot is taken - which is not a thing a harness can do, since MCP cannot inject input
+## and --shot fires on a timer.
+##
+##   Godot.exe --path <project> res://scenes/Main.tscn --quit-after 90 --
+##       --map:bastion --show-build-grid --shot:1
+##
+## WITHOUT --headless: a headless run does no rendering, so every one of those _draw()s is
+## skipped and the harness passes while showing nothing.
+func _show_build_grid() -> void:
+	wave_manager.set_process(false)
+	Game.add_gold(5000)
+	var spots := _buildable_lattice()
+	if spots.is_empty():
+		push_error("--show-build-grid: this board offers nowhere to build")
+		return
+	# Three standing towers, so the overlay's "this cell is taken" state is in the shot too,
+	# and so the neighbour half of the rule is exercised rather than assumed.
+	for i in mini(3, spots.size()):
+		var t := TOWER.instantiate() as Tower
+		t.setup_def(String(Game.TOWER_ORDER[i % Game.TOWER_ORDER.size()]))
+		t.position = spots[int(float(spots.size()) * (0.2 + 0.2 * float(i)))]
+		towers_root.add_child(t)
+	Game.towers_changed.emit()
+	_on_drag_started(String(Game.TOWER_ORDER[0]))
+	# Armed as if by a TAP, so the ghost stays put instead of following a mouse nobody is
+	# moving. It is also the state a phone is in for most of a placement.
+	_armed_by_tap = true
+	_update_ghost(spots[int(float(spots.size()) * 0.75)])
+
+## TEMPORARY verification harness for the finger-drag lift: stages a drag as if a finger were
+## holding a tower mid-board, marks the fingertip with a translucent disc, and prints where
+## _aim() put the ghost — including at the top and bottom edges, where the lift bends.
+##
+## No input can be injected here and this desktop has no touchscreen, so it sets
+## `_touch_pointer` directly. What it proves is the GEOMETRY (the ghost clears the fingertip,
+## the edges stay reachable). Whether a real phone marks its touches DEVICE_ID_EMULATION is
+## only settled on a phone.
+##
+##   Godot.exe --path <project> res://scenes/Main.tscn --quit-after 120 -- --show-touch-drag --shot:1
+func _show_touch_drag() -> void:
+	wave_manager.set_process(false)
+	Game.add_gold(5000)
+	_touch_pointer = true
+	_on_drag_started(String(Game.TOWER_ORDER[0]))
+	var finger := Vector2(Game.WORLD_SIZE.x * 0.45, Game.WORLD_SIZE.y * 0.62)
+	var aim := _aim(finger)
+	_update_ghost(aim)
+	var tip := Polygon2D.new()
+	var outline := PackedVector2Array()
+	for i in 24:
+		outline.append(Vector2.from_angle(TAU * float(i) / 24.0) * 40.0)
+	tip.polygon = outline
+	tip.color = Color(1.0, 0.85, 0.7, 0.45)
+	tip.position = finger
+	add_child(tip)
+	print("--- TOUCH DRAG: finger %s -> ghost %s (lifted %.0f world px) ---"
+			% [finger, aim, finger.y - aim.y])
+	for y in [100.0, 200.0, 400.0, 720.0, 800.0, 850.0]:
+		var p := _aim(Vector2(finger.x, y))
+		print("  finger y=%4.0f -> ghost y=%4.0f  (legal ground: %s)"
+				% [y, p.y, Game.can_build_at(Game.snap_to_grid(p))])
+
 ## TEMPORARY verification harness for meta progression. Checks the things that only show up
 ## across an app restart or a wall-clock change, neither of which is testable by playing:
 ## the essence curve, workshop costs, that a bought level actually reaches a tower via the
@@ -870,9 +949,10 @@ func _avatar_pose() -> void:
 		e.armor_element = element
 		e.avatar_element = element
 		enemies_root.add_child(e)
-		# Spread across the MIDDLE of the road, not evenly along the whole of it: the last
-		# leg runs off to the right behind the tower palette (Game.PLAY_RIGHT), and an even
-		# split put the fourth avatar under the panel where it cannot be photographed.
+		# Spread across the MIDDLE of the road, not evenly along the whole of it: on the
+		# winding board the last leg runs off through the top-right corner, where the tower
+		# palette still sits (Game.PALETTE_RECT), and an even split put the fourth avatar
+		# under it where it cannot be photographed.
 		var span := float(Game.active_path.size() - 2)
 		var step := int(span * (0.12 + 0.52 * float(i) / float(Game.TOWER_ORDER.size() - 1))) + 1
 		e.set_progress(step)
@@ -938,7 +1018,7 @@ func _bolt_pose() -> void:
 		p.setup(Vector2(110.0, y), e, 0.0)
 		print("bolt row %2d  y=%4d  %s" % [i, int(y), row["shape"]])
 
-## TEMPORARY verification harness: stands one REAL tower of each impact-relevant identity in
+## TEMPORARY verification harness: stands one REAL tower of every projectile identity in
 ## front of a creep it cannot kill, so every kind of impact lands over and over in a known
 ## spot and can be photographed.
 ##
@@ -951,7 +1031,7 @@ func _bolt_pose() -> void:
 ## not the placement.
 ##
 ## `--fill-board` cannot do this: a maxed board kills every creep in the first frame or two
-## after it spawns, so all seventeen kinds of impact happen on top of one another in one
+## after it spawns, so all fifteen kinds of impact happen on top of one another in one
 ## corner of the map, and catching a chosen one is down to luck with `--shot:N`.
 ##
 ## Pair with --shot, WITHOUT --headless (a headless run does no drawing, so it passes this
@@ -961,28 +1041,23 @@ func _bolt_pose() -> void:
 func _hit_pose() -> void:
 	wave_manager.set_process(false)
 	Game.add_gold(1000000)
-	# Built from the tables, so a row that stops splashing — or starts — shows up here without
-	# this list being edited. The three columns are the three things the impact branch keys
-	# on: a splash radius, a burn payload, and chaos.
-	var rows: Array = [
-		["fire", ["fire"]],                                  # burn, no splash: embers only
-		["water", ["water"]],                                # neither: the quiet reference
-		["earth", ["earth"]],                                # splash 90, no burn
-		["lava", ["earth", "fire"]],                         # splash 110 AND burn
-		["steam", ["fire", "water"]],                        # splash 80, fires 2.5x/s
-		["roots", ["earth", "nature"]],                      # neither, and the slowest tower
-		["infernal", ["earth", "fire", "water"]],            # chaos
-		["rainbow", ["fire", "nature", "water"]],            # chaos, another colour
-		["earth+fire+nature+water", ["earth", "fire", "nature", "water"]],  # Pure
-	]
+	# Derived from the roster so a new fusion cannot silently fall back to the generic impact
+	# without appearing in the photograph. Each row still goes through a real Tower below.
+	var rows: Array = []
+	for element in Game.TOWER_ORDER:
+		rows.append([String(element), [String(element)]])
+	for key in Game.FUSIONS:
+		var def: Dictionary = Game.FUSIONS[key]
+		rows.append([String(def["name"]).to_lower().replace(" ", "_"),
+				Array(String(key).split("+"))])
 	var enemy_scene: PackedScene = load("res://scenes/Enemy.tscn")
 	# Same reason --fill-board opens this way: an impact's payload scales with the firing
 	# tower's level, and without the avatars beaten every base row below would stand at Lv2
 	# (Tower.can_upgrade) and quietly photograph a weaker splash/burn than the one shipped.
 	for e in Game.TOWER_ORDER:
 		Run.beat_avatar(String(e))
-	var xs: Array = [280.0, 700.0, 1120.0]
-	var ys: Array = [220.0, 480.0, 740.0]
+	var xs: Array = [230.0, 590.0, 930.0]
+	var ys: Array = [105.0, 260.0, 415.0, 570.0, 725.0]
 	for i in rows.size():
 		var elems: Array = rows[i][1]
 		var at := Vector2(float(xs[i % 3]), float(ys[i / 3]))
@@ -1006,8 +1081,8 @@ func _hit_pose() -> void:
 		e.radius = Balance.ENEMY_BASE_RADIUS
 		enemies_root.add_child(e)
 		e.set_progress(1)
-		e.global_position = at + Vector2(120.0, 0.0)
-		print("hit row %d  tower=%-12s at (%4d,%4d)  target +120x  splash=%.0f" % [
+		e.global_position = at + Vector2(110.0, 0.0)
+		print("hit row %d  tower=%-12s at (%4d,%4d)  target +110x  splash=%.0f" % [
 				i, t.display_name, int(at.x), int(at.y),
 				float(t._eff.get("splash_radius", 0.0))])
 
@@ -1252,25 +1327,41 @@ func _sim_buy_one() -> bool:
 		return true
 	return false
 
-## Every position a tower could stand, swept on the tower spacing. Used by --fill-board and
-## by --dump-board, which need "the set of places you may build".
+## Every position a tower could stand. Used by --fill-board and by --dump-board, which both
+## need "the set of places you may build".
 ##
-## Placement is free, so that set is CONTINUOUS and this is a sample of it rather than an
-## enumeration: it sweeps at half the tower spacing and keeps whatever clears `_far_enough`,
-## which is one plausible packing. A player placing by hand will fit a slightly different
-## number, so read the count as a capacity estimate and not as a board specification.
+## TWO ANSWERS, because the boards give two. On a grid board the set is FINITE and this
+## enumerates it exactly: every cell, asked of the same can_build_at() a tap goes through, so
+## the count is the board's specification rather than an estimate of it. On a free-placement
+## board the set is CONTINUOUS and this samples it at half the tower spacing, keeping whatever
+## clears `_far_enough` - one plausible packing among many, so a player placing by hand fits a
+## slightly different number. Read that one as a capacity estimate.
 func _buildable_lattice(step := -1.0) -> Array:
+	if Game.has_grid():
+		return _grid_cells()
 	var pitch: float = Game.TOWER_GAP if step <= 0.0 else step
 	var out: Array = []
 	var y := Game.PLAY_TOP + Game.TOWER_RADIUS
 	while y <= Game.WORLD_SIZE.y - Game.TOWER_RADIUS:
 		var x := Game.TOWER_RADIUS
-		while x <= Game.PLAY_RIGHT - Game.TOWER_RADIUS:
+		while x <= Game.WORLD_SIZE.x - Game.TOWER_RADIUS:
 			var at := Vector2(x, y)
 			if Game.can_build_at(at) and _far_enough(at, out):
 				out.append(at)
 			x += pitch * 0.5
 		y += pitch * 0.5
+	return out
+
+## Every legal cell of a grid board, in reading order. No packing choice is being made here
+## and none should be: on a grid the cells ARE the offer.
+func _grid_cells() -> Array:
+	var out: Array = []
+	var extent := Game.grid_size()
+	for row in extent.y:
+		for col in extent.x:
+			var at := Game.cell_centre(Vector2i(col, row))
+			if Game.can_build_at(at):
+				out.append(at)
 	return out
 
 func _far_enough(at: Vector2, taken: Array) -> bool:
@@ -1327,9 +1418,30 @@ func _dump_board() -> void:
 	# it, because a board silently missing its mask measures as a generous board.
 	print("  board            : %s (%s)" % [Game.active_board_id,
 			"open-ground mask" if Game.active_build_mask != null else "NO MASK - terrain unenforced"])
-	print("  buildable spots  : %d (free placement, sampled every %.0fpx)"
-			% [spots.size(), Game.TOWER_GAP * 0.5])
+	# On a grid board this is the board's specification; on a free one it is an estimate of a
+	# continuous set. Saying which is the difference between a number to balance against and a
+	# number to argue with - see _buildable_lattice().
+	if Game.has_grid():
+		var extent := Game.grid_size()
+		print("  buildable spots  : %d cells (build grid, %dx%d of %.0fx%.0fpx)"
+				% [spots.size(), extent.x, extent.y,
+				Game.active_grid_cell.x, Game.active_grid_cell.y])
+	else:
+		print("  buildable spots  : %d (free placement, sampled every %.0fpx)"
+				% [spots.size(), Game.TOWER_GAP * 0.5])
 	print("  road samples     : %d (every %.0f px)" % [samples.size(), STEP])
+	# How much of the road runs under UI that hides it. A creep walking there is a creep the
+	# player cannot see, and a leak there is a leak nobody notices — which is what the
+	# bottom-exit rule for board roads exists to prevent, measured instead of assumed. On the
+	# winding board the road leaves through the top-right corner, where the palette sits.
+	var hidden := 0
+	for s in samples:
+		for rect in Game.ui_world_rects():
+			if (rect as Rect2).has_point(s):
+				hidden += 1
+				break
+	print("  road under UI    : %d samples (%.1f%% of the road)"
+			% [hidden, 100.0 * float(hidden) / float(maxi(1, samples.size()))])
 	print("  %-10s %7s %8s %8s  %-12s %7s %8s"
 			% ["element", "range", "best 1", "median", "cover 95%", "raw", "raw best"])
 	for tid in Game.TOWER_ORDER:
@@ -1455,27 +1567,108 @@ func _process(delta: float) -> void:
 func _on_drag_started(kind: String) -> void:
 	if Game.is_over:
 		return
+	# Tapping the armed tower's own slot again puts it back: a placement you cannot call off
+	# is one you have to spend gold to escape.
+	if _armed_by_tap and kind == _drag_kind:
+		_cancel_placement()
+		return
 	_drag_kind = kind
+	_press_pos = get_global_mouse_position()
+	_armed_by_tap = false
 	grid.set_showing(true)  # closed ground is only worth showing while something is being placed
+	palette.set_armed(kind)
 	_set_hovered(null)  # the drag preview takes over; don't compete with a hover ring
-	_update_ghost(get_global_mouse_position())
+	_update_ghost(_aim(get_global_mouse_position()))
 
-## While a drag is active this runs before the GUI so the ghost tracks the mouse
-## and the drop is caught wherever the button is released. With no drag, mouse
-## motion instead highlights whichever tower is under the cursor.
+## Puts the ghost away without building anything.
+func _cancel_placement() -> void:
+	_drag_kind = ""
+	_armed_by_tap = false
+	preview.hide()
+	grid.set_showing(false)
+	palette.set_armed("")
+
+## World px a press may wander and still count as a tap rather than a drag.
+const TAP_SLOP := 16.0
+
+## Screen px the drag ghost floats ABOVE a finger. On a phone the thumb dragging a tower sits
+## exactly on the spot it is aiming at, so the ghost, its range ring and the shaded ground
+## under it were all hidden until the tower was already built. Lifting the aim point clear of
+## the fingertip is what mobile tower defenses do. 120 is a starting value for a fingertip on a
+## landscape phone, where the 1280px design is drawn at roughly half size; tune it on a device.
+const TOUCH_LIFT := 120.0
+
+## True when the last pointer event came from a finger. Godot turns touches into mouse events
+## (emulate_mouse_from_touch, on by default) and marks them with DEVICE_ID_EMULATION, which is
+## how a mouse drag keeps its ghost under the cursor while a finger's floats above it.
+var _touch_pointer: bool = false
+
+## Where a drag is AIMING, given where the pointer is. With a mouse, and for the tap-to-place
+## route (which builds where the second tap lands), that is the pointer itself. For a finger
+## dragging, it is TOUCH_LIFT above it.
+##
+## Both the ghost and the drop go through this, so the tower is built where the ghost WAS, not
+## under the finger — the same "the preview and the result cannot disagree" rule as
+## _placement_point(), which it feeds.
+##
+## Two edges bend it, or part of the board would be unreachable by dragging:
+##   * TOP — the lifted point is held at the highest row a tower can stand on, so a finger
+##     near the HUD still aims at that row instead of above the play area.
+##   * BOTTOM — a full lift would stop the ghost 120px short of the bottom edge. Inside the last
+##     lift's worth of board the lift shrinks to nothing, so the ghost still reaches the bottom
+##     row; it meets the finger there, which is the price of that last strip.
+func _aim(world_pos: Vector2) -> Vector2:
+	if not _touch_pointer or _armed_by_tap:
+		return world_pos
+	var lift := TOUCH_LIFT * Game.WORLD_SIZE.y / Game.SCREEN_SIZE.y
+	lift *= clampf((Game.WORLD_SIZE.y - world_pos.y) / lift, 0.0, 1.0)
+	var top_row := Game.PLAY_TOP + Game.TOWER_SPRITE_HEIGHT
+	return Vector2(world_pos.x, maxf(world_pos.y - lift, minf(world_pos.y, top_row)))
+
+## While a placement is active this runs before the GUI so the ghost tracks the pointer and
+## the drop is caught wherever the button is released — including over a panel, where the
+## answer is "no" rather than "nothing happened". With no placement, motion instead
+## highlights whichever tower is under the cursor.
+##
+## TWO WAYS TO PLACE, and this is where they part. Press-drag-release is the mouse gesture and
+## ends in _drop() below. Press and release IN THE SAME SPOT is a TAP: it ARMS the tower
+## instead, the ghost stays on the board, and the next tap on open ground builds it. That
+## second tap is handled in _unhandled_input rather than here, so a tap on a button or on the
+## palette reaches the control instead of dropping a tower behind it.
+##
+## The tap path is what makes this usable on a phone. Godot's emulate_mouse_from_touch is on
+## by default, so a finger already arrives here as these same mouse events — what was missing
+## was never the touch events, it was an interaction that does not ask a thumb to hold a drag
+## across the whole screen and release on a 60px target.
 func _input(event: InputEvent) -> void:
+	# Recorded before anything else: _input runs ahead of the GUI, so the press on a palette
+	# slot has already set this by the time the palette emits drag_started.
+	if event is InputEventMouse:
+		_touch_pointer = event.device == InputEvent.DEVICE_ID_EMULATION
 	if event is InputEventMouseMotion:
 		if _drag_kind == "":
 			_update_hover(get_global_mouse_position())
 		else:
-			_update_ghost(get_global_mouse_position())
+			_update_ghost(_aim(get_global_mouse_position()))
 		return
 	if _drag_kind == "":
 		return
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT \
-			and not event.pressed:
-		_drop(get_global_mouse_position())
+	if event is InputEventMouseButton and event.pressed \
+			and event.button_index == MOUSE_BUTTON_RIGHT:
+		_cancel_placement()
 		get_viewport().set_input_as_handled()
+		return
+	if not (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT):
+		return
+	# Already armed by a tap: the press that places it belongs to _unhandled_input, and this
+	# release is that same press's. Either way there is nothing to do with it here.
+	if event.pressed or _armed_by_tap:
+		return
+	if _press_pos.distance_to(get_global_mouse_position()) <= TAP_SLOP:
+		_armed_by_tap = true
+		return
+	_drop(_aim(get_global_mouse_position()))
+	get_viewport().set_input_as_handled()
 
 ## Highlights the tower under the cursor (if any) so its range reads clearly.
 func _update_hover(world_pos: Vector2) -> void:
@@ -1492,14 +1685,14 @@ func _set_hovered(tower: Tower) -> void:
 	if is_instance_valid(_hovered):
 		_hovered.set_highlighted(true)
 
-## Where a tower dropped at `world_pos` would actually stand: the cursor itself, since
-## placement is free and `Game.can_build_at()` is the whole rule.
+## Where a tower dropped at `world_pos` would actually stand: the cursor itself on a board
+## with free placement, the containing cell's centre on a board with a build grid.
 ##
-## Kept as a named function rather than inlined, because it is the one place placement could
-## ever be snapped, quantised or nudged again, and the ghost and the drop MUST agree about
-## it — a preview that answers a different question from the drop is worse than no preview.
+## Named rather than inlined because the ghost and the drop MUST agree about it — a preview
+## that answers a different question from the drop is worse than no preview. Which board gets
+## which is Game.BOARDS data; see Game.snap_to_grid().
 func _placement_point(world_pos: Vector2) -> Vector2:
-	return world_pos
+	return Game.snap_to_grid(world_pos)
 
 func _update_ghost(world_pos: Vector2) -> void:
 	var d: Dictionary = Game.TOWER_DEFS[_drag_kind]
@@ -1507,20 +1700,28 @@ func _update_ghost(world_pos: Vector2) -> void:
 	# bad ground tells the player nothing about WHY, and the board has to keep answering
 	# "can I build here" continuously.
 	#
-	# It sits under the cursor, so the answer the ghost gives is the answer the drop gives;
+	# It sits where the drop will land — under the cursor, or lifted above a finger by _aim() —
+	# so the answer the ghost gives is the answer the drop gives;
 	# `grid.gd` shades the closed ground behind it, so a red ghost has a visible reason.
 	# TOWER_DEFS stores range in Warcraft III units — scale to pixels, exactly as
 	# tower.gd's _recompute does, or the ghost circle lies about the tower's reach.
 	var at := _placement_point(world_pos)
-	var legal := at.is_finite() 			and Game.can_build_at(at, towers_root.get_children()) 			and Game.gold >= _cost(_drag_kind)
+	# Legality and affordability are SEPARATE answers, because _drop() treats them separately:
+	# it refuses bad ground first and short gold second. Folding both into one red ghost meant
+	# the preview and the drop could disagree about WHY — a red ghost over perfectly good
+	# grass, with nothing to say that the only problem was the price.
+	var legal := at.is_finite() and Game.can_build_at(at, towers_root.get_children())
 	preview.show_at(at if at.is_finite() else world_pos, legal,
-			minf(d.get("range", 160.0) * Balance.WC3_RANGE_SCALE, Balance.MAX_TOWER_RANGE))
+			minf(d.get("range", 160.0) * Balance.WC3_RANGE_SCALE, Balance.MAX_TOWER_RANGE),
+			Game.gold >= _cost(_drag_kind))
 
 func _drop(world_pos: Vector2) -> void:
 	var kind := _drag_kind
 	_drag_kind = ""
+	_armed_by_tap = false
 	preview.hide()
 	grid.set_showing(false)
+	palette.set_armed("")
 	var center := _placement_point(world_pos)
 	if not center.is_finite() or not Game.can_build_at(center, towers_root.get_children()):
 		Audio.play("denied")
@@ -1563,10 +1764,20 @@ func _tower_at(world_pos: Vector2) -> Tower:
 ## Clicking bare ground does nothing here — the panel handles its own dismissal, and it
 ## accepts the click that closes it so this never runs for the same press.
 func _unhandled_input(event: InputEvent) -> void:
-	if Game.is_over or _drag_kind != "":
+	if Game.is_over:
 		return
 	if not (event is InputEventMouseButton and event.pressed \
 			and event.button_index == MOUSE_BUTTON_LEFT):
+		return
+	# The second tap of a tap-to-place. It lives HERE rather than in _input() so that a tap on
+	# the palette, the Send Next button or the tower panel reaches that control instead:
+	# anything a Control consumed never gets this far, which is the whole contract of
+	# _unhandled_input and exactly the rule this needs.
+	if _armed_by_tap:
+		_drop(get_global_mouse_position())
+		get_viewport().set_input_as_handled()
+		return
+	if _drag_kind != "":
 		return
 	_handle_tower_click(get_global_mouse_position())
 

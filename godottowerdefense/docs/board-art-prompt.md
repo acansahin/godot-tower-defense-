@@ -261,14 +261,20 @@ Written as fractions of the image, since the generator picks the resolution:
     99px) standing on a road at y=61 is entirely behind the bar and only its feet show. Ask
     for the road to meet the edge about a QUARTER of the way down and it clears with room.
   - **The exit belongs at the BOTTOM edge, not the right one, and it is not a building.**
-    The tower palette covers everything past `PLAY_RIGHT` (1296 of 1536), so a road that
-    leaves on the right hides its last stretch behind the panel — a leak nobody sees. The
-    bottom edge is clear apart from the pause and speed buttons in its left corner. And the
+    The tower palette is a column down the top of the right edge (world y 58-502 of 864), so
+    a road that leaves on the right risks its last stretch running behind it — a leak nobody
+    sees. The bottom edge is clear apart from the pause and speed buttons in its left corner,
+    so keep the exit out of the left 14% too. `--dump-board` prints `road under UI`; a new
+    board should read 0%. And the
     road should simply run off the frame: a painted gatehouse reads as a door the creeps are
     walking into, and the game draws no goal marker of its own to argue with.
-- **The rightmost 16% and the top 6% are covered by UI.** The tower palette hides 240px of
-  world down the right edge and eats clicks there; the HUD bar covers the top 48px. Keep the
-  road, and anything the player must see, out of both strips. Fill them with scenery.
+- **Three areas are covered by UI.** The HUD bar covers the top 48px; the tower palette is a
+  column over world x 1426-1526, y 58-502 (the top-right corner); the Pause and speed buttons
+  cover world x 14-216, y 797-854 (the bottom-left corner). The palette and the buttons eat
+  clicks, so nothing can be built under them either. Keep the road, and anything the player
+  must see, out of all three, and fill them with scenery. Everything else — including the
+  right edge below the palette — is board. (Until the palette became a column it was a
+  panel down the whole right 16%, and older briefs below were written against that.)
 - **Broad curves, not switchbacks.** This one is already settled by keeping the layout, and
   is recorded for the day someone proposes a new route. Folding the path tighter was measured on the ported
   spiral and it makes coverage *worse*: the legs end up close enough that one tower circle
@@ -402,8 +408,8 @@ THE FOREST AND THE CLIFFS — they are not deleted, they are PUSHED BACK:
   the grass. Same dark stone for the cliffs and columns.
 - What changes is only WHERE they are. Nothing vertical stands inside the apron; all of it
   lives outside it.
-- The right 16% of the image and the top 6% are covered by interface in the game: those
-  strips should carry dense forest, cliffs or distant hills, and nothing the player would
+- The top 6%, a column down the right 7% of the image to just past half its height, and the bottom-left corner (the left 14% of the bottom 8%) are covered by interface in the game: those
+  areas should carry dense forest, cliffs or distant hills, and nothing the player would
   need to see.
 
 WATER — KEEP THE WATERFALL:
@@ -714,9 +720,9 @@ THE FOREST AND CLIFFS - at the edges, not in the field:
 - Dark, blue-green conifers, reading much darker and cooler than the grass. Dark stone for
   the cliffs and outcrops. They mass at the outer rim of the picture: a treeline on the far
   side, groves in the corners, cliff walls along the borders.
-- The right 16% of the image and the top 6% are covered by interface in the game. Fill those
-  strips with dense forest, cliffs or distant hills and put nothing there the player needs to
-  see. Keep the road and the gatehouse out of both.
+- The top 6%, a column down the right 7% of the image to just past half its height, and the bottom-left corner (the left 14% of the bottom 8%) are covered by interface in the game. Fill those
+  areas with dense forest, cliffs or distant hills and put nothing there the player needs to
+  see. Keep the road and the gatehouse out of all three.
 
 WATER:
 - One clearly blue pond or short stream, at an EDGE of the picture, away from the road.
@@ -973,9 +979,9 @@ THE ROAD:
 - It never crosses itself, and nothing overlaps or hides any part of it.
 
 THE FRAME:
-- The right 16% of the image and the top 6% are covered by interface in the game. Fill those
-  strips with seracs, crevasse fields, moraine or the ice walls, and put nothing there the
-  player needs to see. Keep the road and the gatehouse out of both.
+- The top 6%, a column down the right 7% of the image to just past half its height, and the bottom-left corner (the left 14% of the bottom 8%) are covered by interface in the game. Fill those
+  areas with seracs, crevasse fields, moraine or the ice walls, and put nothing there the
+  player needs to see. Keep the road and the gatehouse out of all three.
 
 LIGHT:
 - Bright, flat, even winter daylight from the upper left. Lit EVENLY corner to corner: no
@@ -1062,9 +1068,10 @@ Three faults, all in the road, none visible in any number the tools report:
    behind the bar with only its feet showing. v2 enters at y=219. **A spawn wants y > 150.**
 2. **It ended at a painted gatehouse two thirds across** instead of leaving the map, which
    reads as a door the creeps walk into. v2 runs off the frame with nothing at its end.
-3. **The bottom edge, not the right one**, for the exit: the tower palette covers everything
-   past `PLAY_RIGHT` (1296 of 1536), so a right-edge road hides its last stretch behind the
-   panel and a leak happens where nobody can see it.
+3. **The bottom edge, not the right one**, for the exit: when this was written the tower
+   palette covered the whole right-hand strip (world x past 1296), so a right-edge road hid its
+   last stretch behind the panel and a leak happened where nobody could see it. The palette is
+   a top-right column now; the frame rule above says what it still hides.
 
 All three are now constraints in the template above, and the re-generation kept the glacier
 intact — same landform vocabulary, same style, still no trees.
@@ -1241,9 +1248,9 @@ THE ROAD:
 - It never crosses itself, and nothing overlaps or hides any part of it.
 
 THE FRAME:
-- The right 16% of the image and the top 6% are covered by interface in the game. Fill those
-  strips with lava flows, burnt forest, fissures or the volcano's flank, and put nothing there
-  the player needs to see. Keep the road out of both.
+- The top 6%, a column down the right 7% of the image to just past half its height, and the bottom-left corner (the left 14% of the bottom 8%) are covered by interface in the game. Fill those
+  areas with lava flows, burnt forest, fissures or the volcano's flank, and put nothing there
+  the player needs to see. Keep the road out of all three.
 
 LIGHT:
 - Bright, flat, even daylight from the upper left. Lit EVENLY corner to corner: no cloud
@@ -1546,9 +1553,9 @@ THE ROAD:
 - It never crosses itself, and nothing overlaps or hides any part of it.
 
 THE FRAME:
-- The right 16% of the image and the top 6% are covered by interface in the game. Fill those
-  strips with canyon walls, mesas or yardangs, and put nothing there the player needs to see.
-  Keep the road and the oasis out of both.
+- The top 6%, a column down the right 7% of the image to just past half its height, and the bottom-left corner (the left 14% of the bottom 8%) are covered by interface in the game. Fill those
+  areas with canyon walls, mesas or yardangs, and put nothing there the player needs to see.
+  Keep the road and the oasis out of all three.
 
 LIGHT:
 - Bright, flat, even desert daylight from the upper left. Lit EVENLY corner to corner: no cloud

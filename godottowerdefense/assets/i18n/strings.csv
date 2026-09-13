@@ -21,7 +21,7 @@ HOW_TITLE,How to Play,Nasıl Oynanır
 TAB_BASICS,Basics,Temel
 TAB_ELEMENTS,Elements,Elementler
 TAB_FUSIONS,Fusions,Füzyonlar
-BASIC_1,"Drag a tower from the palette on the right onto open ground. While you drag, the shaded ground is where you may NOT build: trees, cliffs, water, and the road itself.","Sağdaki paletten bir kuleyi sürükleyip açık zemine bırak. Sürüklerken koyulaşan zemin inşa EDEMEYECEĞİN yerdir: ağaçlar, kayalıklar, su ve yolun kendisi."
+BASIC_1,"Tap a tower at the top right, then tap open ground to build it (or drag it there). While you place, the shaded ground is where you may NOT build: trees, cliffs, water, and the road itself.","Sağ üstteki kulelerden birine dokun, sonra açık zemine dokunarak kur (ya da oraya sürükle). Yerleştirirken koyulaşan zemin inşa EDEMEYECEĞİN yerdir: ağaçlar, kayalıklar, su ve yolun kendisi."
 BASIC_2,"Towers always shoot the enemy nearest the exit, the one about to cost you a life.",Kuleler her zaman çıkışa en yakın düşmana ateş eder; yani canını götürmek üzere olana.
 BASIC_3,"Tap a tower to open its panel: upgrade it, fuse it, or sell it. Selling refunds everything if the tower never fired a shot, and most of it otherwise.","Bir kuleye dokununca paneli açılır: yükselt, birleştir ya da sat. Hiç ateş etmemiş bir kule tam iade eder, etmişse büyük kısmını."
 BASIC_4,Gold comes from kills. Send Next starts the next wave early and pays a bonus for it.,Altın öldürmekten gelir. Send Next sonraki dalgayı erken başlatır ve bunun için bonus öder.
@@ -59,7 +59,6 @@ HUD_WAVE,Wave: %d,Dalga: %d
 HUD_PAUSE,Pause,Duraklat
 HUD_RESUME,Resume,Devam
 HUD_NEW_MAP,New map: %s,Yeni harita: %s
-PALETTE_TITLE,Towers,Kuleler
 PANEL_LEVEL,Level %d,Seviye %d
 PANEL_LEVEL_LOCKED,"Level %d, beat the %s avatar","Seviye %d, %s avatarını yen"
 PANEL_SELL,Sell,Sat
@@ -119,6 +118,8 @@ MAP_DESERT,Salt Basin,Salt Basin
 MAP_DESERT_DESC,"A dry lake floor. The most open ground in the game, and the shortest road across it.","Kurumuş bir göl tabanı. Oyunun en açık zemini, ve üstündeki en kısa yol."
 MAP_ASH,Ashfall Plain,Ashfall Plain
 MAP_ASH_DESC,"Burnt ground under a live volcano. The flows decide where you may stand.","Yanmış toprak, uyanık bir yanardağ. Nerede durabileceğine lav karar verir."
+MAP_BASTION,Bastion Works,Bastion Works
+MAP_BASTION_DESC,"A cut stone causeway laid out on a builder's grid. Every plot is square and every corner is a right angle.","Bir inşaatının ızgarasına göre döşenmiş taş bir geçit. Her parsel kare, her köşe dik."
 MENU_SANDBOX,Sandbox,Test Modu
 SANDBOX_TITLE,SANDBOX,TEST MODU
 SANDBOX_SUBTITLE,"Everything unlocked. Nothing is saved: no stars, no record, no Essence.","Her şey açık. Hiçbir şey kaydedilmez: yıldız yok, rekor yok, Öz yok."

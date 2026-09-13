@@ -1,38 +1,61 @@
 extends Control
-## Top-right toolbar listing every tower in Game.TOWER_ORDER with its colour and
-## cost. Pressing a slot emits `drag_started`; Main then drags a ghost to a grid
-## cell to place it.
+## The tower palette: one slim column in the top-right corner, a painted icon and a price per
+## tower. Pressing a slot emits `drag_started`; Main then follows the pointer with a ghost and
+## places the tower where it is dropped, or where the next tap lands.
 ##
-## Laid out as 2 columns rather than one tall column. Slots stacked in a single column
-## cannot each be tall enough to hit with a thumb — the board is drawn at roughly half
-## scale on a phone, so the old 38px-tall slot arrived as ~19 CSS px. Two columns buy
-## the height back.
+## It replaced a 200px panel down the whole right-hand side, titled "Towers", with a colour
+## swatch and a name per slot laid out in two columns. Four towers filled two rows of it and
+## the rest was an empty dark slab over the board. The icon is the Lv1 sprite the tower will
+## actually be on the board, which is why the name went: the picture already says which tower
+## it is, and says it in the terms the board uses.
 ##
-## The roster is Game.TOWER_ORDER (four elements as of BUILD NEXT #2 — see
-## GAME_STRATEGY_V2.md §2) plus anything a card unlocks outright via Run.buildable_towers().
-## The panel used to also carry up to eight duals and Lightning, fifteen slots against a
-## panel sized for four; that headroom is gone with the dual roster, but the SHRINK-to-fit
-## logic stays general rather than assuming a fixed count — a tower you own but cannot see
-## is a bug the player cannot diagnose. Up to twelve slots keep the full-size box; past that
-## everything scales down together.
+## POSITION AND SIZE COME FROM Game.PALETTE_RECT, not from Main.tscn. The placement rule reads
+## the same rect to keep towers out from under the column, so a column moved in the scene and
+## not in Game would leave buildable ground under it again, or dead ground beside it.
+##
+## Main tells this panel which slot is ARMED, and it is drawn with a bright border. Tapping to
+## place is otherwise a mode with no indicator: the ghost sits out on the board where a thumb
+## is not, so the palette is the one place a player looks to see what they picked.
+##
+## The slot is 68x84, which arrives at roughly 34x42 CSS px on a phone (the board is drawn at
+## about half scale there). That is a little under the old 87x80 slot and was the price of
+## the smaller panel.
+##
+## The roster is Run.buildable_towers(), which today is exactly Game.TOWER_ORDER. A fifth
+## tower needs PALETTE_RECT grown by one slot (84 + 6px): the column is drawn for as many
+## towers as there are, but only the rect keeps the board clear underneath.
 
 signal drag_started(id: String)
 
-const SLOT_SIZE := Vector2(87, 80)
-const SLOT_STEP := Vector2(93, 86)  ## Slot pitch (size + gutter).
-const SLOT_ORIGIN := Vector2(6, 36) ## Top-left of the first slot, below the header.
-const COLUMNS := 2
-## Never shrink past this: below roughly half size the text stops being legible and the
-## box stops being a thumb target, and a palette that cannot be used is no better than
-## one that is clipped. If a roster ever needs more than this can show, the panel needs
-## to scroll rather than shrink further.
-const MIN_SCALE := 0.62
+const Sprites := preload("res://scripts/sprites.gd")
+
+const PAD := 8.0
+const SLOT := Vector2(68, 84)
+const GAP := 6.0
+## The icon's box inside a slot. The painted towers are much taller than wide, so the icon is
+## fitted to this box by its longer side rather than stretched.
+const ICON := 60.0
+const COST_SIZE := 15
 
 var _gold: int = 0
-var _filter_enabled: bool = false
-var _allowed_ids: Array[String] = []
+var _armed: String = ""
+var _strip: StyleBoxFlat
+var _armed_box: StyleBoxFlat
 
 func _ready() -> void:
+	position = Game.PALETTE_RECT.position
+	size = Game.PALETTE_RECT.size
+	# The tower sheets are cut at ~2x their size on the board and this draws them at a third
+	# of that again; without mipmaps the downscale sparkles (see CLAUDE.md, Known traps).
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_strip = StyleBoxFlat.new()
+	_strip.bg_color = Color(0.05, 0.05, 0.07, 0.55)
+	_strip.set_corner_radius_all(10)
+	_armed_box = StyleBoxFlat.new()
+	_armed_box.bg_color = Color(0.98, 0.92, 0.55, 0.16)
+	_armed_box.border_color = Color(1.0, 0.93, 0.50, 0.95)
+	_armed_box.set_border_width_all(3)
+	_armed_box.set_corner_radius_all(8)
 	# An unlock adds a slot mid-run, and the palette otherwise repaints only on a gold
 	# change — which might not come for seconds, leaving the reward invisible as it lands.
 	Run.roster_changed.connect(queue_redraw)
@@ -41,88 +64,58 @@ func set_gold(value: int) -> void:
 	_gold = value
 	queue_redraw()
 
-## Training reveals only the tower needed by the current lesson. Main never enables this
-## filter and continues to show Run's complete, dynamically unlocked roster.
-func set_allowed_towers(ids: Array) -> void:
-	_filter_enabled = true
-	_allowed_ids.clear()
-	for id in ids:
-		_allowed_ids.append(String(id))
+## Which tower is being placed right now, or "" for none. Set by Main, which owns that state.
+func set_armed(id: String) -> void:
+	if _armed == id:
+		return
+	_armed = id
 	queue_redraw()
 
-func clear_allowed_towers() -> void:
-	_filter_enabled = false
-	_allowed_ids.clear()
-	queue_redraw()
-
-func _visible_ids() -> Array:
-	return _allowed_ids if _filter_enabled else Run.buildable_towers()
-
-## Vertical scale that fits `count` slots in the panel: 1.0 whenever they already fit.
-func _scale_for(count: int) -> float:
-	var rows := int(ceil(float(count) / float(COLUMNS)))
-	if rows <= 0:
-		return 1.0
-	var needed := SLOT_ORIGIN.y + float(rows - 1) * SLOT_STEP.y + SLOT_SIZE.y
-	if needed <= size.y:
-		return 1.0
-	# Only the part below the header can shrink; the header keeps its height.
-	var room := size.y - SLOT_ORIGIN.y
-	var content := needed - SLOT_ORIGIN.y
-	return maxf(MIN_SCALE, room / content)
-
-func _slot_rect(index: int, scale_y: float) -> Rect2:
-	var col := index % COLUMNS
-	@warning_ignore("integer_division")  # deliberate: this is a row index
-	var row := index / COLUMNS
-	var pos := Vector2(SLOT_ORIGIN.x + col * SLOT_STEP.x,
-			SLOT_ORIGIN.y + row * SLOT_STEP.y * scale_y)
-	return Rect2(pos, Vector2(SLOT_SIZE.x, SLOT_SIZE.y * scale_y))
+func _slot_rect(index: int) -> Rect2:
+	return Rect2(Vector2(PAD, PAD + float(index) * (SLOT.y + GAP)), SLOT)
 
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed \
 			and event.button_index == MOUSE_BUTTON_LEFT:
-		var ids: Array = _visible_ids()
-		var scale_y := _scale_for(ids.size())
+		var ids: Array = Run.buildable_towers()
 		for i in ids.size():
-			if _slot_rect(i, scale_y).has_point(event.position):
+			if _slot_rect(i).has_point(event.position):
 				drag_started.emit(ids[i])
 				return
 
 func _draw() -> void:
-	draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, 0.40))
-	draw_rect(Rect2(Vector2.ZERO, size), Color(1, 1, 1, 0.18), false, 2.0)
+	var ids: Array = Run.buildable_towers()
+	if ids.is_empty():
+		return
+	# The backing strip hugs the slots rather than the whole rect, so there is never an empty
+	# dark area over the board.
+	var last := _slot_rect(ids.size() - 1)
+	draw_style_box(_strip, Rect2(Vector2.ZERO, Vector2(size.x, last.end.y + PAD)))
 	var font := get_theme_default_font()
-	draw_string(font, Vector2(10, 26), tr("PALETTE_TITLE"), HORIZONTAL_ALIGNMENT_LEFT, -1, 20,
-			Color(1, 1, 1, 0.9))
-	var ids: Array = _visible_ids()
-	var scale_y := _scale_for(ids.size())
 	for i in ids.size():
-		_draw_slot(_slot_rect(i, scale_y), ids[i], font)
+		_draw_slot(_slot_rect(i), String(ids[i]), font)
 
-## One slot: colour swatch on top, name and cost stacked underneath. Both strings are
-## centred across the slot's full width and clipped to it, so a long name ("Electricity")
-## stays inside its box instead of bleeding into the neighbouring column.
-##
-## Every vertical offset is a fraction of the slot's height rather than a pixel constant,
-## so a shrunk slot stays composed instead of having its text drop out of the bottom.
+## One slot: the tower's own Lv1 sprite, and its price underneath. A tower you cannot afford
+## is dimmed and priced in red rather than hidden, so the palette never changes shape.
 func _draw_slot(r: Rect2, id: String, font: Font) -> void:
 	var d: Dictionary = Game.TOWER_DEFS[id]
 	var cost: int = int(d["cost"])
 	var affordable := _gold >= cost
-	var k := r.size.y / SLOT_SIZE.y  # 1.0 at full size
-	draw_rect(r, Color(0.20, 0.20, 0.24, 0.85) if affordable else Color(0.22, 0.12, 0.12, 0.7))
-	draw_rect(r, Color(1, 1, 1, 0.22), false, 2.0)
-	# Element colour swatch, centred near the top.
-	var c := r.position + Vector2(r.size.x * 0.5, 26.0 * k)
-	draw_circle(c, 16.0 * k, d["color"])
-	draw_arc(c, 16.0 * k, 0.0, TAU, 20, Color(0, 0, 0, 0.4), 2.0, true)
-	# Name + cost, centred under the swatch.
-	var text_w := r.size.x - 6.0
-	var text_x := r.position.x + 3.0
-	var font_size := int(roundf(14.0 * k))
-	draw_string(font, Vector2(text_x, r.position.y + 58.0 * k), str(d["name"]),
-			HORIZONTAL_ALIGNMENT_CENTER, text_w, font_size, Color.WHITE)
-	var cost_col := Color(1, 0.9, 0.4) if affordable else Color(0.9, 0.45, 0.45)
-	draw_string(font, Vector2(text_x, r.position.y + 74.0 * k), "%d g" % cost,
-			HORIZONTAL_ALIGNMENT_CENTER, text_w, font_size, cost_col)
+	if id == _armed:
+		draw_style_box(_armed_box, r)
+	var icon_centre := r.position + Vector2(r.size.x * 0.5, 4.0 + ICON * 0.5)
+	var tint := Color.WHITE if affordable else Color(1, 1, 1, 0.40)
+	var tex := Sprites.tower(id, 1)
+	if tex != null:
+		var tex_size := tex.get_size()
+		var fit := ICON / maxf(tex_size.x, tex_size.y)
+		var drawn := tex_size * fit
+		draw_texture_rect(tex, Rect2(icon_centre - drawn * 0.5, drawn), false, tint)
+	else:
+		# Unpainted: the element colour the board's code art uses.
+		var c: Color = d["color"]
+		draw_circle(icon_centre, 20.0, Color(c.r, c.g, c.b, c.a * tint.a))
+		draw_arc(icon_centre, 20.0, 0.0, TAU, 24, Color(0, 0, 0, 0.4 * tint.a), 2.0, true)
+	var cost_col := Color(1, 0.9, 0.4) if affordable else Color(0.95, 0.45, 0.45)
+	draw_string(font, Vector2(r.position.x, r.end.y - 6.0), "%d" % cost,
+			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, COST_SIZE, cost_col)

@@ -11,7 +11,8 @@ extends Node
 ## scanning plus one temp-array allocation per scanning tower.
 
 ## Hash cell size (px). A query of radius R touches ~(2R/CELL + 1)² cells, so this wants to
-## track the query radii — i.e. tower ranges, which scale with Game.CELL_WIDTH.
+## track the query radii — i.e. tower ranges, which are Balance.WC3_RANGE_SCALE of the
+## definitions' Warcraft III units, capped at Balance.MAX_TOWER_RANGE.
 const CELL := 192.0
 
 var _frame: int = -1
