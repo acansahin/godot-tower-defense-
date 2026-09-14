@@ -10,8 +10,8 @@ class_name EndScreen
 @onready var menu_button: Button = $Center/Panel/VBox/MenuButton
 
 func _ready() -> void:
-	restart_button.pressed.connect(_restart)
-	menu_button.pressed.connect(_to_menu)
+	restart_button.pressed.connect(restart)
+	menu_button.pressed.connect(to_menu)
 	hide()
 
 ## Ends the run and shows how it went. A loss is still framed as a result rather than a
@@ -80,14 +80,16 @@ func _verdict(reached: int) -> String:
 		return tr("END_FLAVOUR_2")
 	return tr("END_FLAVOUR_1")
 
-func _restart() -> void:
+## Public because the pause menu leaves a run through these too (main.gd `_leave_run`): the
+## pause flag and the time scale have to be handed back whichever screen the player left from.
+func restart() -> void:
 	_clear_time_state()
 	Game.reset()
 	get_tree().reload_current_scene()
 
 ## Back to the title screen. Clearing the pause first is essential — show_result() set it,
 ## and it survives the scene change, which would leave the menu frozen.
-func _to_menu() -> void:
+func to_menu() -> void:
 	_clear_time_state()
 	Game.reset()
 	get_tree().change_scene_to_file("res://scenes/Menu.tscn")

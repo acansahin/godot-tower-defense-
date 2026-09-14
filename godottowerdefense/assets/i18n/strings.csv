@@ -130,3 +130,6 @@ SANDBOX_WAVE,Start at wave,Başlangıç dalgası
 SANDBOX_GOLD,Gold,Altın
 SANDBOX_LIVES,Lives,Can
 SANDBOX_START,Start sandbox run,Test koşusunu başlat
+PAUSE_TITLE,PAUSED,DURAKLATILDI
+PAUSE_SUBTITLE,Wave %d  ·  leaving now banks +%d Essence,Dalga %d  ·  şimdi ayrılırsan +%d Öz kazanırsın
+PAUSE_CONFIRM,Tap again to confirm,Onaylamak için tekrar dokun

@@ -120,6 +120,10 @@ boss first — the tower's OWN element is the locked one, so one screenshot carr
 states of the gate: offered fusion rows, the locked-elements footer, and the dim
 locked-upgrade row. `--show-locked-upgrade` is the same scenario with the fusion skipped,
 i.e. a base tower sitting at the Lv2 branch point with both roads on screen at once),
+`--show-pause` (drives the pause menu through the notifications a PHONE sends — the app going
+to the background, then the back button twice — printing `paused=`/`menu=` after each and
+leaving the menu open for `--shot`. MCP cannot press a back button or background an app, and
+`project.godot`'s `quit_on_go_back=false` is what stops that button closing the app mid-run),
 `--air-pose` (parks eight Air creeps along
 the road on an EMPTY board so the flyer's drawing can be photographed — `--fill-board`
 buries the road and kills them at the spawn point, and a normal run never reaches the Air

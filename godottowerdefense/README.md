@@ -174,7 +174,12 @@ the only audio file that ships is the background music track. See §6.
   viewport and the camera zooms to frame all of it, so there is no scrolling and no leak
   you cannot see.
 - **Time controls** sit in the bottom-left corner: **Pause** (or **Space**) freezes
-  everything, and the speed button (or **F**) cycles **1x → 2x → 3x**.
+  everything and opens the pause menu (Resume / Restart / Main Menu — the last two ask for a
+  second tap), and the speed button (or **F**) cycles **1x → 2x → 3x**. Leaving a run from
+  there banks its Essence exactly as losing on that wave would.
+- **Back** (Android's back button, or **Escape**) closes one thing per press: a placement,
+  then the tower panel, then pauses. On the title screen it closes the open panel, and on
+  the bare menu it leaves the app. Sending the app to the background pauses the run.
 - **Ground-only towers** (Earth) can't hit flyers — but fusing Earth into Lava or any
   triple lifts that restriction, which is the source map's own rule.
 - **Upgrading raises damage only.** Range and fire rate are fixed per element for the
@@ -343,6 +348,23 @@ EndScreen (Control)         [end_screen.gd]  (process_mode = Always)
 ```
 Both buttons clear `get_tree().paused` first — `show_result()` sets it, and it would
 otherwise survive the scene change and leave the next screen frozen.
+
+### `PauseMenu.tscn`
+```
+PauseMenu (Control)         [pause_menu.gd]  (process_mode = Always)
+├── Dim (ColorRect)
+└── Center (CenterContainer)
+    └── Panel (PanelContainer)
+        └── VBox (VBoxContainer)
+            ├── Title (Label)
+            ├── Subtitle (Label)          -> wave, and the Essence leaving now would bank
+            ├── ResumeButton (Button)
+            ├── RestartButton (Button)    -> second tap confirms
+            └── MenuButton (Button)       -> second tap confirms
+```
+It only shows the pause flag, which `HUD` owns (`pause_changed`), and only reports what was
+pressed: `main.gd` `_leave_run()` banks the run and leaves through `EndScreen.restart()` /
+`to_menu()`, so there is still one path out of a level.
 
 The `Game` autoload (`scripts/game.gd`) is registered in `project.godot` and is
 globally accessible as `Game`. It holds the board sequence and profiles (`WINDING_PATH`,

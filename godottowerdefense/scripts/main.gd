@@ -14,6 +14,7 @@ const SHAKE_DECAY := 26.0  ## Pixels of camera shake bled off per second.
 @onready var hud: HUD = $UI/HUD
 @onready var palette = $UI/TowerPalette
 @onready var end_screen: EndScreen = $UI/EndScreen
+@onready var pause_menu: PauseMenu = $UI/PauseMenu
 @onready var tower_panel: TowerPanel = $UI/TowerPanel
 @onready var camera: Camera2D = $Camera2D
 @onready var preview = $Preview  ## Drag ghost.
@@ -119,6 +120,13 @@ func _ready() -> void:
 	wave_manager.wave_preview.connect(hud.set_next)
 	wave_manager.prep_started.connect(hud.enable_send)
 	hud.send_pressed.connect(wave_manager.send_now)
+	# The HUD owns the pause flag, the pause menu shows it, and leaving the run happens here —
+	# leaving banks the run, and banking is this file's business.
+	hud.pause_changed.connect(pause_menu.set_open)
+	hud.back_pressed.connect(_on_back_pressed)
+	pause_menu.resume_pressed.connect(hud.toggle_pause)
+	pause_menu.restart_pressed.connect(_leave_run.bind(false))
+	pause_menu.menu_pressed.connect(_leave_run.bind(true))
 	palette.drag_started.connect(_on_drag_started)
 	Game.shake_requested.connect(_add_shake)
 	# The build overlay answers "may a tower stand here", and that answer includes the towers
@@ -213,6 +221,10 @@ func _ready() -> void:
 	# the dim "beat the Fire avatar" row next to the fusion rows.
 	if OS.get_cmdline_user_args().has("--show-locked-upgrade"):
 		call_deferred("_show_fusion_panel", false)
+	# The pause menu, reached through the phone's own notifications rather than the button, so
+	# the photograph also proves the route: MCP cannot press a back button or background an app.
+	if OS.get_cmdline_user_args().has("--show-pause"):
+		call_deferred("_show_pause")
 	for arg in OS.get_cmdline_user_args():
 		if String(arg).begins_with("--shot"):
 			# `--shot` grabs the opening board; `--shot:20` waits 20 seconds first, which is
@@ -1865,6 +1877,49 @@ func _sell_tower(tower: Tower) -> void:
 	# from a tower that no longer exists.
 	towers_root.remove_child(tower)
 	Game.towers_changed.emit()
+
+## Android's back button, and Escape. Peels off ONE layer per press, innermost first, and only
+## reaches the pause menu when nothing smaller is open — a player backing out of a placement
+## should not land in a paused game. Once the run is over the end screen is the only layer,
+## and back leaves it for the title screen.
+func _on_back_pressed() -> void:
+	if Game.is_over:
+		end_screen.to_menu()
+	elif pause_menu.visible:
+		hud.toggle_pause()
+	elif _drag_kind != "":
+		_cancel_placement()
+	elif tower_panel.is_open():
+		tower_panel.close()
+	else:
+		hud.toggle_pause()
+
+## Restart / Main Menu from the pause menu. Walking away BANKS the run exactly as losing it on
+## this wave would: the alternative pays a player who wants to stop to leak creeps until the
+## lives run out instead, which is the same result by a slower and sillier route. A sandbox
+## run banks nothing, as on every other exit.
+func _leave_run(to_menu: bool) -> void:
+	if not Game.sandbox and not Game.is_over:
+		Meta.finish_run(Game.wave_reached)
+	if to_menu:
+		end_screen.to_menu()
+	else:
+		end_screen.restart()
+
+## Harness for `--show-pause`: drives the pause menu through the same notifications a phone
+## sends, printing the state after each, and leaves it OPEN for `--shot`:
+##   1. the app goes to the background -> paused, menu up
+##   2. back                            -> resumed, menu gone
+##   3. back                            -> paused again, menu up
+##   Godot.exe --path <project> res://scenes/Main.tscn -- --show-pause --shot:1
+func _show_pause() -> void:
+	var steps := [[NOTIFICATION_APPLICATION_PAUSED, "background"],
+			[NOTIFICATION_WM_GO_BACK_REQUEST, "back"],
+			[NOTIFICATION_WM_GO_BACK_REQUEST, "back"]]
+	for step in steps:
+		get_tree().root.propagate_notification(int(step[0]))
+		print("--- PAUSE after %s: paused=%s menu=%s" % [step[1], get_tree().paused,
+				pause_menu.visible])
 
 func _on_game_over() -> void:
 	Audio.play("gameover")

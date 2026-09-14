@@ -19,6 +19,7 @@ config/description="A tiny Warcraft III Element TD inspired tower defense protot
 run/main_scene="res://scenes/Menu.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
+config/quit_on_go_back=false
 
 [autoload]
 

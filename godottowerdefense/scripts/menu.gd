@@ -69,8 +69,13 @@ func _ready() -> void:
 	_refresh_map_label()
 	_refresh_ruleset_label()
 	_refresh_language_label()
-	if OS.has_feature("web"):
-		_quit_button.hide()   # there is nothing to quit to in a browser tab
+	# Nothing to quit to in a browser tab, and on a phone the back button is how an app is left.
+	if OS.has_feature("web") or OS.has_feature("mobile"):
+		_quit_button.hide()
+	# The sandbox is a testing tool, not a mode: a release build (the store APK, and the web
+	# deploy, which exports release) hides it. The editor and the CI debug APK keep it.
+	if not OS.is_debug_build():
+		_sandbox_button.hide()
 	_how_panel.hide()
 	_workshop.hide()
 	_map_panel.hide()
@@ -260,6 +265,32 @@ func _on_sound() -> void:
 
 func _on_quit() -> void:
 	get_tree().quit()
+
+## Android's back button. Closes whichever panel is open, exactly as its own Back button would;
+## on the bare menu it leaves the app, which is what back does on an app's first screen.
+## project.godot sets `quit_on_go_back=false`, so nothing quits unless this says so.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST and is_node_ready() and not _close_open_panel():
+		get_tree().quit()
+
+## Escape does the same on the desktop, minus the quit: a key that closes the game from the
+## title screen is one a developer presses by accident.
+func _unhandled_key_input(event: InputEvent) -> void:
+	var key := event as InputEventKey
+	if key != null and key.pressed and not key.echo and key.keycode == KEY_ESCAPE \
+			and _close_open_panel():
+		get_viewport().set_input_as_handled()
+
+## Every panel closes by hiding itself and emitting `closed`, and this file's handlers do the
+## rest (showing the column again, refreshing labels). Doing the same two things reuses them.
+func _close_open_panel() -> bool:
+	for panel: Control in [_how_panel, _workshop, _map_panel, _sandbox_panel]:
+		if panel.visible:
+			Audio.play("sell")
+			panel.hide()
+			panel.emit_signal("closed")
+			return true
+	return false
 
 ## Keeps the label in step with the M key, which can toggle mute from anywhere.
 func _refresh_sound_label() -> void:

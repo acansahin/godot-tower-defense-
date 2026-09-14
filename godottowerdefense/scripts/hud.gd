@@ -9,6 +9,11 @@ class_name HUD
 ## reasoning as the Audio autoload (see audio.gd).
 
 signal send_pressed  ## Player asked to send the next wave early.
+## The pause flag changed, by any route. Main shows the pause menu off it.
+signal pause_changed(paused: bool)
+## Android's back button, or Escape. What it should DO depends on what is open, which is
+## Main's to decide — so this only reports it.
+signal back_pressed
 
 ## Speeds the speed button cycles through. Kept whole numbers — the button label
 ## formats them with %d.
@@ -71,8 +76,8 @@ func enable_send() -> void:
 
 # --- Time controls -------------------------------------------------------------
 
-## Space toggles pause, F cycles the speed. Handled here rather than in Main
-## because Main stops processing input the moment the tree is paused.
+## Space toggles pause, F cycles the speed, Escape is the desktop's back button. Handled here
+## rather than in Main because Main stops processing input the moment the tree is paused.
 func _unhandled_key_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if key == null or not key.pressed or key.echo:
@@ -81,9 +86,37 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		toggle_pause()
 	elif key.keycode == KEY_F:
 		cycle_speed()
+	elif key.keycode == KEY_ESCAPE:
+		back_pressed.emit()
 	else:
 		return
 	get_viewport().set_input_as_handled()
+
+## The phone's side of the time controls, here for the same reason as the keys: this node still
+## runs while the tree is paused. project.godot sets `quit_on_go_back=false`, without which the
+## back button closed the app in the middle of a run.
+##
+## Going to the background pauses the run. On a phone that is a call, a notification pulled
+## down, or the home button — and before this the creeps kept walking behind it. FOCUS_OUT only
+## counts on mobile and web: on the desktop it is a developer clicking another window while a
+## harness runs, and a harness that pauses itself measures nothing.
+func _notification(what: int) -> void:
+	if not is_node_ready():
+		return
+	match what:
+		NOTIFICATION_WM_GO_BACK_REQUEST:
+			back_pressed.emit()
+		NOTIFICATION_APPLICATION_PAUSED:
+			pause_for_background()
+		NOTIFICATION_APPLICATION_FOCUS_OUT:
+			if OS.has_feature("mobile") or OS.has_feature("web"):
+				pause_for_background()
+
+## Only ever SETS the flag: coming back to the app must not resume a run the player was not
+## watching, so the return lands on the pause menu and waits for a tap.
+func pause_for_background() -> void:
+	if not _paused:
+		toggle_pause()
 
 ## No-op once the game is over: the end screen owns the pause flag at that point,
 ## and un-pausing would let the level keep running behind the overlay.
@@ -102,6 +135,7 @@ func cycle_speed() -> void:
 func _apply_pause() -> void:
 	get_tree().paused = _paused
 	pause_button.text = tr("HUD_RESUME") if _paused else tr("HUD_PAUSE")
+	pause_changed.emit(_paused)
 
 func _apply_speed() -> void:
 	Engine.time_scale = SPEEDS[_speed_index]
